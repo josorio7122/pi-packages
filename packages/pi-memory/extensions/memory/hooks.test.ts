@@ -198,6 +198,55 @@ describe("createCaptureHook", () => {
     expect(await db.count()).toBe(countBefore);
   });
 
+  it("captures text from array content blocks", async () => {
+    // Message where content is an array of content blocks, not a plain string
+    const { createCaptureHook } = await import("./hooks.js");
+    const hook = createCaptureHook(db as any, mockEmb as any, cfg);
+    await hook({
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "I always prefer dark mode and TypeScript" },
+          ],
+        },
+      ],
+    });
+    // Should have stored the memory
+    expect(await db.count()).toBe(1);
+  });
+
+  it("skips non-text blocks in array content", async () => {
+    const { createCaptureHook } = await import("./hooks.js");
+    const hook = createCaptureHook(db as any, mockEmb as any, cfg);
+    await hook({
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/png", data: "..." } },
+          ],
+        },
+      ],
+    });
+    // Image-only message should not store anything
+    expect(await db.count()).toBe(0);
+  });
+
+  it("skips messages with non-string non-array content", async () => {
+    const { createCaptureHook } = await import("./hooks.js");
+    const hook = createCaptureHook(db as any, mockEmb as any, cfg);
+    await hook({
+      messages: [
+        { role: "user", content: null },
+        { role: "user", content: 42 },
+        { role: "user", content: { type: "unknown" } },
+      ],
+    });
+    // None of these can be extracted as text — nothing stored
+    expect(await db.count()).toBe(0);
+  });
+
   it("stores up to 3 messages per call, skips the rest", async () => {
     // Use distinct vectors per call so messages are not treated as duplicates of each other
     let callCount = 0;
