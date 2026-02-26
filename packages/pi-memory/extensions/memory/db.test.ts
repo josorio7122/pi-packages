@@ -116,4 +116,27 @@ describe("MemoryDB", () => {
     expect(r2.id).toBeTruthy();
     expect(await db.count()).toBe(2);
   });
+
+  it("allows retry after a transient initialization error", async () => {
+    const { MemoryDB } = await import("./db.js");
+    const db = new MemoryDB(tmpPath, DIMS);
+
+    // Patch doInitialize to fail once, then succeed
+    let failCount = 0;
+    const original = (db as any).doInitialize.bind(db);
+    (db as any).doInitialize = async () => {
+      if (failCount === 0) {
+        failCount++;
+        throw new Error("Transient error");
+      }
+      return original();
+    };
+
+    // First call throws
+    await expect(db.count()).rejects.toThrow("Transient error");
+
+    // initPromise should be reset — second call should work
+    const count = await db.count();
+    expect(count).toBe(0);
+  });
 });

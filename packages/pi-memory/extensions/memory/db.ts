@@ -43,28 +43,38 @@ export class MemoryDB {
     if (this.table) { return; }
     if (this.initPromise) { return this.initPromise; }
     this.initPromise = this.doInitialize();
-    return this.initPromise;
+    try {
+      return await this.initPromise;
+    } catch (err) {
+      this.initPromise = null; // allow retry on next operation
+      throw err;
+    }
   }
 
   private async doInitialize(): Promise<void> {
-    const lancedb = await loadLanceDB();
-    this.db = await lancedb.connect(this.dbPath);
-    const tables = await this.db.tableNames();
+    try {
+      const lancedb = await loadLanceDB();
+      this.db = await lancedb.connect(this.dbPath);
+      const tables = await this.db.tableNames();
 
-    if (tables.includes(TABLE_NAME)) {
-      this.table = await this.db.openTable(TABLE_NAME);
-    } else {
-      this.table = await this.db.createTable(TABLE_NAME, [
-        {
-          id: "__schema__",
-          text: "",
-          vector: Array.from({ length: this.vectorDim }).fill(0),
-          importance: 0,
-          category: "other",
-          createdAt: 0,
-        },
-      ]);
-      await this.table.delete('id = "__schema__"');
+      if (tables.includes(TABLE_NAME)) {
+        this.table = await this.db.openTable(TABLE_NAME);
+      } else {
+        this.table = await this.db.createTable(TABLE_NAME, [
+          {
+            id: "__schema__",
+            text: "",
+            vector: Array.from({ length: this.vectorDim }).fill(0),
+            importance: 0,
+            category: "other",
+            createdAt: 0,
+          },
+        ]);
+        await this.table.delete('id = "__schema__"');
+      }
+    } catch (err) {
+      this.initPromise = null; // allow retry on next operation
+      throw err;
     }
   }
 

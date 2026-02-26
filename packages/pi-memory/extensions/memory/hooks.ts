@@ -1,7 +1,7 @@
 import type { MemoryDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import type { MemoryConfig } from "./config.js";
-import { shouldCapture, detectCategory, formatRelevantMemoriesContext } from "./utils.js";
+import { shouldCapture, detectCategory, formatRelevantMemoriesContext, looksLikePromptInjection } from "./utils.js";
 
 export function createInjectionHook(
   db: MemoryDB,
@@ -10,6 +10,10 @@ export function createInjectionHook(
 ): (event: { prompt: string; systemPrompt: string }) => Promise<{ systemPrompt: string } | undefined> {
   return async (event) => {
     if (!event.prompt || event.prompt.length < 5) {
+      return undefined;
+    }
+    // Guard against adversarial prompts designed to surface poisoned memories
+    if (looksLikePromptInjection(event.prompt)) {
       return undefined;
     }
     try {
@@ -67,7 +71,7 @@ export function createCaptureHook(
         stored++;
       }
 
-      if (stored > 0) {
+      if (stored > 0 && process.env.PI_MEMORY_DEBUG) {
         console.log(`pi-memory: auto-captured ${stored} memories`);
       }
     } catch (err) {

@@ -3,6 +3,7 @@ export const MEMORY_CATEGORIES = ["preference", "fact", "decision", "entity", "o
 export const DEFAULT_CAPTURE_MAX_CHARS = 500;
 
 const MEMORY_TRIGGERS = [
+  // Czech and English trigger phrases (ported from OpenClaw)
   /zapamatuj si|pamatuj|remember/i,
   /preferuji|radši|nechci|prefer/i,
   /rozhodli jsme|budeme používat/i,

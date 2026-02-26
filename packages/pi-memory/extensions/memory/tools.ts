@@ -31,7 +31,7 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
       _ctx: unknown
     ): Promise<ToolResult> {
       const vector = await emb.embed(params.query);
-      const results = await db.search(vector, params.limit ?? 5, 0.1);
+      const results = await db.search(vector, params.limit ?? 5, 0.3);
 
       if (results.length === 0) {
         return {
@@ -68,7 +68,7 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
     parameters: Type.Object({
       text: Type.String({ description: "Information to remember" }),
       importance: Type.Optional(
-        Type.Number({ description: "Importance 0-1 (default: 0.7)" })
+        Type.Number({ minimum: 0, maximum: 1, description: "Importance score 0-1 (default: 0.7)" })
       ),
       category: Type.Optional(
         Type.Unsafe<MemoryCategory>({
@@ -84,6 +84,12 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
       _onUpdate: unknown,
       _ctx: unknown
     ): Promise<ToolResult> {
+      if (!params.text || params.text.trim().length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "Memory text cannot be empty." }],
+          details: { error: "empty_text" },
+        };
+      }
       const vector = await emb.embed(params.text);
 
       // Duplicate check at very high threshold

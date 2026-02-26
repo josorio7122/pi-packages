@@ -134,6 +134,13 @@ describe("createMemoryTools", () => {
       const countAfter = await db.count();
       expect(countAfter).toBe(countBefore + 1);
     });
+
+    it("rejects empty text in memory_store", async () => {
+      const { createMemoryTools } = await import("./tools.js");
+      const { storeTool } = createMemoryTools(db as any, mockEmb as any, cfg);
+      const result = await exec(storeTool, { text: "" });
+      expect(result.details?.error).toBe("empty_text");
+    });
   });
 
   // ─── memory_forget ─────────────────────────────────────────────────────────
