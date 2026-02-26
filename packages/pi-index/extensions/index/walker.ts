@@ -28,12 +28,18 @@ function getExt(filePath: string): string {
   return extname(base);
 }
 
+export type WalkResult = {
+  files: FileRecord[];
+  skippedLarge: number;
+};
+
 async function walkDir(
   dir: string,
   indexRoot: string,
   supportedExtensions: Set<string>,
   maxFileKB: number,
   results: FileRecord[],
+  counts: { skippedLarge: number },
 ): Promise<void> {
   let entries;
   try {
@@ -45,14 +51,17 @@ async function walkDir(
   for (const entry of entries) {
     const abs = join(dir, entry.name);
     if (entry.isDirectory()) {
-      await walkDir(abs, indexRoot, supportedExtensions, maxFileKB, results);
+      await walkDir(abs, indexRoot, supportedExtensions, maxFileKB, results, counts);
     } else if (entry.isFile()) {
       const ext = getExt(entry.name);
       if (!supportedExtensions.has(ext)) continue;
       try {
         const s = await stat(abs);
         const sizeKB = s.size / 1024;
-        if (sizeKB > maxFileKB) continue;
+        if (sizeKB > maxFileKB) {
+          counts.skippedLarge++;
+          continue;
+        }
         results.push({
           relativePath: relative(indexRoot, abs).replace(/\\/g, "/"),
           absolutePath: abs,
@@ -72,13 +81,14 @@ export async function walkDirs(
   indexRoot: string,
   supportedExtensions: string[],
   maxFileKB: number,
-): Promise<FileRecord[]> {
+): Promise<WalkResult> {
   const extSet = new Set(supportedExtensions);
   const results: FileRecord[] = [];
+  const counts = { skippedLarge: 0 };
   for (const dir of dirs) {
-    await walkDir(dir, indexRoot, extSet, maxFileKB, results);
+    await walkDir(dir, indexRoot, extSet, maxFileKB, results, counts);
   }
-  return results;
+  return { files: results, skippedLarge: counts.skippedLarge };
 }
 
 export async function readMtimeCache(

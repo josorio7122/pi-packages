@@ -9,6 +9,7 @@ import {
   diffFileSet,
   type MtimeEntry,
   type FileRecord,
+  type WalkResult,
 } from "./walker.js";
 
 let tmpDir: string;
@@ -27,7 +28,7 @@ describe("walkDirs", () => {
     writeFileSync(join(tmpDir, "style.css"), "body {}");
     writeFileSync(join(tmpDir, "ignored.rb"), "# ruby");
 
-    const files = await walkDirs([tmpDir], tmpDir, [".ts", ".css"], 500);
+    const { files } = await walkDirs([tmpDir], tmpDir, [".ts", ".css"], 500);
     const paths = files.map((f) => f.relativePath);
     expect(paths).toContain("index.ts");
     expect(paths).toContain("style.css");
@@ -39,38 +40,46 @@ describe("walkDirs", () => {
     mkdirSync(sub);
     writeFileSync(join(sub, "login.ts"), "export function login() {}");
 
-    const files = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
+    const { files } = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
     expect(files[0].relativePath).toBe("src/login.ts");
   });
 
-  it("skips files exceeding maxFileKB (strictly greater than)", async () => {
+  it("skips files exceeding maxFileKB (strictly greater than) and counts them", async () => {
     // 501 KB should be skipped when maxFileKB = 500
     const bigContent = "x".repeat(501 * 1024);
     writeFileSync(join(tmpDir, "big.ts"), bigContent);
     writeFileSync(join(tmpDir, "small.ts"), "const x = 1;");
 
-    const files = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
-    const paths = files.map((f) => f.relativePath);
+    const result = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
+    const paths = result.files.map((f) => f.relativePath);
     expect(paths).not.toContain("big.ts");
     expect(paths).toContain("small.ts");
+    expect(result.skippedLarge).toBe(1);
+  });
+
+  it("returns skippedLarge of 0 when no files exceed the limit", async () => {
+    writeFileSync(join(tmpDir, "small.ts"), "const x = 1;");
+    const { skippedLarge } = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
+    expect(skippedLarge).toBe(0);
   });
 
   it("recurses into subdirectories", async () => {
     mkdirSync(join(tmpDir, "a/b"), { recursive: true });
     writeFileSync(join(tmpDir, "a/b/deep.ts"), "");
 
-    const files = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
+    const { files } = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
     expect(files.map((f) => f.relativePath)).toContain("a/b/deep.ts");
   });
 
-  it("returns empty array for an empty directory", async () => {
-    const files = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
+  it("returns empty files array for an empty directory", async () => {
+    const { files, skippedLarge } = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
     expect(files).toHaveLength(0);
+    expect(skippedLarge).toBe(0);
   });
 
   it("includes extension field on each record", async () => {
     writeFileSync(join(tmpDir, "index.ts"), "const x = 1;");
-    const files = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
+    const { files } = await walkDirs([tmpDir], tmpDir, [".ts"], 500);
     expect(files[0].extension).toBe(".ts");
   });
 });
