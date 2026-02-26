@@ -53,7 +53,7 @@ export function buildFilter(filters: ScopeFilter[]): string | undefined {
     const v = f.value.replace(/'/g, "''"); // escape SQL string
     // For LIKE patterns only: escape % and _ wildcards
     const vLike = v.replace(/%/g, "\\%").replace(/_/g, "\\_");
-    let condition: string;
+    let condition: string | undefined;
     switch (f.scope) {
       case "file":
         // Match basename: filePath ends with /value or equals value
@@ -69,7 +69,11 @@ export function buildFilter(filters: ScopeFilter[]): string | undefined {
       case "lang":
         condition = `language = '${v.toLowerCase()}'`;
         break;
+      default:
+        // Scope already validated by parseScopeFilters — this branch is unreachable
+        continue;
     }
+    if (!condition) continue;
     if (!byScope.has(f.scope)) byScope.set(f.scope, []);
     byScope.get(f.scope)!.push(condition);
   }
