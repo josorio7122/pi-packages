@@ -12,20 +12,59 @@ export default function (pi: ExtensionAPI): void {
   // The index root is the directory where pi is running (the project root)
   const indexRoot = process.cwd();
 
-  // Load config — if it fails (missing API key), register stub tools that return the error
+  // Load config — if it fails (missing API key), register stub tools + commands that report the error
   let cfg: ReturnType<typeof loadConfig>;
   try {
     cfg = loadConfig(indexRoot);
-  } catch (err) {
-    const errorMsg = `Error: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable pi-index.`;
+  } catch (_err) {
+    const errorMsg = "Error: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable pi-index.";
+    // Register stub tools
     for (const name of ["codebase_search", "codebase_index", "codebase_status"]) {
       pi.registerTool({
         name,
-        description: `pi-index: ${name} (disabled — no API key configured)`,
+        description: `pi-index: ${name} (disabled)`,
         parameters: { type: "object", properties: {} },
         handler: async () => errorMsg,
       } as never);
     }
+    // Register /index-status with API-key-missing warning output
+    const RULE = "─".repeat(39);
+    pi.registerCommand("index-status", {
+      description: "Show pi-index status",
+      handler: async (_args, ctx) => {
+        ctx.ui.notify(
+          [
+            "pi-index status",
+            RULE,
+            "⚠ Warning: OPENAI_API_KEY is not set. Indexing and search are disabled.",
+            `Index path:    ${indexRoot}/.pi/index/lancedb`,
+            "Status:        Not built",
+            RULE,
+          ].join("\n"),
+          "info",
+        );
+      },
+    });
+    // Register stub /index-rebuild
+    pi.registerCommand("index-rebuild", {
+      description: "Force-rebuild the codebase index",
+      handler: async (_args, ctx) => {
+        ctx.ui.notify(
+          "Index rebuild failed: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable pi-index.",
+          "error",
+        );
+      },
+    });
+    // Register stub /index-clear
+    pi.registerCommand("index-clear", {
+      description: "Clear the codebase index",
+      handler: async (_args, ctx) => {
+        ctx.ui.notify(
+          "Index clear failed: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable pi-index.",
+          "error",
+        );
+      },
+    });
     return;
   }
 
@@ -60,25 +99,26 @@ export default function (pi: ExtensionAPI): void {
 
   // ─── Slash commands ──────────────────────────────────────────────────────
 
+  const RULE = "─".repeat(39);
+
   pi.registerCommand("index-status", {
     description: "Show pi-index status — chunk count, files indexed, last indexed time",
     handler: async (_args, ctx) => {
       try {
         const status = await db.getStatus();
         const cache = await readMtimeCache(cfg.mtimeCachePath);
-        const RULE = "─".repeat(47);
 
         if (status.chunkCount === 0 && cache.size === 0) {
           ctx.ui.notify(
             [
               "pi-index status",
               RULE,
-              `  Index path:    ${cfg.dbPath}`,
-              "  Status:        Not built",
-              "                 Run /index-rebuild or call codebase_index to create the index.",
-              `  Model:         ${cfg.model}`,
-              `  Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
-              `  Index dirs:    ${cfg.indexDirs.join(", ")}`,
+              `Index path:    ${cfg.dbPath}`,
+              "Status:        Not built",
+              "               Run /index-rebuild or call codebase_index to create the index.",
+              `Model:         ${cfg.model}`,
+              `Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
+              `Index dirs:    ${cfg.indexDirs.join(", ")}`,
               RULE,
             ].join("\n"),
             "info",
@@ -94,20 +134,31 @@ export default function (pi: ExtensionAPI): void {
         const lines = [
           "pi-index status",
           RULE,
-          `  Index path:    ${cfg.dbPath}`,
-          `  Total chunks:  ${status.chunkCount.toLocaleString()}`,
-          `  Files indexed: ${status.fileCount.toLocaleString()}`,
-          `  Last indexed:  ${lastStr}  (${new Date(status.lastIndexedAt!).toISOString().slice(0, 16).replace("T", " ")})`,
-          `  Model:         ${cfg.model}`,
-          `  Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
-          `  Index dirs:    ${cfg.indexDirs.join(", ")}`,
+          `Index path:    ${cfg.dbPath}`,
+          `Total chunks:  ${status.chunkCount.toLocaleString()}`,
+          `Files indexed: ${status.fileCount.toLocaleString()}`,
+          `Last indexed:  ${lastStr}  (${new Date(status.lastIndexedAt!).toISOString().slice(0, 16).replace("T", " ")})`,
+          `Model:         ${cfg.model}`,
+          `Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
+          `Index dirs:    ${cfg.indexDirs.join(", ")}`,
           RULE,
         ];
-        if (rebuilding) lines.push("  (Index currently rebuilding…)");
+        if (rebuilding) lines.push("(Index currently rebuilding…)");
 
         ctx.ui.notify(lines.join("\n"), "info");
       } catch (err) {
-        ctx.ui.notify(`pi-index: status error — ${String(err)}`, "error");
+        // Spec: /index-status never fails — report unreadable state gracefully
+        ctx.ui.notify(
+          [
+            "pi-index status",
+            RULE,
+            "Status:        Could not read index state.",
+            `               ${String(err)}`,
+            `Index path:    ${cfg.dbPath}`,
+            RULE,
+          ].join("\n"),
+          "info",
+        );
       }
     },
   });
@@ -122,8 +173,8 @@ export default function (pi: ExtensionAPI): void {
           [
             "Index rebuilt:",
             `  Added:   ${summary.added} files (${summary.addedChunks} chunks)`,
-            `  Skipped: ${summary.failedFiles.length} files (errors)`,
-            `  Time:    ${(summary.elapsedMs / 1000).toFixed(1)}s`,
+            `  Skipped: ${summary.skippedTooLarge} files (too large)`,
+            `  Time:    ${Math.round(summary.elapsedMs / 1000)}s`,
           ].join("\n"),
           "info",
         );
@@ -159,4 +210,3 @@ export default function (pi: ExtensionAPI): void {
     },
   });
 }
-
