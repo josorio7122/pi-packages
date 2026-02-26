@@ -80,6 +80,14 @@
 - **Notes:** none
 - **Timestamp:** 2026-02-25
 
+### Branch Review Fixes: pi-memory
+- **Status:** ✅ Complete
+- **Commit:** b3b6f8c
+- **Built:** 7 fixes — initPromise retry on failure (ensureInitialized + doInitialize), search threshold unified to 0.3, injection guard in createInjectionHook, empty text validation in memory_store, TypeBox min/max constraints on importance, console.log gated with PI_MEMORY_DEBUG, Czech triggers comment in utils.ts
+- **Tests:** 78 passing (3 new tests added)
+- **Notes:** Fix for initPromise retry placed in `ensureInitialized` (not only `doInitialize`) because test patches `doInitialize`, so the reset must happen at the caller level too. Both layers reset `this.initPromise = null` on failure for defense-in-depth.
+- **Timestamp:** 2026-02-25
+
 ### Task 9: README + skill
 - **Status:** ✅ Complete
 - **Commit:** 6e71638

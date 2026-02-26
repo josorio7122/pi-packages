@@ -14,6 +14,7 @@ export class Embeddings {
     const response = await this.client.embeddings.create({
       model: this.model,
       input: text,
+      encoding_format: "float", // ensure plain number[] (openai 6.x defaults to base64 internally)
     });
     return response.data[0].embedding;
   }
