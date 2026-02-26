@@ -13,17 +13,16 @@ function isRateLimitError(err: unknown): boolean {
 }
 
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  let lastErr: unknown;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       return await fn();
     } catch (err) {
       if (!isRateLimitError(err) || attempt === MAX_RETRIES - 1) throw err;
-      lastErr = err;
       await new Promise((res) => setTimeout(res, RETRY_BASE_DELAY_MS * Math.pow(2, attempt)));
     }
   }
-  throw lastErr;
+  // TypeScript requires an unreachable throw for type narrowing
+  throw new Error("[pi-index] withRetry: exhausted all retry attempts");
 }
 
 export class Embeddings {
