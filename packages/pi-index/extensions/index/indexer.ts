@@ -93,14 +93,13 @@ export class Indexer {
       const toProcess: FileRecord[] = [...diff.toAdd, ...diff.toUpdate];
       const failedFiles: string[] = [];
 
-      // Delete stale chunks for changed and deleted files
-      for (const filePath of [
-        ...diff.toUpdate.map((f) => f.relativePath),
-        ...diff.toDelete,
-      ]) {
+      // Delete chunks for files that no longer exist on disk
+      for (const filePath of diff.toDelete) {
         await this.db.deleteByFilePath(filePath);
         cache.delete(filePath);
       }
+      // Note: changed files (toUpdate) are deleted per-file in processBatch
+      // after embedding succeeds, to preserve stale-but-present data on failure
 
       // Process all new/changed files: chunk-level batching with bounded concurrency
       await this.processBatch(toProcess, cache, failedFiles);
@@ -212,6 +211,8 @@ export class Indexer {
         createdAt: Date.now(),
       }));
       try {
+        // Delete old chunks then insert new ones (spec §Writing)
+        await this.db.deleteByFilePath(file.relativePath);
         await this.db.insertChunks(chunks);
         // Only update cache after successful write (CONSTITUTION.md §6 invariant 5)
         cache.set(file.relativePath, {

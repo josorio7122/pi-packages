@@ -215,6 +215,28 @@ describe("Indexer", () => {
     expect(summary.failedFiles).toContain("multi.ts");
   });
 
+  it("preserves stale chunks when embedding fails for a changed file", async () => {
+    const filePath = join(tmpDir, "stale.ts");
+    writeFileSync(filePath, "const x = 1;");
+    const db = makeDb();
+    const emb = makeEmb();
+    const indexer = new Indexer(makeConfig(), db, emb);
+    await indexer.run(); // first run: stale.ts is new, no deleteByFilePath
+
+    // Modify file so it appears changed
+    writeFileSync(filePath, "const y = 2;");
+
+    // Make embedding fail on second run
+    const failingError = Object.assign(new Error("API error"), { status: 500 });
+    vi.mocked(emb.embed).mockRejectedValue(failingError);
+
+    vi.mocked(db.deleteByFilePath).mockClear();
+    await indexer.run();
+
+    // deleteByFilePath must NOT have been called — stale chunks should be preserved
+    expect(db.deleteByFilePath).not.toHaveBeenCalledWith("stale.ts");
+  });
+
   it("embed concurrency never exceeds EMBED_CONCURRENCY batches at once", async () => {
     // Create 25 small files so we get ≥ 25 chunks total (more than one batch of 20)
     for (let i = 0; i < 25; i++) {
