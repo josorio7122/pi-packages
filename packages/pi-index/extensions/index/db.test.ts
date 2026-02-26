@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -110,6 +110,47 @@ describe("IndexDB", () => {
     const status = await db.getStatus();
     expect(status.chunkCount).toBe(3);
     expect(status.fileCount).toBe(2);
+  }, 30_000);
+
+  it("hybridSearch returns scored results", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([
+      makeChunk("src/a.ts", 0, "authentication logic"),
+      makeChunk("src/b.ts", 1, "payment processing"),
+    ]);
+    const results = await db.hybridSearch([1, 0, 0, 0], "authentication", 2);
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.score).toBeGreaterThanOrEqual(0);
+      expect(r.score).toBeLessThanOrEqual(1);
+    }
+  }, 30_000);
+
+  it("hybridSearch falls back to vectorSearch when hybrid query throws", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([
+      makeChunk("src/a.ts", 0, "authentication logic"),
+    ]);
+
+    // Mock db.vectorSearch to return canned results — this bypasses table internals
+    // so the fallback path doesn't also hit the broken table.query
+    const fakeResults = [{ ...makeChunk("src/a.ts", 0, "authentication logic"), score: 0.85 }];
+    const vectorSearchSpy = vi.spyOn(db, "vectorSearch").mockResolvedValue(fakeResults);
+
+    // Force the hybrid path to throw by replacing table.query with a throwing stub
+    type DbInternal = { table: { query: () => void }; ensureInitialized: () => Promise<void> };
+    const dbInternal = db as unknown as DbInternal;
+    await dbInternal.ensureInitialized();
+    const originalQuery = dbInternal.table.query;
+    dbInternal.table.query = () => { throw new Error("FTS not available"); };
+
+    const results = await db.hybridSearch([1, 0, 0, 0], "auth", 2);
+
+    // Restore
+    dbInternal.table.query = originalQuery;
+
+    expect(vectorSearchSpy).toHaveBeenCalled();
+    expect(results).toEqual(fakeResults);
   }, 30_000);
 });
 
