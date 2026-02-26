@@ -87,25 +87,20 @@ export class Indexer {
         cache.delete(filePath);
       }
 
-      // Process new/changed files in batches
-      for (let i = 0; i < toProcess.length; i += EMBED_BATCH_SIZE * EMBED_CONCURRENCY) {
-        const batchGroup = toProcess.slice(i, i + EMBED_BATCH_SIZE * EMBED_CONCURRENCY);
-        const subBatches: FileRecord[][] = [];
-        for (let j = 0; j < batchGroup.length; j += EMBED_BATCH_SIZE) {
-          subBatches.push(batchGroup.slice(j, j + EMBED_BATCH_SIZE));
-        }
-        await Promise.all(
-          subBatches.map((batch) => this.processBatch(batch, cache, failedFiles)),
-        );
-      }
+      // Process all new/changed files: chunk-level batching with bounded concurrency
+      await this.processBatch(toProcess, cache, failedFiles);
 
       // Persist updated mtime cache atomically
       await writeMtimeCache(this.cfg.mtimeCachePath, cache);
 
       const totalChunks = await this.db.count();
 
+      // added = files newly discovered minus those that failed (spec: failedFiles excluded)
+      const addedSet = new Set(diff.toAdd.map((f) => f.relativePath));
+      const failedAddedCount = failedFiles.filter((f) => addedSet.has(f)).length;
+
       return {
-        added: diff.toAdd.length,
+        added: diff.toAdd.length - failedAddedCount,
         updated: diff.toUpdate.length,
         removed: diff.toDelete.length,
         skipped: allFiles.length - toProcess.length,
@@ -123,18 +118,79 @@ export class Indexer {
     cache: Map<string, MtimeEntry>,
     failedFiles: string[],
   ): Promise<void> {
+    // Step 1: read all files and produce raw chunks
+    const fileChunks: { file: FileRecord; chunks: ReturnType<typeof chunkFile> }[] = [];
     for (const file of files) {
       try {
         const content = await readFile(file.absolutePath, "utf-8");
-        const rawChunks = chunkFile(file.relativePath, content, file.mtime);
-        if (rawChunks.length === 0) continue;
+        const chunks = chunkFile(file.relativePath, content, file.mtime);
+        if (chunks.length > 0) {
+          fileChunks.push({ file, chunks });
+        }
+      } catch {
+        failedFiles.push(file.relativePath);
+      }
+    }
 
-        // Embed with retry
-        const chunks = await this.embedWithRetry(rawChunks, file.relativePath, failedFiles);
-        if (!chunks) continue;
+    // Step 2: flatten all chunks, embed in batches of EMBED_BATCH_SIZE with EMBED_CONCURRENCY
+    const allRaw = fileChunks.flatMap(({ file, chunks }) =>
+      chunks.map((chunk) => ({ file, chunk }))
+    );
 
+    // Build chunk batches (up to 20 chunks per batch)
+    const chunkBatches: { file: FileRecord; chunk: ReturnType<typeof chunkFile>[number] }[][] = [];
+    for (let i = 0; i < allRaw.length; i += EMBED_BATCH_SIZE) {
+      chunkBatches.push(allRaw.slice(i, i + EMBED_BATCH_SIZE));
+    }
+
+    // Embed with limited concurrency (up to 3 batches concurrent, sequential within each batch)
+    const embedded: { file: FileRecord; chunk: ReturnType<typeof chunkFile>[number]; vector: number[] }[] = [];
+    for (let i = 0; i < chunkBatches.length; i += EMBED_CONCURRENCY) {
+      const batchGroup = chunkBatches.slice(i, i + EMBED_CONCURRENCY);
+      const results = await Promise.all(
+        batchGroup.map(async (batch) => {
+          const batchResults: typeof embedded = [];
+          for (const { file, chunk } of batch) {
+            for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+              try {
+                const enriched = `File: ${chunk.filePath} (${chunk.language})\nSymbol: ${chunk.symbol}\n---\n${chunk.text}`;
+                const vector = await this.emb.embed(enriched);
+                batchResults.push({ file, chunk, vector });
+                break;
+              } catch {
+                if (attempt < RETRY_DELAYS_MS.length) {
+                  await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+                } else {
+                  if (!failedFiles.includes(file.relativePath)) {
+                    failedFiles.push(file.relativePath);
+                  }
+                }
+              }
+            }
+          }
+          return batchResults;
+        }),
+      );
+      embedded.push(...results.flat());
+    }
+
+    // Step 3: group embedded chunks by file and write to DB
+    const byFile = new Map<string, typeof embedded>();
+    for (const item of embedded) {
+      const key = item.file.relativePath;
+      if (!byFile.has(key)) byFile.set(key, []);
+      byFile.get(key)!.push(item);
+    }
+
+    for (const [, items] of byFile) {
+      const { file } = items[0];
+      const chunks = items.map(({ chunk, vector }) => ({
+        ...chunk,
+        vector,
+        createdAt: Date.now(),
+      }));
+      try {
         await this.db.insertChunks(chunks);
-
         // Only update cache after successful write (CONSTITUTION.md §6 invariant 5)
         cache.set(file.relativePath, {
           filePath: file.relativePath,
@@ -142,37 +198,11 @@ export class Indexer {
           chunkCount: chunks.length,
           indexedAt: Date.now(),
         });
-      } catch (err) {
-        failedFiles.push(file.relativePath);
-      }
-    }
-  }
-
-  private async embedWithRetry(
-    chunks: ReturnType<typeof chunkFile>,
-    filePath: string,
-    failedFiles: string[],
-  ): Promise<ReturnType<typeof chunkFile> | null> {
-    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-      try {
-        const embedded = await Promise.all(
-          chunks.map(async (chunk) => {
-            // Enriched input: prepend file context for better embedding quality
-            const enriched = `File: ${chunk.filePath} (${chunk.language})\nSymbol: ${chunk.symbol}\n---\n${chunk.text}`;
-            const vector = await this.emb.embed(enriched);
-            return { ...chunk, vector, createdAt: Date.now() };
-          }),
-        );
-        return embedded;
-      } catch (err) {
-        if (attempt < RETRY_DELAYS_MS.length) {
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-        } else {
-          failedFiles.push(filePath);
-          return null;
+      } catch {
+        if (!failedFiles.includes(file.relativePath)) {
+          failedFiles.push(file.relativePath);
         }
       }
     }
-    return null;
   }
 }

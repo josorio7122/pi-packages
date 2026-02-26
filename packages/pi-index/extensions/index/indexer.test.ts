@@ -49,6 +49,7 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("Indexer", () => {
@@ -140,5 +141,45 @@ describe("Indexer", () => {
     const indexer = new Indexer(makeConfig(), db, makeEmb());
     const summary = await indexer.run();
     expect(summary.added).toBe(1); // only the .ts file
+  });
+
+  it("added count excludes files that failed to read/process", async () => {
+    writeFileSync(join(tmpDir, "good.ts"), "export const x = 1;");
+    const badPath = join(tmpDir, "bad.ts");
+    writeFileSync(badPath, "export const y = 2;");
+    // Make bad.ts unreadable so readFile throws — no retry delays involved
+    const { chmodSync } = await import("node:fs");
+    chmodSync(badPath, 0o000);
+    const db = makeDb();
+    const emb = makeEmb();
+    const indexer = new Indexer(makeConfig(), db, emb);
+    const summary = await indexer.run();
+    // Restore permissions so afterEach cleanup can delete it
+    chmodSync(badPath, 0o644);
+    expect(summary.failedFiles).toContain("bad.ts");
+    expect(summary.added).toBe(1); // only good.ts succeeded, not 2
+  });
+
+  it("embed concurrency never exceeds EMBED_CONCURRENCY batches at once", async () => {
+    // Create 25 small files so we get ≥ 25 chunks total (more than one batch of 20)
+    for (let i = 0; i < 25; i++) {
+      writeFileSync(join(tmpDir, `f${i}.ts`), `export const v${i} = ${i};`);
+    }
+    const db = makeDb();
+    const emb = makeEmb();
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    vi.mocked(emb.embed).mockImplementation(async () => {
+      concurrent++;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      await new Promise((r) => setTimeout(r, 5));
+      concurrent--;
+      return [0.1, 0.2, 0.3, 0.4];
+    });
+    const indexer = new Indexer(makeConfig(), db, emb);
+    await indexer.run();
+    // At most EMBED_CONCURRENCY (3) batches, each processes chunks sequentially
+    // So max concurrent embed calls should be ≤ 3
+    expect(maxConcurrent).toBeLessThanOrEqual(3);
   });
 });
