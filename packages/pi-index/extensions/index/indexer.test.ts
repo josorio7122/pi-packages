@@ -185,15 +185,12 @@ describe("Indexer", () => {
   it("force=true calls db.deleteAll before indexing even when files are unchanged", async () => {
     // Run once to populate mtime cache — second run would normally skip (unchanged)
     writeFileSync(join(tmpDir, "cached.ts"), "export const x = 1;");
-    const db = makeDb();
-    const emb = makeEmb();
-    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
     await indexer.run();
 
-    // Second run with same db/emb but fresh indexer (cache on disk persists)
+    // Second run with a fresh indexer (cache on disk persists, so files look unchanged)
     const db2 = makeDb();
-    const emb2 = makeEmb();
-    const indexer2 = new Indexer(makeConfig(), db2, emb2);
+    const indexer2 = new Indexer(makeConfig(), db2, makeEmb());
     const deleteAllSpy = vi.spyOn(db2, "deleteAll");
     const insertChunksSpy = vi.spyOn(db2, "insertChunks");
 

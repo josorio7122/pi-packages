@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
+import { rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { IndexDB } from "./db.js";
 import type { CodeChunk } from "./chunker.js";
 
@@ -108,5 +110,55 @@ describe("IndexDB", () => {
     const status = await db.getStatus();
     expect(status.chunkCount).toBe(3);
     expect(status.fileCount).toBe(2);
+  }, 30_000);
+});
+
+describe("IndexDB integration", () => {
+  let dbPath: string;
+
+  beforeEach(async () => {
+    dbPath = join(tmpdir(), `pi-index-test-${randomUUID()}`);
+    await mkdir(dbPath, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(dbPath, { recursive: true, force: true });
+  });
+
+  it("inserts chunks and retrieves status", async () => {
+    const db = new IndexDB(dbPath, 4); // small 4-dim vectors for speed
+    const now = Date.now();
+    const chunk: CodeChunk = {
+      id: "src/foo.ts:0",
+      text: "export function greet(name: string) { return `Hello ${name}`; }",
+      vector: [0.1, 0.2, 0.3, 0.4],
+      filePath: "src/foo.ts",
+      chunkIndex: 0,
+      startLine: 1,
+      endLine: 3,
+      language: "typescript",
+      extension: ".ts",
+      symbol: "greet",
+      mtime: now,
+      createdAt: now,
+    };
+    await db.insertChunks([chunk]);
+    const status = await db.getStatus();
+    expect(status.chunkCount).toBe(1);
+    expect(status.fileCount).toBe(1);
+    expect(status.lastIndexedAt).toBeGreaterThan(0);
+  }, 30_000);
+
+  it("deleteByFilePath removes only matching chunks", async () => {
+    const db = new IndexDB(dbPath, 4);
+    const now = Date.now();
+    await db.insertChunks([
+      { id: "a.ts:0", text: "a", vector: [1, 0, 0, 0], filePath: "a.ts", chunkIndex: 0, startLine: 1, endLine: 1, language: "typescript", extension: ".ts", symbol: "", mtime: now, createdAt: now },
+      { id: "b.ts:0", text: "b", vector: [0, 1, 0, 0], filePath: "b.ts", chunkIndex: 0, startLine: 1, endLine: 1, language: "typescript", extension: ".ts", symbol: "", mtime: now, createdAt: now },
+    ]);
+    await db.deleteByFilePath("a.ts");
+    const status = await db.getStatus();
+    expect(status.chunkCount).toBe(1);
+    expect(status.fileCount).toBe(1);
   }, 30_000);
 });
