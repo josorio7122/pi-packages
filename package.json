@@ -2,12 +2,20 @@
   "name": "pi-packages",
   "private": true,
   "version": "0.0.0",
+  "description": "Pi packages monorepo — extensions and skills for the pi coding agent",
+  "keywords": ["pi-package"],
+  "license": "MIT",
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "dev": "turbo run dev --parallel"
+    "dev": "turbo run dev --parallel",
+    "postinstall": "cd packages/pi-memory && npm install"
+  },
+  "pi": {
+    "extensions": ["./packages/pi-memory/extensions"],
+    "skills": ["./packages/pi-memory/skills"]
   },
   "devDependencies": {
     "turbo": "latest",
