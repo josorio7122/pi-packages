@@ -11,19 +11,29 @@ export type IndexTool = {
   handler: (args: Record<string, unknown>) => Promise<string>;
 };
 
+function relativeTime(ms: number): string {
+  const diffMs = Date.now() - ms;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? "s" : ""} ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hour${diffHr !== 1 ? "s" : ""} ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay} day${diffDay !== 1 ? "s" : ""} ago`;
+}
+
 function formatSummary(summary: IndexSummary): string {
   const lines = [
     "Index updated:",
-    `  Added:   ${summary.added} file${summary.added !== 1 ? "s" : ""}`,
-    `  Updated: ${summary.updated} file${summary.updated !== 1 ? "s" : ""}`,
+    `  Added:   ${summary.added} file${summary.added !== 1 ? "s" : ""} (${summary.addedChunks} chunk${summary.addedChunks !== 1 ? "s" : ""})`,
+    `  Updated: ${summary.updated} file${summary.updated !== 1 ? "s" : ""} (${summary.updatedChunks} chunk${summary.updatedChunks !== 1 ? "s" : ""})`,
     `  Removed: ${summary.removed} file${summary.removed !== 1 ? "s" : ""}`,
     `  Skipped: ${summary.skipped} file${summary.skipped !== 1 ? "s" : ""} (unchanged)`,
+    `  Skipped: ${summary.skippedTooLarge} file${summary.skippedTooLarge !== 1 ? "s" : ""} (too large)`,
     `  Total:   ${summary.totalChunks} chunk${summary.totalChunks !== 1 ? "s" : ""} in index`,
     `  Time:    ${(summary.elapsedMs / 1000).toFixed(1)}s`,
   ];
-  if (summary.failedFiles.length > 0) {
-    lines.push(`  Failed:  ${summary.failedFiles.length} file${summary.failedFiles.length !== 1 ? "s" : ""} (embedding error)`);
-  }
   return lines.join("\n");
 }
 
@@ -70,7 +80,11 @@ export function createIndexTools(
       try {
         return await searcher.search(query, limit);
       } catch (err) {
-        return `Error: [SEARCH_FAILED] ${String(err)}`;
+        const msg = String(err);
+        if (msg.includes("CONFIG_MISSING_API_KEY")) {
+          return "Error: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable pi-index.";
+        }
+        return `Error: [SEARCH_FAILED] ${msg}`;
       }
     },
   };
@@ -125,27 +139,31 @@ export function createIndexTools(
         if (status.chunkCount === 0 && cache.size === 0) {
           return [
             "pi-index status:",
-            `  Index path:   ${cfg.dbPath}`,
+            `  Index path:    ${cfg.dbPath}`,
             "  Status:       Not built. Call codebase_index to create the index.",
             `  Auto-index:   ${cfg.autoIndex ? "on" : "off"}`,
             `  Index dirs:   ${cfg.indexDirs.join(", ")}`,
           ].join("\n");
         }
 
-        const lastIndexedAt = status.lastIndexedAt
-          ? new Date(status.lastIndexedAt).toLocaleString()
-          : "never";
+        const lastStr = status.lastIndexedAt ? relativeTime(status.lastIndexedAt) : "never";
 
-        return [
+        let statusStr = [
           "pi-index status:",
           `  Index path:    ${cfg.dbPath}`,
           `  Total chunks:  ${status.chunkCount}`,
           `  Files indexed: ${status.fileCount}`,
-          `  Last indexed:  ${lastIndexedAt}`,
+          `  Last indexed:  ${lastStr}`,
           `  Model:         ${cfg.model}`,
           `  Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
           `  Index dirs:    ${cfg.indexDirs.join(", ")}`,
         ].join("\n");
+
+        if (indexer.isRunning) {
+          statusStr += "\n  (Index currently rebuilding in background)";
+        }
+
+        return statusStr;
       } catch (err) {
         return `Error: [STATUS_FAILED] ${String(err)}`;
       }

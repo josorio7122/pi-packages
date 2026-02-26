@@ -15,12 +15,16 @@ function makeSearcher(result = "Found 1 result"): Searcher {
 
 function makeIndexer(
   summary: Partial<IndexSummary> = {},
+  opts: { isRunning?: boolean } = {},
 ): Indexer {
   const defaults: IndexSummary = {
-    added: 1, updated: 0, removed: 0, skipped: 0,
-    failedFiles: [], totalChunks: 5, elapsedMs: 1000,
+    added: 1, addedChunks: 3, updated: 0, updatedChunks: 0, removed: 0, skipped: 0,
+    skippedTooLarge: 0, failedFiles: [], totalChunks: 5, elapsedMs: 1000,
   };
-  return { run: vi.fn().mockResolvedValue({ ...defaults, ...summary }) } as unknown as Indexer;
+  return {
+    run: vi.fn().mockResolvedValue({ ...defaults, ...summary }),
+    isRunning: opts.isRunning ?? false,
+  } as unknown as Indexer;
 }
 
 function makeDb(
@@ -113,7 +117,7 @@ describe("createIndexTools", () => {
     });
 
     it("returns a summary string with Added/Updated/Removed/Skipped", async () => {
-      const indexer = makeIndexer({ added: 3, updated: 1, removed: 0, skipped: 95, totalChunks: 200, elapsedMs: 5000 });
+      const indexer = makeIndexer({ added: 3, addedChunks: 12, updated: 1, updatedChunks: 4, removed: 0, skipped: 95, skippedTooLarge: 0, totalChunks: 200, elapsedMs: 5000 });
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
       const result = await tool.handler({});
@@ -122,9 +126,35 @@ describe("createIndexTools", () => {
       expect(result).toContain("Skipped:");
     });
 
+    it("includes chunk counts in Added and Updated lines", async () => {
+      const indexer = makeIndexer({ added: 3, addedChunks: 12, updated: 1, updatedChunks: 4, skippedTooLarge: 0 });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      const result = await tool.handler({});
+      expect(result).toContain("3 files (12 chunks)");
+      expect(result).toContain("1 file (4 chunks)");
+    });
+
+    it("shows skippedTooLarge line when files were skipped for size", async () => {
+      const indexer = makeIndexer({ skippedTooLarge: 2 });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      const result = await tool.handler({});
+      expect(result).toContain("2 files (too large)");
+    });
+
+    it("does not include Failed: line even when failedFiles is non-empty", async () => {
+      const indexer = makeIndexer({ failedFiles: ["bad.ts", "broken.ts"] });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      const result = await tool.handler({});
+      expect(result).not.toContain("Failed:");
+    });
+
     it("returns INDEX_ALREADY_RUNNING error when indexer throws that", async () => {
       const indexer = {
         run: vi.fn().mockRejectedValue(new Error("INDEX_ALREADY_RUNNING: still running")),
+        isRunning: false,
       } as unknown as Indexer;
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
@@ -156,6 +186,58 @@ describe("createIndexTools", () => {
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
       expect(result).toContain("on");
+    });
+
+    it("shows relative time for lastIndexedAt (just now)", async () => {
+      const db = makeDb({ chunkCount: 5, fileCount: 2, lastIndexedAt: Date.now() - 5000 });
+      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("just now");
+    });
+
+    it("shows relative time in minutes", async () => {
+      const db = makeDb({ chunkCount: 5, fileCount: 2, lastIndexedAt: Date.now() - 5 * 60 * 1000 });
+      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("5 minutes ago");
+    });
+
+    it("appends rebuilding note when indexer.isRunning is true", async () => {
+      const indexer = makeIndexer({}, { isRunning: true });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("(Index currently rebuilding in background)");
+    });
+
+    it("does not append rebuilding note when indexer.isRunning is false", async () => {
+      const indexer = makeIndexer({}, { isRunning: false });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).not.toContain("rebuilding");
+    });
+
+    it("not-built block has 4 spaces after 'Index path:' colon", async () => {
+      const db = makeDb({ chunkCount: 0, fileCount: 0, lastIndexedAt: null });
+      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("Index path:    ");
+    });
+  });
+
+  describe("codebase_search CONFIG_MISSING_API_KEY", () => {
+    it("returns CONFIG_MISSING_API_KEY error when searcher throws it", async () => {
+      const searcher = {
+        search: vi.fn().mockRejectedValue(new Error("CONFIG_MISSING_API_KEY")),
+      } as unknown as Searcher;
+      const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_search")!;
+      const result = await tool.handler({ query: "auth" });
+      expect(result).toContain("[CONFIG_MISSING_API_KEY]");
     });
   });
 });
