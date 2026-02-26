@@ -17,6 +17,7 @@ function makeConfig(override: Partial<IndexConfig> = {}): IndexConfig {
     dbPath: join(tmpDir, "lancedb"),
     mtimeCachePath: join(tmpDir, "mtime-cache.json"),
     indexDirs: [tmpDir],
+    indexRoot: tmpDir,
     autoIndex: false,
     maxFileKB: 500,
     minScore: 0.2,

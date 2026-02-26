@@ -70,8 +70,7 @@ export class Indexer {
       this.mtimeCache = cache;
 
       // Discover all eligible files
-      // Use the first configured dir as the index root for relative paths
-      const indexRoot = this.cfg.indexDirs[0];
+      const indexRoot = this.cfg.indexRoot;
       const walkResult = await walkDirs(
         this.cfg.indexDirs,
         indexRoot,
@@ -137,6 +136,9 @@ export class Indexer {
     cache: Map<string, MtimeEntry>,
     failedFiles: string[],
   ): Promise<void> {
+    // O(1) deduplication guard — kept in sync with failedFiles array
+    const failedSet = new Set<string>(failedFiles);
+
     // Step 1: read all files and produce raw chunks
     const fileChunks: { file: FileRecord; chunks: ReturnType<typeof chunkFile> }[] = [];
     for (const file of files) {
@@ -178,7 +180,8 @@ export class Indexer {
               const vector = await this.emb.embed(enriched);
               batchResults.push({ file, chunk, vector });
             } catch {
-              if (!failedFiles.includes(file.relativePath)) {
+              if (!failedSet.has(file.relativePath)) {
+                failedSet.add(file.relativePath);
                 failedFiles.push(file.relativePath);
               }
               embedFailedFiles.add(file.relativePath);
@@ -219,7 +222,8 @@ export class Indexer {
           indexedAt: Date.now(),
         });
       } catch {
-        if (!failedFiles.includes(file.relativePath)) {
+        if (!failedSet.has(file.relativePath)) {
+          failedSet.add(file.relativePath);
           failedFiles.push(file.relativePath);
         }
       }

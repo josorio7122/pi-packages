@@ -9,6 +9,7 @@ vi.mock("./config.js", () => ({
     dbPath: "/tmp/lancedb",
     mtimeCachePath: "/tmp/mtime-cache.json",
     indexDirs: ["/project"],
+    indexRoot: "/project",
     autoIndex: false,
     maxFileKB: 500,
     minScore: 0.2,
@@ -269,7 +270,7 @@ describe("pi-index extension entry point", () => {
       loadConfig: vi.fn().mockReturnValue({
         apiKey: "sk-test", model: "text-embedding-3-small", dimensions: 1536,
         dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
-        indexDirs: ["/project"], autoIndex: true, maxFileKB: 500, minScore: 0.2,
+        indexDirs: ["/project"], indexRoot: "/project", autoIndex: true, maxFileKB: 500, minScore: 0.2,
       }),
     }));
     const mod2 = await import("./index.js");

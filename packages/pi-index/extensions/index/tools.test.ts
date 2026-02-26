@@ -44,6 +44,7 @@ function makeConfig(override: Partial<IndexConfig> = {}): IndexConfig {
     dbPath: "/tmp/lancedb",
     mtimeCachePath: "/tmp/mtime-cache.json",
     indexDirs: ["/project"],
+    indexRoot: "/project",
     autoIndex: false,
     maxFileKB: 500,
     minScore: 0.2,
@@ -177,7 +178,8 @@ describe("createIndexTools", () => {
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
       const result = await tool.handler({});
-      expect(result).toContain("2 files (too large)");
+      expect(result).toContain("Too large:");
+      expect(result).toContain("2 files (size limit)");
     });
 
     it("does not include Failed: line even when failedFiles is non-empty", async () => {

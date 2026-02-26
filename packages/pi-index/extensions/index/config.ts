@@ -8,6 +8,7 @@ export type IndexConfig = {
   dbPath: string;
   mtimeCachePath: string;
   indexDirs: string[];
+  indexRoot: string;
   autoIndex: boolean;
   maxFileKB: number;
   minScore: number;
@@ -85,6 +86,7 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
     dbPath,
     mtimeCachePath,
     indexDirs,
+    indexRoot,
     autoIndex: raw.autoIndex === true,
     maxFileKB,
     minScore,

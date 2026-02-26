@@ -200,6 +200,7 @@ describe("Searcher", () => {
       dbPath: "/tmp/lancedb",
       mtimeCachePath: "/tmp/mtime-cache.json",
       indexDirs: ["/project"],
+      indexRoot: "/project",
       autoIndex: false,
       maxFileKB: 500,
       minScore: 0.0, // set low so all results pass threshold in tests
