@@ -1,77 +1,70 @@
 # pi-packages
 
-Extensions and skills for the [pi coding agent](https://github.com/mariozechner/pi-coding-agent), published as a single installable git package.
+A collection of [pi](https://github.com/mariozechner/pi) extensions — packages that extend the pi AI coding agent with memory, codebase search, and other capabilities.
+
+---
 
 ## Packages
 
-| Package | Description |
-| --- | --- |
-| [`@josorio/pi-memory`](./packages/pi-memory) | Persistent cross-session memory via LanceDB vector storage |
+| Package | Version | Description |
+|---|---|---|
+| [`@josorio/pi-memory`](./packages/pi-memory) | 0.1.0 | Persistent conversation memory via LanceDB + OpenAI embeddings |
+| [`@josorio/pi-index`](./packages/pi-index) | 0.1.0 | Semantic codebase search via hybrid vector + BM25 indexing |
 
-## Install
+---
 
-Install directly from GitHub into pi:
+## Getting Started
 
-```sh
-pi install git:github.com/josorio7122/pi-packages
+### Install a package
+
+```bash
+# From your pi config directory (e.g. ~/.pi)
+pnpm add @josorio/pi-memory
+pnpm add @josorio/pi-index
 ```
 
-This clones the repo, installs dependencies, and loads all extensions and skills automatically on every pi session.
+### Add to pi config
 
-To try it without installing permanently:
-
-```sh
-pi -e git:github.com/josorio7122/pi-packages
+```json
+{
+  "extensions": [
+    "@josorio/pi-memory",
+    "@josorio/pi-index"
+  ]
+}
 ```
 
-## Local Development
+---
 
-```sh
+## Development
+
+This is a [pnpm](https://pnpm.io) workspace + [Turborepo](https://turbo.build) monorepo.
+
+```bash
 # Install all dependencies
 pnpm install
 
 # Run all tests
-pnpm test
+pnpm turbo test
 
-# Type-check all packages
-pnpm lint
+# Build all packages
+pnpm turbo build
+
+# Run tests for a specific package
+pnpm --filter @josorio/pi-memory exec vitest run
+pnpm --filter @josorio/pi-index exec vitest run
 ```
 
-Run commands scoped to a single package:
+---
 
-```sh
-pnpm --filter @josorio/pi-memory test
-pnpm --filter @josorio/pi-memory lint
-```
+## Requirements
 
-## Repository Structure
+- Node.js 20+
+- pnpm 9+
+- OpenAI API key
 
-```
-pi-packages/
-├── packages/
-│   └── pi-memory/              # Persistent memory extension
-│       ├── extensions/memory/  # pi extension source files
-│       ├── skills/memory-guide/ # SKILL.md for the memory-guide skill
-│       └── README.md
-├── turbo.json
-└── package.json
-```
+---
 
-## Adding a Package
+## License
 
-```sh
-cd packages && mkdir my-package && cd my-package
-pnpm init
-```
-
-Follow the [pi packages documentation](https://github.com/mariozechner/pi-coding-agent/blob/main/docs/packages.md) for the correct `package.json` shape. Then add the new package's extension and skill paths to the `pi` key in the root `package.json`.
-
-## Tech Stack
-
-| Tool | Version | Purpose |
-| --- | --- | --- |
-| [Turborepo](https://turbo.build) | 2.8.11 | Monorepo task runner and caching |
-| [TypeScript](https://typescriptlang.org) | 5.9.3 | Static typing across all packages |
-| [Vitest](https://vitest.dev) | 4.0.18 | Unit testing with ESM support |
-| [LanceDB](https://lancedb.com) | 0.26.2 | Embedded vector database (pi-memory) |
-| [OpenAI SDK](https://github.com/openai/openai-node) | 6.25.0 | Embeddings via `text-embedding-3-*` (pi-memory) |
+MIT
