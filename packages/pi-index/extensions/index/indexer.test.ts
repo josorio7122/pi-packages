@@ -61,6 +61,54 @@ describe("Indexer", () => {
     expect(summary.skipped).toBe(0);
   });
 
+  it("summary includes addedChunks > 0 when new files are indexed", async () => {
+    writeFileSync(join(tmpDir, "hello.ts"), "export function hello() {}");
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    const summary = await indexer.run();
+    expect(summary.addedChunks).toBeGreaterThan(0);
+    expect(summary.updatedChunks).toBe(0);
+  });
+
+  it("summary includes updatedChunks > 0 when changed files are re-indexed", async () => {
+    const filePath = join(tmpDir, "hello.ts");
+    writeFileSync(filePath, "export function hello() {}");
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    await indexer.run();
+    writeFileSync(filePath, "export function hello2() {}");
+    const summary = await indexer.run();
+    expect(summary.updatedChunks).toBeGreaterThan(0);
+    expect(summary.addedChunks).toBe(0);
+  });
+
+  it("summary includes skippedTooLarge count for oversized files", async () => {
+    const bigContent = "x".repeat(501 * 1024);
+    writeFileSync(join(tmpDir, "big.ts"), bigContent);
+    writeFileSync(join(tmpDir, "small.ts"), "const x = 1;");
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    const summary = await indexer.run();
+    expect(summary.skippedTooLarge).toBe(1);
+  });
+
+  it("isRunning is false when not indexing", () => {
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    expect(indexer.isRunning).toBe(false);
+  });
+
+  it("isRunning is true while run() is in progress", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const db = makeDb();
+    vi.mocked(db.insertChunks).mockImplementation(
+      () => new Promise((resolve) => setTimeout(resolve, 100)),
+    );
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    const runPromise = indexer.run();
+    // give the run a tick to start
+    await new Promise((r) => setTimeout(r, 10));
+    expect(indexer.isRunning).toBe(true);
+    await runPromise;
+    expect(indexer.isRunning).toBe(false);
+  });
+
   it("calls db.insertChunks for new files", async () => {
     writeFileSync(join(tmpDir, "test.ts"), "const x = 1;");
     const db = makeDb();

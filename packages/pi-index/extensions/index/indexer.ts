@@ -14,9 +14,12 @@ import {
 
 export type IndexSummary = {
   added: number;
+  addedChunks: number;
   updated: number;
+  updatedChunks: number;
   removed: number;
   skipped: number;
+  skippedTooLarge: number;
   failedFiles: string[];
   totalChunks: number;
   elapsedMs: number;
@@ -51,6 +54,10 @@ export class Indexer {
   private running = false;
   private mtimeCache: Map<string, MtimeEntry> | null = null;
 
+  get isRunning(): boolean {
+    return this.running;
+  }
+
   constructor(
     private readonly cfg: IndexConfig,
     private readonly db: IndexDB,
@@ -81,12 +88,13 @@ export class Indexer {
       // Discover all eligible files
       // Use the first configured dir as the index root for relative paths
       const indexRoot = this.cfg.indexDirs[0];
-      const allFiles = await walkDirs(
+      const walkResult = await walkDirs(
         this.cfg.indexDirs,
         indexRoot,
         SUPPORTED_EXTENSIONS,
         this.cfg.maxFileKB,
       );
+      const allFiles = walkResult.files;
 
       // Three-way diff
       const diff = diffFileSet(allFiles, cache);
@@ -111,13 +119,25 @@ export class Indexer {
 
       // added = files newly discovered minus those that failed (spec: failedFiles excluded)
       const addedSet = new Set(diff.toAdd.map((f) => f.relativePath));
+      const updateSet = new Set(diff.toUpdate.map((f) => f.relativePath));
       const failedAddedCount = failedFiles.filter((f) => addedSet.has(f)).length;
+
+      // Count chunks created for added vs updated files
+      let addedChunks = 0;
+      let updatedChunks = 0;
+      for (const [path, entry] of cache.entries()) {
+        if (addedSet.has(path)) addedChunks += entry.chunkCount;
+        else if (updateSet.has(path)) updatedChunks += entry.chunkCount;
+      }
 
       return {
         added: diff.toAdd.length - failedAddedCount,
+        addedChunks,
         updated: diff.toUpdate.length,
+        updatedChunks,
         removed: diff.toDelete.length,
         skipped: allFiles.length - toProcess.length,
+        skippedTooLarge: walkResult.skippedLarge,
         failedFiles,
         totalChunks,
         elapsedMs: Date.now() - start,
