@@ -86,6 +86,17 @@ describe("buildFilter", () => {
     expect(f).toBeDefined();
     expect(f).toContain("typescript");
   });
+
+  it("ORs conditions for same-type filters", () => {
+    const f = buildFilter([
+      { scope: "lang", value: "typescript" },
+      { scope: "lang", value: "python" },
+    ]);
+    expect(f).toContain("typescript");
+    expect(f).toContain("python");
+    expect(f).toContain("OR");
+    expect(f).not.toContain("AND");
+  });
 });
 
 // --- formatResults ---
@@ -221,6 +232,12 @@ describe("Searcher", () => {
     const searcher = new Searcher(makeDb(), makeEmb(), makeConfig());
     const result = await searcher.search("auth @module:core");
     expect(result).toContain("INVALID_SCOPE_FILTER");
+  });
+
+  it("returns error with [CODE] bracket format for invalid scope", async () => {
+    const searcher = new Searcher(makeDb(), makeEmb(), makeConfig());
+    const result = await searcher.search("auth @module:core");
+    expect(result).toBe("Error: [INVALID_SCOPE_FILTER] Unknown scope '@module'. Supported scopes: @file, @dir, @ext, @lang.");
   });
 
   it("returns EMBEDDING_FAILED when embed throws", async () => {

@@ -25,7 +25,7 @@ export function parseScopeFilters(query: string): {
       const scope = match[1].toLowerCase();
       if (!KNOWN_SCOPES.has(scope)) {
         throw new Error(
-          `INVALID_SCOPE_FILTER: Unknown scope '@${match[1]}'. Supported scopes: @file, @dir, @ext, @lang.`,
+          `[INVALID_SCOPE_FILTER] Unknown scope '@${match[1]}'. Supported scopes: @file, @dir, @ext, @lang.`,
         );
       }
       filters.push({ scope, value: match[2] });
@@ -47,28 +47,39 @@ export function parseScopeFilters(query: string): {
 export function buildFilter(filters: ScopeFilter[]): string | undefined {
   if (filters.length === 0) return undefined;
 
-  const conditions: string[] = [];
+  // Group by scope type
+  const byScope = new Map<string, string[]>();
   for (const f of filters) {
     const v = f.value.replace(/'/g, "''");
+    let condition: string;
     switch (f.scope) {
       case "file":
         // Match basename: filePath ends with /value or equals value
-        conditions.push(`(filePath = '${v}' OR filePath LIKE '%/${v}')`);
+        condition = `(filePath = '${v}' OR filePath LIKE '%/${v}')`;
         break;
       case "dir":
         // Match path prefix
-        conditions.push(`(filePath LIKE '${v}/%' OR filePath = '${v}')`);
+        condition = `(filePath LIKE '${v}/%' OR filePath = '${v}')`;
         break;
       case "ext":
-        conditions.push(`extension = '${v}'`);
+        condition = `extension = '${v}'`;
         break;
       case "lang":
-        conditions.push(`language = '${v.toLowerCase()}'`);
+        condition = `language = '${v.toLowerCase()}'`;
         break;
+      default:
+        continue;
     }
+    if (!byScope.has(f.scope)) byScope.set(f.scope, []);
+    byScope.get(f.scope)!.push(condition);
   }
 
-  return conditions.length > 0 ? conditions.join(" AND ") : undefined;
+  // OR within same type, AND across types
+  const groups = Array.from(byScope.values()).map((conditions) =>
+    conditions.length === 1 ? conditions[0] : `(${conditions.join(" OR ")})`,
+  );
+
+  return groups.length > 0 ? groups.join(" AND ") : undefined;
 }
 
 const SEPARATOR = "-".repeat(60);
