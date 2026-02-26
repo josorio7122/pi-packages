@@ -92,6 +92,18 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
   };
 }
 
+function parseEnvInt(name: string, value: string): number {
+  const v = parseInt(value, 10);
+  if (Number.isNaN(v)) throw new Error(`CONFIG_INVALID_VALUE: ${name} must be a valid integer (got "${value}")`);
+  return v;
+}
+
+function parseEnvFloat(name: string, value: string): number {
+  const v = parseFloat(value);
+  if (Number.isNaN(v)) throw new Error(`CONFIG_INVALID_VALUE: ${name} must be a valid number (got "${value}")`);
+  return v;
+}
+
 export function loadConfig(indexRoot: string): IndexConfig {
   const apiKey = process.env.PI_INDEX_API_KEY ?? process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -101,13 +113,13 @@ export function loadConfig(indexRoot: string): IndexConfig {
   }
 
   const maxFileKB = process.env.PI_INDEX_MAX_FILE_KB
-    ? parseInt(process.env.PI_INDEX_MAX_FILE_KB, 10)
+    ? parseEnvInt("PI_INDEX_MAX_FILE_KB", process.env.PI_INDEX_MAX_FILE_KB)
     : undefined;
   const minScore = process.env.PI_INDEX_MIN_SCORE
-    ? parseFloat(process.env.PI_INDEX_MIN_SCORE)
+    ? parseEnvFloat("PI_INDEX_MIN_SCORE", process.env.PI_INDEX_MIN_SCORE)
     : undefined;
   const mmrLambda = process.env.PI_INDEX_MMR_LAMBDA
-    ? parseFloat(process.env.PI_INDEX_MMR_LAMBDA)
+    ? parseEnvFloat("PI_INDEX_MMR_LAMBDA", process.env.PI_INDEX_MMR_LAMBDA)
     : undefined;
 
   return parseConfig({

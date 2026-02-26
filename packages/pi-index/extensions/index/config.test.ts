@@ -194,4 +194,45 @@ describe("loadConfig", () => {
     const cfg = loadConfig("/project");
     expect(cfg.mmrLambda).toBe(0.7);
   });
+
+  // NaN guard — invalid env var strings
+  it("throws CONFIG_INVALID_VALUE when PI_INDEX_MAX_FILE_KB=abc", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_MAX_FILE_KB = "abc";
+    expect(() => loadConfig("/project")).toThrow("CONFIG_INVALID_VALUE");
+  });
+
+  it("throws CONFIG_INVALID_VALUE when PI_INDEX_MIN_SCORE=notanumber", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_MIN_SCORE = "notanumber";
+    expect(() => loadConfig("/project")).toThrow("CONFIG_INVALID_VALUE");
+  });
+
+  it("throws CONFIG_INVALID_VALUE when PI_INDEX_MMR_LAMBDA=xyz", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_MMR_LAMBDA = "xyz";
+    expect(() => loadConfig("/project")).toThrow("CONFIG_INVALID_VALUE");
+  });
+
+  // Happy paths for env vars
+  it("sets maxFileKB=200 when PI_INDEX_MAX_FILE_KB=200", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_MAX_FILE_KB = "200";
+    const cfg = loadConfig("/project");
+    expect(cfg.maxFileKB).toBe(200);
+  });
+
+  it("sets minScore=0.5 when PI_INDEX_MIN_SCORE=0.5", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_MIN_SCORE = "0.5";
+    const cfg = loadConfig("/project");
+    expect(cfg.minScore).toBe(0.5);
+  });
+
+  it("sets mmrLambda=0.8 when PI_INDEX_MMR_LAMBDA=0.8", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_MMR_LAMBDA = "0.8";
+    const cfg = loadConfig("/project");
+    expect(cfg.mmrLambda).toBe(0.8);
+  });
 });
