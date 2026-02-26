@@ -174,6 +174,15 @@ describe("createMemoryTools", () => {
       expect(await db.count()).toBe(0);
     });
 
+    it("returns found: 0 when query matches nothing", async () => {
+      // DB is empty — no memories stored, search returns []
+      const { createMemoryTools } = await import("./tools.js");
+      const { forgetTool } = createMemoryTools(db, mockEmb as any, cfg);
+      const result = await exec(forgetTool, { query: "something not in memory" });
+      expect(result.details.found).toBe(0);
+      expect(result.content[0].text).toContain("No matching");
+    });
+
     it("returns candidates list when multiple matches", async () => {
       await db.store({
         text: "Memory alpha",
