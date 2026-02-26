@@ -18,7 +18,7 @@ function formatSummary(summary: IndexSummary): string {
     `  Added:   ${summary.added} file${summary.added !== 1 ? "s" : ""} (${summary.addedChunks} chunk${summary.addedChunks !== 1 ? "s" : ""})`,
     `  Updated: ${summary.updated} file${summary.updated !== 1 ? "s" : ""} (${summary.updatedChunks} chunk${summary.updatedChunks !== 1 ? "s" : ""})`,
     `  Skipped: ${summary.skipped} file${summary.skipped !== 1 ? "s" : ""} (unchanged)`,
-    `  Skipped: ${summary.skippedTooLarge} file${summary.skippedTooLarge !== 1 ? "s" : ""} (too large)`,
+    `  Too large: ${summary.skippedTooLarge} file${summary.skippedTooLarge !== 1 ? "s" : ""} (size limit)`,
     `  Total:   ${summary.totalChunks} chunk${summary.totalChunks !== 1 ? "s" : ""}`,
     `  Time:    ${(summary.elapsedMs / 1000).toFixed(1)}s`,
   ];
