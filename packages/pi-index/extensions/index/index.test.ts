@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock all internal modules before importing the extension
 vi.mock("./config.js", () => ({
@@ -91,6 +91,10 @@ describe("pi-index extension entry point", () => {
     const mod = await import("./index.js");
     extension = mod.default as typeof extension;
     extension(pi as never);
+  });
+
+  afterEach(() => {
+    vi.resetModules();
   });
 
   it("registers the codebase_search tool", () => {
@@ -298,7 +302,7 @@ describe("pi-index extension entry point", () => {
     const localCtx = { ui: { notify: vi.fn() } };
     await handler({}, localCtx);
     expect(localCtx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("50"),
+      expect.stringContaining("Total chunks:  50"),
       "info",
     );
   });
@@ -353,6 +357,10 @@ describe("pi-index extension — config fails (missing API key)", () => {
     const mod = await import("./index.js");
     const extension = mod.default as (pi: typeof pi) => void;
     extension(pi as never);
+  });
+
+  afterEach(() => {
+    vi.resetModules();
   });
 
   it("registers stub codebase_search tool when config fails", () => {

@@ -136,7 +136,7 @@ export default function (pi: ExtensionAPI): void {
           `Index path:    ${cfg.dbPath}`,
           `Total chunks:  ${status.chunkCount.toLocaleString()}`,
           `Files indexed: ${status.fileCount.toLocaleString()}`,
-          `Last indexed:  ${lastStr}  ${status.lastIndexedAt ? `(${new Date(status.lastIndexedAt).toISOString().slice(0, 16).replace("T", " ")})` : ""}`,
+          `Last indexed:  ${lastStr}${status.lastIndexedAt ? `  (${new Date(status.lastIndexedAt).toISOString().slice(0, 16).replace("T", " ")})` : ""}`,
           `Model:         ${cfg.model}`,
           `Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
           `Index dirs:    ${cfg.indexDirs.join(", ")}`,
