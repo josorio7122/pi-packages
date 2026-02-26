@@ -101,10 +101,11 @@ export class Indexer {
 
       const totalChunks = await this.db.count();
 
-      // added = files newly discovered minus those that failed (spec: failedFiles excluded)
+      // added/updated = files processed minus those that failed (spec: failedFiles excluded)
       const addedSet = new Set(diff.toAdd.map((f) => f.relativePath));
       const updateSet = new Set(diff.toUpdate.map((f) => f.relativePath));
       const failedAddedCount = failedFiles.filter((f) => addedSet.has(f)).length;
+      const failedUpdatedCount = failedFiles.filter((f) => updateSet.has(f)).length;
 
       // Count chunks created for added vs updated files
       let addedChunks = 0;
@@ -117,7 +118,7 @@ export class Indexer {
       return {
         added: diff.toAdd.length - failedAddedCount,
         addedChunks,
-        updated: diff.toUpdate.length,
+        updated: diff.toUpdate.length - failedUpdatedCount,
         updatedChunks,
         removed: diff.toDelete.length,
         skipped: allFiles.length - toProcess.length,

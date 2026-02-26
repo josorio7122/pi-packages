@@ -303,6 +303,34 @@ describe("Indexer", () => {
     expect(db.deleteByFilePath).not.toHaveBeenCalledWith("stale.ts");
   });
 
+  it("updated count excludes files that failed to embed", async () => {
+    // First run: index one file successfully
+    const goodPath = join(tmpDir, "good.ts");
+    const badPath = join(tmpDir, "bad.ts");
+    writeFileSync(goodPath, "export const x = 1;");
+    writeFileSync(badPath, "export const y = 2;");
+
+    const db = makeDb();
+    const emb = makeEmb();
+    const indexer = new Indexer(makeConfig(), db, emb);
+    await indexer.run(); // first run: both files added
+
+    // Modify both files so they appear changed on next run
+    writeFileSync(goodPath, "export const x = 2;");
+    writeFileSync(badPath, "export const y = 3;");
+
+    // Make bad.ts fail to embed on second run — check the enriched text to be order-independent
+    vi.mocked(emb.embed).mockImplementation(async (text: string) => {
+      if (text.includes("bad.ts")) throw new Error("Embed error for bad.ts");
+      return [0.1, 0.2, 0.3, 0.4];
+    });
+
+    const summary = await indexer.run();
+    // bad.ts failed to embed, so updated should be 1 (only good.ts), not 2
+    expect(summary.failedFiles).toContain("bad.ts");
+    expect(summary.updated).toBe(1);
+  });
+
   it("embed concurrency never exceeds EMBED_CONCURRENCY batches at once", async () => {
     // Create 25 small files so we get ≥ 25 chunks total (more than one batch of 20)
     for (let i = 0; i < 25; i++) {
