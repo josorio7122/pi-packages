@@ -127,4 +127,50 @@ describe("chunkFile", () => {
     const repoChunk = chunks.find((c) => c.symbol === "Repository");
     expect(repoChunk).toBeDefined();
   });
+
+  // M-3: var declarations must NOT create chunk boundaries
+  it("var declaration does NOT trigger a TypeScript chunk boundary", () => {
+    const content = [
+      "export function doSomething() {",
+      "  var foo = 1;",
+      "  var bar = 2;",
+      "  return foo + bar;",
+      "}",
+    ].join("\n");
+    const chunks = chunkFile("src/util.ts", content, 1000);
+    // All lines should be in a single chunk — var declarations don't split
+    expect(chunks).toHaveLength(1);
+  });
+
+  // M-4: CSS boundary — `.className {` must trigger
+  it(".className { triggers a CSS chunk boundary", () => {
+    const content = [
+      "body {",
+      "  margin: 0;",
+      "}",
+      "",
+      ".container {",
+      "  padding: 16px;",
+      "}",
+    ].join("\n");
+    const chunks = chunkFile("src/styles.css", content, 1000);
+    // .container { should start a new chunk
+    const containerChunk = chunks.find((c) => c.text.includes(".container {"));
+    expect(containerChunk).toBeDefined();
+    expect(containerChunk!.startLine).toBe(5);
+  });
+
+  // M-4: CSS boundary — `.className` alone (no brace/comma) must NOT trigger
+  it(".className alone (no brace or comma) does NOT trigger a CSS chunk boundary", () => {
+    const content = [
+      ".container",
+      "  .child {",
+      "  color: red;",
+      "}",
+    ].join("\n");
+    const chunks = chunkFile("src/styles.css", content, 1000);
+    // `.container` on its own line should not start a chunk — only 1 chunk total
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].startLine).toBe(1);
+  });
 });

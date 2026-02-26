@@ -72,7 +72,7 @@ const BOUNDARIES: Record<string, BoundaryDef[]> = {
     [/^#{2,3}\s+(.+)/, (l) => l.replace(/^#+\s+/, "").trim()],
   ],
   css: [
-    [/^[.#a-zA-Z:[]\w][^{]*\{/, (l) => l.replace(/\{.*/, "").trim()],
+    [/^\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[,{]|^[a-zA-Z][a-zA-Z0-9_-]*\s*\{/, (l) => l.replace(/[,{].*/, "").trim()],
   ],
 };
 
