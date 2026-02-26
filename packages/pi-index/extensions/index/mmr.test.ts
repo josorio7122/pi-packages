@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mmrRerank, cosineSimilarity } from "./mmr.js";
-import type { CodeChunk } from "./chunker.js";
-
-type ScoredChunk = CodeChunk & { score: number };
+import { mmrRerank, cosineSimilarity, type ScoredChunk } from "./mmr.js";
 
 function makeChunk(id: string, vector: number[], score: number): ScoredChunk {
   return {

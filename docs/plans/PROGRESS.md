@@ -188,3 +188,51 @@
 - **Tests:** 183 passing (pi-index), 78 passing (pi-memory)
 - **Notes:** none
 - **Timestamp:** 2026-02-26
+
+### Task: Fix M-3 (remove var boundary) and M-4 (tighten CSS regex)
+- **Status:** ✅ Complete
+- **Commit:** 461881f
+- **Built:** (M-3) Confirmed `var` was never in the TS/JS boundary patterns (already granular per-pattern entries) — added test documenting this behavior. (M-4) Replaced broken CSS regex `/^[.#a-zA-Z:[]\w][^{]*\{/` (which had a character-class parsing bug causing `]` to close the class early, breaking `.className {` matching) with `/^\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[,{]|^[a-zA-Z][a-zA-Z0-9_-]*\s*\{/` — also updated symbol extractor to strip comma/brace.
+- **Tests:** 26 passing
+- **Notes:** The old CSS pattern was silently broken — the `]` in `[.#a-zA-Z:[]\w]` closed the character class early, so `.container {` never matched. All CSS content was falling into fixed-size chunks instead of semantic chunks. This is now fixed.
+- **Timestamp:** 2026-02-26
+
+### Task: Fix L-1, L-3, L-4 — gitignore note, chunk ID stability, timestamp test
+- **Status:** ✅ Complete
+- **Commit:** 3e898fd (test), 4aa43ad (docs)
+- **Built:** (L-1) Added `.gitignore` section to README after configuration block; (L-4) Added Chunk IDs subsection in Architecture explaining `{filePath}:{chunkIndex}` format and index-instability; (L-3) Added `/index-status includes formatted last indexed date` test verifying `2023-11-14 22:13` output from known timestamp `1700000000000`
+- **Tests:** 26 passing
+- **Notes:** none
+- **Timestamp:** 2026-02-26
+
+### Task: Fix L-2, M-5, M-6 — retry to embeddings.ts, LanceDB integration tests, force=true test
+- **Status:** ✅ Complete
+- **Commit:** eb92386 (tests), 02c589f (refactor)
+- **Built:** (L-2) Moved `isRateLimitError`+`withRetry` from indexer.ts into embeddings.ts — `embed()` now retries up to 4× on 429 before throwing; removed retry loop from indexer's `processBatch`, which now just calls `this.emb.embed()` directly. (M-5) Added `IndexDB integration` describe block in db.test.ts with 2 real-LanceDB tests using async `mkdir`/`rm` + `randomUUID` temp dirs. (M-6) Added `force=true calls db.deleteAll before indexing even when files are unchanged` test in indexer.test.ts using `vi.spyOn` to verify both `deleteAll` and `insertChunks` are called.
+- **Tests:** 199 passing
+- **Notes:** The existing indexer test `"HTTP 429 errors are retried and can succeed on a subsequent attempt"` was renamed and updated to reflect new contract: from indexer's perspective a 429 from emb.embed() is a plain failure (the real Embeddings class handles retrying internally). The M-5 integration tests use `30_000` timeout matching the existing db.test.ts pattern.
+- **Timestamp:** 2026-02-26
+
+### Task: Fix M-1 (mmrLambda config) and M-2 (dir existence warning)
+- **Status:** ✅ Complete
+- **Commit:** fecb9dd
+- **Built:** Added `mmrLambda: number` to `IndexConfig` (default 0.5, validated 0–1, env var `PI_INDEX_MMR_LAMBDA`); added `existsSync` filtering in `parseConfig` — missing dirs emit `console.warn` and are removed, falling back to `indexRoot` if all removed.
+- **Tests:** 23 passing
+- **Notes:** ESM prevents `vi.spyOn` on `node:fs` named exports; used `vi.mock("node:fs", factory)` + `vi.mocked(existsSync)` instead. Added `beforeEach` reset to all describe blocks so the mock defaults to `true` and doesn't break existing tests.
+- **Timestamp:** 2026-02-26
+
+### Task: Fix H-3 (minScore param) and M-1 searcher side (mmrLambda)
+- **Status:** ✅ Complete
+- **Commit:** e1169ac
+- **Built:** (1) `mmrRerank` gains optional `lambda = 0.5` parameter (backward-compatible, replaces hardcoded 0.5 in both relevance and diversity weights); (2) `Searcher.search()` gains optional `minScore?: number` param — uses `minScore ?? this.cfg.minScore` for threshold; (3) `Searcher.search()` passes `this.cfg.mmrLambda` to `mmrRerank`; (4) `codebase_search` tool adds `minScore` to schema, extracts and passes it through to `search()`.
+- **Tests:** 207 passing
+- **Notes:** Existing tool tests updated: `toHaveBeenCalledWith("auth", 8)` → `toHaveBeenCalledWith("auth", 8, undefined)` since the call now passes 3 args. `makeConfig` in searcher.test.ts updated to include `mmrLambda: 0.5`.
+- **Timestamp:** 2026-02-26
+
+### Task: Fix NaN guard in config.ts and add missing loadConfig env var tests
+- **Status:** ✅ Complete
+- **Commit:** 6772f07
+- **Built:** Added `parseEnvInt`/`parseEnvFloat` helpers that throw `CONFIG_INVALID_VALUE` on `NaN`; updated `loadConfig` to use them for `PI_INDEX_MAX_FILE_KB`, `PI_INDEX_MIN_SCORE`, `PI_INDEX_MMR_LAMBDA`. Added 6 new tests: 3 NaN error cases + 3 happy-path env var parse tests.
+- **Tests:** 29 passing
+- **Notes:** none
+- **Timestamp:** 2026-02-26

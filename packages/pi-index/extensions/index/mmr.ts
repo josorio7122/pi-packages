@@ -7,7 +7,10 @@ export type ScoredChunk = CodeChunk & { score: number };
  * Returns 0 if either vector is all-zeros.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
+  if (a.length !== b.length) {
+    console.warn(`[pi-index] cosineSimilarity: vector dimension mismatch (${a.length} vs ${b.length})`);
+    return 0;
+  }
   let dot = 0;
   let normA = 0;
   let normB = 0;

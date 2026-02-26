@@ -20,6 +20,7 @@ function makeConfig(override: Partial<IndexConfig> = {}): IndexConfig {
     autoIndex: false,
     maxFileKB: 500,
     minScore: 0.2,
+    mmrLambda: 0.5,
     ...override,
   };
 }

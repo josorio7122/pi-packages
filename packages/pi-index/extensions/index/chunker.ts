@@ -44,23 +44,18 @@ export function detectLanguage(ext: string): string {
 // Each entry: [regex that matches the START of a boundary line, function to extract symbol name]
 type BoundaryDef = [RegExp, (line: string) => string];
 
+const TS_JS_BOUNDARIES: BoundaryDef[] = [
+  [/^export\s+(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
+  [/^export\s+(?:abstract\s+)?class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
+  [/^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/, (l) => l.match(/const\s+(\w+)/)?.[1] ?? ""],
+  [/^(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
+  [/^abstract\s+class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
+  [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
+];
+
 const BOUNDARIES: Record<string, BoundaryDef[]> = {
-  typescript: [
-    [/^export\s+(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
-    [/^export\s+(?:abstract\s+)?class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-    [/^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/, (l) => l.match(/const\s+(\w+)/)?.[1] ?? ""],
-    [/^(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
-    [/^abstract\s+class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-    [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-  ],
-  javascript: [
-    [/^export\s+(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
-    [/^export\s+(?:abstract\s+)?class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-    [/^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/, (l) => l.match(/const\s+(\w+)/)?.[1] ?? ""],
-    [/^(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
-    [/^abstract\s+class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-    [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-  ],
+  typescript: TS_JS_BOUNDARIES,
+  javascript: TS_JS_BOUNDARIES,
   python: [
     [/^(?:async\s+)?def\s+(\w+)/, (l) => l.match(/def\s+(\w+)/)?.[1] ?? ""],
     [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
