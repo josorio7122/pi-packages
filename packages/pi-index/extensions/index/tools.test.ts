@@ -116,7 +116,7 @@ describe("createIndexTools", () => {
       expect(indexer.run).toHaveBeenCalledWith({ force: true });
     });
 
-    it("returns a summary string with Added/Updated/Removed/Skipped", async () => {
+    it("returns a summary string with Added/Updated/Skipped", async () => {
       const indexer = makeIndexer({ added: 3, addedChunks: 12, updated: 1, updatedChunks: 4, removed: 0, skipped: 95, skippedTooLarge: 0, totalChunks: 200, elapsedMs: 5000 });
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
