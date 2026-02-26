@@ -32,6 +32,21 @@ const EMBED_BATCH_SIZE = 20;
 const EMBED_CONCURRENCY = 3;
 const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000]; // 4 attempts = 15 seconds max wait
 
+// Only HTTP 429 (rate-limit) errors are retried. All other errors fail immediately.
+function isRateLimitError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const status = (err as { status?: number }).status;
+    if (status === 429) return true;
+    if (
+      err.message.toLowerCase().includes("rate limit") ||
+      err.message.toLowerCase().includes("429")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export class Indexer {
   private running = false;
   private mtimeCache: Map<string, MtimeEntry> | null = null;
@@ -143,6 +158,9 @@ export class Indexer {
       chunkBatches.push(allRaw.slice(i, i + EMBED_BATCH_SIZE));
     }
 
+    // Track files where any chunk failed to embed — these must not be partially written
+    const embedFailedFiles = new Set<string>();
+
     // Embed with limited concurrency (up to 3 batches concurrent, sequential within each batch)
     const embedded: { file: FileRecord; chunk: ReturnType<typeof chunkFile>[number]; vector: number[] }[] = [];
     for (let i = 0; i < chunkBatches.length; i += EMBED_CONCURRENCY) {
@@ -157,13 +175,15 @@ export class Indexer {
                 const vector = await this.emb.embed(enriched);
                 batchResults.push({ file, chunk, vector });
                 break;
-              } catch {
-                if (attempt < RETRY_DELAYS_MS.length) {
+              } catch (err) {
+                if (attempt < RETRY_DELAYS_MS.length && isRateLimitError(err)) {
                   await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
                 } else {
                   if (!failedFiles.includes(file.relativePath)) {
                     failedFiles.push(file.relativePath);
                   }
+                  embedFailedFiles.add(file.relativePath);
+                  break; // stop retrying for this chunk
                 }
               }
             }
@@ -175,9 +195,11 @@ export class Indexer {
     }
 
     // Step 3: group embedded chunks by file and write to DB
+    // Skip files that had any chunk embedding failure to avoid partial writes
     const byFile = new Map<string, typeof embedded>();
     for (const item of embedded) {
       const key = item.file.relativePath;
+      if (embedFailedFiles.has(key)) continue; // skip — file already marked failed
       if (!byFile.has(key)) byFile.set(key, []);
       byFile.get(key)!.push(item);
     }

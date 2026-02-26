@@ -160,6 +160,61 @@ describe("Indexer", () => {
     expect(summary.added).toBe(1); // only good.ts succeeded, not 2
   });
 
+  it("non-429 embed errors fail immediately without retrying", async () => {
+    writeFileSync(join(tmpDir, "fail.ts"), "export const x = 1;");
+    const db = makeDb();
+    const emb = makeEmb();
+    const authError = Object.assign(new Error("Unauthorized"), { status: 401 });
+    vi.mocked(emb.embed).mockRejectedValue(authError);
+    const indexer = new Indexer(makeConfig(), db, emb);
+    const summary = await indexer.run();
+    // embed should only be called once — no retries for non-429
+    expect(emb.embed).toHaveBeenCalledTimes(1);
+    expect(summary.failedFiles).toContain("fail.ts");
+  });
+
+  it("HTTP 429 errors are retried and can succeed on a subsequent attempt", async () => {
+    writeFileSync(join(tmpDir, "rate.ts"), "export const x = 1;");
+    const db = makeDb();
+    const emb = makeEmb();
+    const rateLimitError = Object.assign(new Error("Rate limit exceeded"), { status: 429 });
+    let calls = 0;
+    vi.mocked(emb.embed).mockImplementation(async () => {
+      calls++;
+      if (calls === 1) throw rateLimitError; // first attempt fails with 429
+      return [0.1, 0.2, 0.3, 0.4];           // second attempt succeeds
+    });
+    const indexer = new Indexer(makeConfig(), db, emb);
+    const summary = await indexer.run();
+    // embed called twice: initial attempt + 1 retry after 429
+    expect(emb.embed).toHaveBeenCalledTimes(2);
+    // File should succeed (not in failedFiles) because the retry succeeded
+    expect(summary.failedFiles).not.toContain("rate.ts");
+  }, 5000); // 5s timeout: allows for the 1-second retry delay
+
+  it("file with any failed chunk embedding is not partially inserted to DB", async () => {
+    // Create a file that produces multiple chunks — fail the second one
+    writeFileSync(
+      join(tmpDir, "multi.ts"),
+      // Large enough content to produce multiple chunks
+      Array.from({ length: 100 }, (_, i) => `export const v${i} = ${i};`).join("\n"),
+    );
+    const db = makeDb();
+    const emb = makeEmb();
+    let callCount = 0;
+    const authError = Object.assign(new Error("Forbidden"), { status: 403 });
+    vi.mocked(emb.embed).mockImplementation(async () => {
+      callCount++;
+      if (callCount === 2) throw authError; // fail the 2nd chunk
+      return [0.1, 0.2, 0.3, 0.4];
+    });
+    const indexer = new Indexer(makeConfig(), db, emb);
+    const summary = await indexer.run();
+    // insertChunks must NOT be called for multi.ts — no partial writes
+    expect(db.insertChunks).not.toHaveBeenCalled();
+    expect(summary.failedFiles).toContain("multi.ts");
+  });
+
   it("embed concurrency never exceeds EMBED_CONCURRENCY batches at once", async () => {
     // Create 25 small files so we get ≥ 25 chunks total (more than one batch of 20)
     for (let i = 0; i < 25; i++) {
