@@ -182,6 +182,29 @@ describe("Indexer", () => {
     expect(summary.added).toBe(1);
   });
 
+  it("force=true calls db.deleteAll before indexing even when files are unchanged", async () => {
+    // Run once to populate mtime cache — second run would normally skip (unchanged)
+    writeFileSync(join(tmpDir, "cached.ts"), "export const x = 1;");
+    const db = makeDb();
+    const emb = makeEmb();
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    await indexer.run();
+
+    // Second run with same db/emb but fresh indexer (cache on disk persists)
+    const db2 = makeDb();
+    const emb2 = makeEmb();
+    const indexer2 = new Indexer(makeConfig(), db2, emb2);
+    const deleteAllSpy = vi.spyOn(db2, "deleteAll");
+    const insertChunksSpy = vi.spyOn(db2, "insertChunks");
+
+    await indexer2.run({ force: true });
+
+    // Assert: deleteAll was called even though files were unchanged
+    expect(deleteAllSpy).toHaveBeenCalledOnce();
+    // Assert: insertChunks was called (files were re-indexed despite being in cache)
+    expect(insertChunksSpy).toHaveBeenCalled();
+  });
+
   it("only indexes files with supported extensions", async () => {
     writeFileSync(join(tmpDir, "code.ts"), "const x = 1;");
     writeFileSync(join(tmpDir, "ignored.rb"), "# ruby");
@@ -221,24 +244,21 @@ describe("Indexer", () => {
     expect(summary.failedFiles).toContain("fail.ts");
   });
 
-  it("HTTP 429 errors are retried and can succeed on a subsequent attempt", async () => {
+  it("embed errors including 429 are treated as file failures (retry is inside embeddings.ts)", async () => {
+    // Retry logic has been moved into embeddings.ts#embed(). From indexer's perspective,
+    // a 429 from emb.embed() is a plain failure — the real Embeddings class handles retrying
+    // internally before ever throwing. This mock simulates a failure that exhausted all retries.
     writeFileSync(join(tmpDir, "rate.ts"), "export const x = 1;");
     const db = makeDb();
     const emb = makeEmb();
     const rateLimitError = Object.assign(new Error("Rate limit exceeded"), { status: 429 });
-    let calls = 0;
-    vi.mocked(emb.embed).mockImplementation(async () => {
-      calls++;
-      if (calls === 1) throw rateLimitError; // first attempt fails with 429
-      return [0.1, 0.2, 0.3, 0.4];           // second attempt succeeds
-    });
+    vi.mocked(emb.embed).mockRejectedValue(rateLimitError);
     const indexer = new Indexer(makeConfig(), db, emb);
     const summary = await indexer.run();
-    // embed called twice: initial attempt + 1 retry after 429
-    expect(emb.embed).toHaveBeenCalledTimes(2);
-    // File should succeed (not in failedFiles) because the retry succeeded
-    expect(summary.failedFiles).not.toContain("rate.ts");
-  }, 5000); // 5s timeout: allows for the 1-second retry delay
+    // embed called once — indexer no longer retries (retry moved to embeddings.ts)
+    expect(emb.embed).toHaveBeenCalledTimes(1);
+    expect(summary.failedFiles).toContain("rate.ts");
+  });
 
   it("file with any failed chunk embedding is not partially inserted to DB", async () => {
     // Create a file that produces multiple chunks — fail the second one

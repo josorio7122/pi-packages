@@ -33,22 +33,6 @@ const SUPPORTED_EXTENSIONS = [
 
 const EMBED_BATCH_SIZE = 20;
 const EMBED_CONCURRENCY = 3;
-const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000]; // 4 attempts = 15 seconds max wait
-
-// Only HTTP 429 (rate-limit) errors are retried. All other errors fail immediately.
-function isRateLimitError(err: unknown): boolean {
-  if (err instanceof Error) {
-    const status = (err as { status?: number }).status;
-    if (status === 429) return true;
-    if (
-      err.message.toLowerCase().includes("rate limit") ||
-      err.message.toLowerCase().includes("429")
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
 
 export class Indexer {
   private running = false;
@@ -188,23 +172,15 @@ export class Indexer {
         batchGroup.map(async (batch) => {
           const batchResults: typeof embedded = [];
           for (const { file, chunk } of batch) {
-            for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-              try {
-                const enriched = `File: ${chunk.filePath} (${chunk.language})\nSymbol: ${chunk.symbol}\n---\n${chunk.text}`;
-                const vector = await this.emb.embed(enriched);
-                batchResults.push({ file, chunk, vector });
-                break;
-              } catch (err) {
-                if (attempt < RETRY_DELAYS_MS.length && isRateLimitError(err)) {
-                  await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
-                } else {
-                  if (!failedFiles.includes(file.relativePath)) {
-                    failedFiles.push(file.relativePath);
-                  }
-                  embedFailedFiles.add(file.relativePath);
-                  break; // stop retrying for this chunk
-                }
+            try {
+              const enriched = `File: ${chunk.filePath} (${chunk.language})\nSymbol: ${chunk.symbol}\n---\n${chunk.text}`;
+              const vector = await this.emb.embed(enriched);
+              batchResults.push({ file, chunk, vector });
+            } catch {
+              if (!failedFiles.includes(file.relativePath)) {
+                failedFiles.push(file.relativePath);
               }
+              embedFailedFiles.add(file.relativePath);
             }
           }
           return batchResults;

@@ -44,4 +44,38 @@ describe("Embeddings", () => {
       })
     );
   });
+
+  it("retries embed on HTTP 429 and returns result after retry", async () => {
+    const OpenAI = (await import("openai")).default;
+    let callCount = 0;
+    const mockCreate = vi.fn().mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw Object.assign(new Error("Rate limit exceeded"), { status: 429 });
+      }
+      return { data: [{ embedding: [0.5, 0.6, 0.7] }] };
+    });
+    vi.mocked(OpenAI).mockImplementationOnce(function () {
+      return { embeddings: { create: mockCreate } };
+    } as never);
+    const { Embeddings } = await import("./embeddings.js");
+    const emb = new Embeddings("sk-test", "text-embedding-3-small");
+    const result = await emb.embed("rate limit test");
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    expect(result).toEqual([0.5, 0.6, 0.7]);
+  }, 5000); // Allow for 1s retry delay
+
+  it("does not retry on non-429 errors", async () => {
+    const OpenAI = (await import("openai")).default;
+    const mockCreate = vi.fn().mockRejectedValue(
+      Object.assign(new Error("Unauthorized"), { status: 401 }),
+    );
+    vi.mocked(OpenAI).mockImplementationOnce(function () {
+      return { embeddings: { create: mockCreate } };
+    } as never);
+    const { Embeddings } = await import("./embeddings.js");
+    const emb = new Embeddings("sk-test", "text-embedding-3-small");
+    await expect(emb.embed("test")).rejects.toThrow("Unauthorized");
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
 });
