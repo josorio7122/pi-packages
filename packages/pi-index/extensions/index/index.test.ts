@@ -307,6 +307,34 @@ describe("pi-index extension entry point", () => {
     );
   });
 
+  it("/index-status includes formatted last indexed date", async () => {
+    vi.resetModules();
+    vi.doMock("./db.js", () => ({
+      IndexDB: function (this: Record<string, unknown>) {
+        this.getStatus = vi.fn().mockResolvedValue({ chunkCount: 100, fileCount: 20, lastIndexedAt: 1700000000000 });
+        this.deleteAll = vi.fn().mockResolvedValue(undefined);
+        this.vectorSearch = vi.fn().mockResolvedValue([]);
+        this.hybridSearch = vi.fn().mockResolvedValue([]);
+        this.insertChunks = vi.fn().mockResolvedValue(undefined);
+        this.deleteByFilePath = vi.fn().mockResolvedValue(undefined);
+      },
+    }));
+    const mod2 = await import("./index.js");
+    const ext2 = mod2.default as (pi: typeof pi) => void;
+    const rc2 = vi.fn();
+    ext2({ registerTool: vi.fn(), registerCommand: rc2, on: vi.fn() } as never);
+
+    const statusCall = rc2.mock.calls.find((c: [string]) => c[0] === "index-status");
+    const handler = statusCall![1].handler as (args: unknown, ctx: { ui: { notify: ReturnType<typeof vi.fn> } }) => Promise<void>;
+    const localCtx = { ui: { notify: vi.fn() } };
+    await handler({}, localCtx);
+    // new Date(1700000000000).toISOString().slice(0, 16).replace("T", " ") === "2023-11-14 22:13"
+    expect(localCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("2023-11-14 22:13"),
+      "info",
+    );
+  });
+
   // Fix 6: /index-status error is reported gracefully (not as "error" level)
   it("/index-status reports unreadable state gracefully with info level", async () => {
     vi.resetModules();
