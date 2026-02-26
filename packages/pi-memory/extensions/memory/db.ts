@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Connection, Table } from "@lancedb/lancedb";
 import type { MemoryCategory } from "./utils.js";
 
 let lancedbImportPromise: Promise<typeof import("@lancedb/lancedb")> | null = null;
@@ -27,11 +28,23 @@ export type MemorySearchResult = {
   score: number;
 };
 
+// Shape of a row returned by LanceDB's toArray() for our schema.
+// _distance is added by the vector search engine.
+interface MemoryRow {
+  id: string;
+  text: string;
+  vector: number[];
+  importance: number;
+  category: string;
+  createdAt: number;
+  _distance?: number;
+}
+
 const TABLE_NAME = "memories";
 
 export class MemoryDB {
-  private db: any = null;
-  private table: any = null;
+  private db: Connection | null = null;
+  private table: Table | null = null;
   private initPromise: Promise<void> | null = null;
 
   constructor(
@@ -91,23 +104,24 @@ export class MemoryDB {
 
   async search(vector: number[], limit = 5, minScore = 0.5): Promise<MemorySearchResult[]> {
     await this.ensureInitialized();
-    const results = await this.table!.vectorSearch(vector).limit(limit).toArray();
-    const mapped = results.map((row: any) => {
+    const rows: MemoryRow[] = await this.table!.vectorSearch(vector).limit(limit).toArray();
+    const mapped = rows.map((row) => {
       const distance = row._distance ?? 0;
+      // LanceDB uses L2 distance by default; convert to a 0-1 similarity score
       const score = 1 / (1 + distance);
       return {
         entry: {
-          id: row.id as string,
-          text: row.text as string,
-          vector: row.vector as number[],
-          importance: row.importance as number,
-          category: row.category as MemoryEntry["category"],
-          createdAt: row.createdAt as number,
+          id: row.id,
+          text: row.text,
+          vector: row.vector,
+          importance: row.importance,
+          category: row.category as MemoryCategory,
+          createdAt: row.createdAt,
         },
         score,
       };
     });
-    return mapped.filter((r: MemorySearchResult) => r.score >= minScore);
+    return mapped.filter((r) => r.score >= minScore);
   }
 
   async delete(id: string): Promise<boolean> {

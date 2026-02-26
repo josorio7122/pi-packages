@@ -20,9 +20,9 @@ export default function (pi: ExtensionAPI): void {
 
   // ── Tools ────────────────────────────────────────────────────────────────
   const { recallTool, storeTool, forgetTool } = createMemoryTools(db, emb, cfg);
-  pi.registerTool(recallTool as any);
-  pi.registerTool(storeTool as any);
-  pi.registerTool(forgetTool as any);
+  pi.registerTool(recallTool);
+  pi.registerTool(storeTool);
+  pi.registerTool(forgetTool);
 
   // ── Injection hook ────────────────────────────────────────────────────────
   if (cfg.autoRecall) {
@@ -42,7 +42,7 @@ export default function (pi: ExtensionAPI): void {
     const captureHook = createCaptureHook(db, emb, cfg);
 
     pi.on("agent_end", async (event, _ctx) => {
-      await captureHook({ messages: (event.messages ?? []) as any });
+      await captureHook({ messages: event.messages ?? [] });
     });
   }
 

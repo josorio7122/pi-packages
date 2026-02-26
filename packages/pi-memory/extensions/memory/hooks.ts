@@ -1,7 +1,16 @@
+import type { AgentEndEvent } from "@mariozechner/pi-coding-agent";
 import type { MemoryDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import type { MemoryConfig } from "./config.js";
 import { shouldCapture, detectCategory, formatRelevantMemoriesContext, looksLikePromptInjection } from "./utils.js";
+
+// Derive message types from the event — no extra peer dep needed.
+type AgentMessage = AgentEndEvent["messages"][number];
+// UserMessage is the discriminated branch where role === "user".
+type UserMessage = Extract<AgentMessage, { role: "user" }>;
+type UserContent = UserMessage["content"];
+
+// ── Injection hook ─────────────────────────────────────────────────────────
 
 export function createInjectionHook(
   db: MemoryDB,
@@ -32,26 +41,30 @@ export function createInjectionHook(
   };
 }
 
+// ── Capture hook ───────────────────────────────────────────────────────────
+
 export function createCaptureHook(
   db: MemoryDB,
   emb: Pick<Embeddings, "embed">,
   cfg: MemoryConfig,
-): (event: { messages: Array<{ role: string; content: unknown }> }) => Promise<void> {
+): (event: { messages: AgentMessage[] }) => Promise<void> {
   return async (event) => {
     if (event.messages.length === 0) {
       return;
     }
     try {
       let stored = 0;
-      for (const message of event.messages) {
+      for (const msg of event.messages) {
         if (stored >= 3) {
           break;
         }
-        if (message.role !== "user") {
+        // Only process user messages — never self-poison from model output
+        if (msg.role !== "user") {
           continue;
         }
 
-        const text = extractText(message.content);
+        // TypeScript narrows msg to UserMessage here since role === "user"
+        const text = extractText((msg as UserMessage).content);
         if (!text) {
           continue;
         }
@@ -80,19 +93,27 @@ export function createCaptureHook(
   };
 }
 
-function extractText(content: unknown): string | null {
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Extract plain text from a UserMessage's content.
+ * Handles both string content and content-block arrays.
+ */
+function extractText(content: UserContent): string | null {
   if (typeof content === "string") {
     return content.trim() || null;
   }
-  if (Array.isArray(content)) {
-    const parts: string[] = [];
-    for (const block of content) {
-      if (block && typeof block === "object" && block.type === "text" && typeof block.text === "string") {
-        parts.push(block.text);
-      }
-    }
-    const joined = parts.join(" ").trim();
-    return joined || null;
+  // TypeScript guarantees this branch is (TextContent | ImageContent)[],
+  // but guard defensively against unexpected runtime shapes.
+  if (!Array.isArray(content)) {
+    return null;
   }
-  return null;
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type === "text") {
+      // TypeScript narrows block to TextContent here
+      parts.push(block.text);
+    }
+  }
+  return parts.join(" ").trim() || null;
 }

@@ -1,15 +1,65 @@
-import { Type } from "@sinclair/typebox";
+import { Type, type Static } from "@sinclair/typebox";
+import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { MemoryDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import type { MemoryConfig } from "./config.js";
 import { MEMORY_CATEGORIES, type MemoryCategory } from "./utils.js";
 
-type ToolResult = {
-  content: Array<{ type: string; text: string }>;
-  details?: Record<string, unknown>;
+// ── TypeBox parameter schemas ────────────────────────────────────────────────
+
+const recallParams = Type.Object({
+  query: Type.String({ description: "Search query" }),
+  limit: Type.Optional(Type.Number({ description: "Max results (default: 5)" })),
+});
+
+const storeParams = Type.Object({
+  text: Type.String({ description: "Information to remember" }),
+  importance: Type.Optional(
+    Type.Number({ minimum: 0, maximum: 1, description: "Importance score 0-1 (default: 0.7)" }),
+  ),
+  category: Type.Optional(
+    Type.Unsafe<MemoryCategory>({ type: "string", enum: [...MEMORY_CATEGORIES] }),
+  ),
+});
+
+const forgetParams = Type.Object({
+  query: Type.Optional(Type.String({ description: "Search to find memory" })),
+  memoryId: Type.Optional(Type.String({ description: "Specific memory ID" })),
+});
+
+// ── Detail types for each tool ───────────────────────────────────────────────
+
+type SanitizedMemory = {
+  id: string;
+  text: string;
+  category: MemoryCategory;
+  importance: number;
+  createdAt: number;
+  score: number;
 };
 
-export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, _cfg: MemoryConfig) {
+type RecallDetails = { count: number; memories?: SanitizedMemory[] };
+
+type StoreDetails =
+  | { action: "created"; id: string }
+  | { action: "duplicate"; id: string; text: string; category: MemoryCategory }
+  | { error: "empty_text" };
+
+type ForgetCandidate = { id: string; text: string; score: number };
+
+type ForgetDetails =
+  | { action: "deleted"; id: string }
+  | { action: "candidates"; candidates: ForgetCandidate[] }
+  | { action: "not_found"; found: 0 }
+  | { error: "missing_param" };
+
+// ── Factory ──────────────────────────────────────────────────────────────────
+
+export function createMemoryTools(
+  db: MemoryDB,
+  emb: Pick<Embeddings, "embed">,
+  _cfg: MemoryConfig,
+) {
   // ─── memory_recall ──────────────────────────────────────────────────────
 
   const recallTool = {
@@ -17,19 +67,14 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
     label: "Memory Recall",
     description:
       "Search through long-term memories. Use when you need context about user preferences, past decisions, or previously discussed topics.",
-    parameters: Type.Object({
-      query: Type.String({ description: "Search query" }),
-      limit: Type.Optional(
-        Type.Number({ description: "Max results (default: 5)" })
-      ),
-    }),
+    parameters: recallParams,
     async execute(
       _toolCallId: string,
-      params: { query: string; limit?: number },
+      params: Static<typeof recallParams>,
       _signal: AbortSignal | undefined,
-      _onUpdate: unknown,
-      _ctx: unknown
-    ): Promise<ToolResult> {
+      _onUpdate: AgentToolUpdateCallback<RecallDetails> | undefined,
+      _ctx: ExtensionContext,
+    ): Promise<AgentToolResult<RecallDetails>> {
       const vector = await emb.embed(params.query);
       const results = await db.search(vector, params.limit ?? 5, 0.1);
 
@@ -47,11 +92,15 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
         )
         .join("\n");
 
-      // Sanitize: strip vector field before serialization
-      const memories = results.map((r) => {
-        const { vector: _v, ...rest } = r.entry;
-        return { ...rest, score: r.score };
-      });
+      // Sanitize: strip the vector field before serialization
+      const memories: SanitizedMemory[] = results.map((r) => ({
+        id: r.entry.id,
+        text: r.entry.text,
+        category: r.entry.category,
+        importance: r.entry.importance,
+        createdAt: r.entry.createdAt,
+        score: r.score,
+      }));
 
       return {
         content: [{ type: "text", text: `Found ${results.length} memories:\n\n${text}` }],
@@ -67,31 +116,21 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
     label: "Memory Store",
     description:
       "Save important information in long-term memory. Use for preferences, facts, decisions.",
-    parameters: Type.Object({
-      text: Type.String({ description: "Information to remember" }),
-      importance: Type.Optional(
-        Type.Number({ minimum: 0, maximum: 1, description: "Importance score 0-1 (default: 0.7)" })
-      ),
-      category: Type.Optional(
-        Type.Unsafe<MemoryCategory>({
-          type: "string",
-          enum: [...MEMORY_CATEGORIES],
-        })
-      ),
-    }),
+    parameters: storeParams,
     async execute(
       _toolCallId: string,
-      params: { text: string; importance?: number; category?: MemoryCategory },
+      params: Static<typeof storeParams>,
       _signal: AbortSignal | undefined,
-      _onUpdate: unknown,
-      _ctx: unknown
-    ): Promise<ToolResult> {
+      _onUpdate: AgentToolUpdateCallback<StoreDetails> | undefined,
+      _ctx: ExtensionContext,
+    ): Promise<AgentToolResult<StoreDetails>> {
       if (!params.text || params.text.trim().length === 0) {
         return {
-          content: [{ type: "text" as const, text: "Memory text cannot be empty." }],
+          content: [{ type: "text", text: "Memory text cannot be empty." }],
           details: { error: "empty_text" },
         };
       }
+
       const vector = await emb.embed(params.text);
 
       // Duplicate check at very high threshold
@@ -100,17 +139,9 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
         const existing = dupes[0].entry;
         return {
           content: [
-            {
-              type: "text",
-              text: `Duplicate memory found: "${existing.text}"`,
-            },
+            { type: "text", text: `Similar memory already exists: "${existing.text}"` },
           ],
-          details: {
-            action: "duplicate",
-            id: existing.id,
-            text: existing.text,
-            category: existing.category,
-          },
+          details: { action: "duplicate", id: existing.id, text: existing.text, category: existing.category },
         };
       }
 
@@ -134,28 +165,19 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
     name: "memory_forget",
     label: "Memory Forget",
     description: "Delete specific memories. GDPR-compliant.",
-    parameters: Type.Object({
-      query: Type.Optional(
-        Type.String({ description: "Search to find memory" })
-      ),
-      memoryId: Type.Optional(
-        Type.String({ description: "Specific memory ID" })
-      ),
-    }),
+    parameters: forgetParams,
     async execute(
       _toolCallId: string,
-      params: { query?: string; memoryId?: string },
+      params: Static<typeof forgetParams>,
       _signal: AbortSignal | undefined,
-      _onUpdate: unknown,
-      _ctx: unknown
-    ): Promise<ToolResult> {
+      _onUpdate: AgentToolUpdateCallback<ForgetDetails> | undefined,
+      _ctx: ExtensionContext,
+    ): Promise<AgentToolResult<ForgetDetails>> {
       // Direct delete by ID
       if (params.memoryId) {
         await db.delete(params.memoryId);
         return {
-          content: [
-            { type: "text", text: `Memory ${params.memoryId} deleted.` },
-          ],
+          content: [{ type: "text", text: `Memory ${params.memoryId} forgotten.` }],
           details: { action: "deleted", id: params.memoryId },
         };
       }
@@ -177,23 +199,23 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
           const id = results[0].entry.id;
           await db.delete(id);
           return {
-            content: [{ type: "text", text: `Memory ${id} deleted.` }],
+            content: [{ type: "text", text: `Forgotten: "${results[0].entry.text}"` }],
             details: { action: "deleted", id },
           };
         }
 
         // Multiple matches — return candidates
-        const candidates = results.map((r) => ({
+        const candidates: ForgetCandidate[] = results.map((r) => ({
           id: r.entry.id,
-          text: r.entry.text.slice(0, 80),
+          text: r.entry.text.slice(0, 60),
           score: Math.round(r.score * 100),
         }));
+        const list = candidates
+          .map((c) => `- [${c.id.slice(0, 8)}] ${c.text}...`)
+          .join("\n");
         return {
           content: [
-            {
-              type: "text",
-              text: `Found ${candidates.length} candidates. Specify a memoryId to delete.`,
-            },
+            { type: "text", text: `Found ${results.length} candidates. Specify memoryId:\n${list}` },
           ],
           details: { action: "candidates", candidates },
         };
@@ -201,12 +223,7 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
 
       // Neither provided
       return {
-        content: [
-          {
-            type: "text",
-            text: "Provide either a query or a memoryId.",
-          },
-        ],
+        content: [{ type: "text", text: "Provide query or memoryId." }],
         details: { error: "missing_param" },
       };
     },
