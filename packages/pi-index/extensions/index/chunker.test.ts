@@ -114,4 +114,17 @@ describe("chunkFile", () => {
     const chunks = chunkFile(filePath, content, mtime);
     expect(chunks[0].startLine).toBe(1);
   });
+
+  it("detects standalone abstract class boundary", () => {
+    const content = [
+      "import { Base } from './base.js';",
+      "",
+      "abstract class Repository {",
+      "  abstract find(id: string): unknown;",
+      "}",
+    ].join("\n");
+    const chunks = chunkFile("src/repo.ts", content, 1000);
+    const repoChunk = chunks.find((c) => c.symbol === "Repository");
+    expect(repoChunk).toBeDefined();
+  });
 });

@@ -49,8 +49,8 @@ const BOUNDARIES: Record<string, BoundaryDef[]> = {
     [/^export\s+(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
     [/^export\s+(?:abstract\s+)?class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
     [/^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/, (l) => l.match(/const\s+(\w+)/)?.[1] ?? ""],
-    [/^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?function/, (l) => l.match(/const\s+(\w+)/)?.[1] ?? ""],
     [/^(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
+    [/^abstract\s+class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
     [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
   ],
   javascript: [
@@ -58,6 +58,7 @@ const BOUNDARIES: Record<string, BoundaryDef[]> = {
     [/^export\s+(?:abstract\s+)?class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
     [/^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/, (l) => l.match(/const\s+(\w+)/)?.[1] ?? ""],
     [/^(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
+    [/^abstract\s+class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
     [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
   ],
   python: [
