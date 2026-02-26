@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createIndexTools } from "./tools.js";
 import type { Indexer, IndexSummary } from "./indexer.js";
 import type { Searcher } from "./searcher.js";
@@ -220,12 +220,31 @@ describe("createIndexTools", () => {
       expect(result).not.toContain("rebuilding");
     });
 
-    it("not-built block has 4 spaces after 'Index path:' colon", async () => {
+    it("codebase_status not-built includes dbPath", async () => {
       const db = makeDb({ chunkCount: 0, fileCount: 0, lastIndexedAt: null });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
-      expect(result).toContain("Index path:    ");
+      expect(result).toContain("/tmp/lancedb");
+      expect(result).toContain("Not built");
+    });
+
+    it("codebase_status shows relative time in hours", async () => {
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+      const db = makeDb({ chunkCount: 10, fileCount: 3, lastIndexedAt: twoHoursAgo });
+      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("hours ago");
+    });
+
+    it("codebase_status shows relative time in days", async () => {
+      const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+      const db = makeDb({ chunkCount: 10, fileCount: 3, lastIndexedAt: threeDaysAgo });
+      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("days ago");
     });
   });
 
@@ -239,5 +258,36 @@ describe("createIndexTools", () => {
       const result = await tool.handler({ query: "auth" });
       expect(result).toContain("[CONFIG_MISSING_API_KEY]");
     });
+  });
+
+  it("codebase_search returns SEARCH_FAILED for unexpected errors", async () => {
+    const searcher = {
+      search: vi.fn().mockRejectedValue(new Error("unexpected DB error")),
+    } as unknown as Searcher;
+    const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
+    const tool = tools.find((t) => t.name === "codebase_search")!;
+    const result = await tool.handler({ query: "auth" });
+    expect(result).toContain("[SEARCH_FAILED]");
+  });
+
+  it("codebase_index returns INDEX_FAILED for unexpected errors", async () => {
+    const indexer = {
+      run: vi.fn().mockRejectedValue(new Error("disk full")),
+      isRunning: false,
+    } as unknown as Indexer;
+    const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+    const tool = tools.find((t) => t.name === "codebase_index")!;
+    const result = await tool.handler({});
+    expect(result).toContain("[INDEX_FAILED]");
+  });
+
+  it("codebase_status returns STATUS_FAILED for unexpected errors", async () => {
+    const db = {
+      getStatus: vi.fn().mockRejectedValue(new Error("connection lost")),
+    } as unknown as IndexDB;
+    const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+    const tool = tools.find((t) => t.name === "codebase_status")!;
+    const result = await tool.handler({});
+    expect(result).toContain("[STATUS_FAILED]");
   });
 });

@@ -139,9 +139,9 @@ export function createIndexTools(
           return [
             "pi-index status:",
             `  Index path:    ${cfg.dbPath}`,
-            "  Status:       Not built. Call codebase_index to create the index.",
-            `  Auto-index:   ${cfg.autoIndex ? "on" : "off"}`,
-            `  Index dirs:   ${cfg.indexDirs.join(", ")}`,
+            "  Status:        Not built. Call codebase_index to create the index.",
+            `  Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
+            `  Index dirs:    ${cfg.indexDirs.join(", ")}`,
           ].join("\n");
         }
 
