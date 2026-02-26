@@ -97,6 +97,26 @@ describe("createIndexTools", () => {
       const result = await tool.handler({ query: "auth" });
       expect(result).toBe("Found 3 results for auth");
     });
+
+    it("returns INDEX_NOT_INITIALIZED when db.getStatus throws", async () => {
+      const db = {
+        getStatus: vi.fn().mockRejectedValue(new Error("DB connection lost")),
+      } as unknown as IndexDB;
+      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_search")!;
+      const result = await tool.handler({ query: "auth" });
+      expect(result).toContain("[INDEX_NOT_INITIALIZED]");
+    });
+
+    it("codebase_search returns SEARCH_FAILED for unexpected errors", async () => {
+      const searcher = {
+        search: vi.fn().mockRejectedValue(new Error("unexpected DB error")),
+      } as unknown as Searcher;
+      const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_search")!;
+      const result = await tool.handler({ query: "auth" });
+      expect(result).toContain("[SEARCH_FAILED]");
+    });
   });
 
   describe("codebase_index", () => {
@@ -160,6 +180,27 @@ describe("createIndexTools", () => {
       const tool = tools.find((t) => t.name === "codebase_index")!;
       const result = await tool.handler({});
       expect(result).toContain("[INDEX_ALREADY_RUNNING]");
+    });
+
+    it("returns CONFIG_MISSING_API_KEY error when indexer throws it", async () => {
+      const indexer = {
+        run: vi.fn().mockRejectedValue(new Error("CONFIG_MISSING_API_KEY: no key set")),
+      } as unknown as Indexer;
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      const result = await tool.handler({});
+      expect(result).toContain("[CONFIG_MISSING_API_KEY]");
+    });
+
+    it("codebase_index returns INDEX_FAILED for unexpected errors", async () => {
+      const indexer = {
+        run: vi.fn().mockRejectedValue(new Error("disk full")),
+        isRunning: false,
+      } as unknown as Indexer;
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      const result = await tool.handler({});
+      expect(result).toContain("[INDEX_FAILED]");
     });
   });
 
@@ -246,6 +287,16 @@ describe("createIndexTools", () => {
       const result = await tool.handler({});
       expect(result).toContain("days ago");
     });
+
+    it("codebase_status returns STATUS_FAILED for unexpected errors", async () => {
+      const db = {
+        getStatus: vi.fn().mockRejectedValue(new Error("connection lost")),
+      } as unknown as IndexDB;
+      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("[STATUS_FAILED]");
+    });
   });
 
   describe("codebase_search CONFIG_MISSING_API_KEY", () => {
@@ -260,34 +311,4 @@ describe("createIndexTools", () => {
     });
   });
 
-  it("codebase_search returns SEARCH_FAILED for unexpected errors", async () => {
-    const searcher = {
-      search: vi.fn().mockRejectedValue(new Error("unexpected DB error")),
-    } as unknown as Searcher;
-    const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
-    const tool = tools.find((t) => t.name === "codebase_search")!;
-    const result = await tool.handler({ query: "auth" });
-    expect(result).toContain("[SEARCH_FAILED]");
-  });
-
-  it("codebase_index returns INDEX_FAILED for unexpected errors", async () => {
-    const indexer = {
-      run: vi.fn().mockRejectedValue(new Error("disk full")),
-      isRunning: false,
-    } as unknown as Indexer;
-    const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
-    const tool = tools.find((t) => t.name === "codebase_index")!;
-    const result = await tool.handler({});
-    expect(result).toContain("[INDEX_FAILED]");
-  });
-
-  it("codebase_status returns STATUS_FAILED for unexpected errors", async () => {
-    const db = {
-      getStatus: vi.fn().mockRejectedValue(new Error("connection lost")),
-    } as unknown as IndexDB;
-    const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
-    const tool = tools.find((t) => t.name === "codebase_status")!;
-    const result = await tool.handler({});
-    expect(result).toContain("[STATUS_FAILED]");
-  });
 });
