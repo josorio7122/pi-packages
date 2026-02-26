@@ -97,6 +97,45 @@ describe("buildFilter", () => {
     expect(f).toContain("OR");
     expect(f).not.toContain("AND");
   });
+
+  it("escapes underscore in @file LIKE pattern", () => {
+    const f = buildFilter([{ scope: "file", value: "auth_helper.ts" }]);
+    expect(f).toBeDefined();
+    // LIKE clause must have the underscore escaped as \_
+    expect(f).toMatch(/LIKE.*auth\\_helper\.ts/);
+    // Must include ESCAPE clause
+    expect(f).toContain("ESCAPE");
+    // Exact match clause uses unescaped name (= comparison)
+    expect(f).toContain("auth_helper.ts");
+  });
+
+  it("escapes percent in @file LIKE pattern", () => {
+    const f = buildFilter([{ scope: "file", value: "100%_done.ts" }]);
+    expect(f).toBeDefined();
+    expect(f).toMatch(/LIKE.*100\\%\\_done\.ts/);
+    expect(f).toContain("ESCAPE");
+  });
+
+  it("escapes underscore in @dir LIKE pattern", () => {
+    const f = buildFilter([{ scope: "dir", value: "src/my_module" }]);
+    expect(f).toBeDefined();
+    expect(f).toMatch(/LIKE.*src\/my\\_module/);
+    expect(f).toContain("ESCAPE");
+  });
+
+  it("does not add ESCAPE clause to @ext filter (uses = not LIKE)", () => {
+    const f = buildFilter([{ scope: "ext", value: ".ts" }]);
+    expect(f).toBeDefined();
+    expect(f).not.toContain("ESCAPE");
+    expect(f).not.toContain("LIKE");
+  });
+
+  it("does not add ESCAPE clause to @lang filter (uses = not LIKE)", () => {
+    const f = buildFilter([{ scope: "lang", value: "typescript" }]);
+    expect(f).toBeDefined();
+    expect(f).not.toContain("ESCAPE");
+    expect(f).not.toContain("LIKE");
+  });
 });
 
 // --- formatResults ---

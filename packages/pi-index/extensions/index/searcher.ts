@@ -50,16 +50,18 @@ export function buildFilter(filters: ScopeFilter[]): string | undefined {
   // Group by scope type
   const byScope = new Map<string, string[]>();
   for (const f of filters) {
-    const v = f.value.replace(/'/g, "''");
+    const v = f.value.replace(/'/g, "''"); // escape SQL string
+    // For LIKE patterns only: escape % and _ wildcards
+    const vLike = v.replace(/%/g, "\\%").replace(/_/g, "\\_");
     let condition: string;
     switch (f.scope) {
       case "file":
         // Match basename: filePath ends with /value or equals value
-        condition = `(filePath = '${v}' OR filePath LIKE '%/${v}')`;
+        condition = `(filePath = '${v}' OR filePath LIKE '%/${vLike}' ESCAPE '\\')`;
         break;
       case "dir":
         // Match path prefix
-        condition = `(filePath LIKE '${v}/%' OR filePath = '${v}')`;
+        condition = `(filePath LIKE '${vLike}/%' ESCAPE '\\' OR filePath = '${v}')`;
         break;
       case "ext":
         condition = `extension = '${v}'`;
@@ -67,8 +69,6 @@ export function buildFilter(filters: ScopeFilter[]): string | undefined {
       case "lang":
         condition = `language = '${v.toLowerCase()}'`;
         break;
-      default:
-        continue;
     }
     if (!byScope.has(f.scope)) byScope.set(f.scope, []);
     byScope.get(f.scope)!.push(condition);
