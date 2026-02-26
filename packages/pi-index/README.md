@@ -68,6 +68,19 @@ Or via `pi.config.json`:
 
 ---
 
+## Gitignore
+
+pi-index stores its database and cache inside your project. Add these to your `.gitignore`:
+
+```
+# pi-index
+.pi/index/
+```
+
+Without this, `git add .` will commit the LanceDB vector database files to your repository.
+
+---
+
 ## Tools
 
 ### `codebase_search`
@@ -133,6 +146,10 @@ searcher.ts            — query parsing, scope filters, result formatting
 tools.ts               — LLM tool definitions + handlers
 utils.ts               — shared helpers (relativeTime)
 ```
+
+### Chunk IDs
+
+Chunk IDs use the format `{filePath}:{chunkIndex}` (e.g., `src/auth/login.ts:3`). IDs are **not stable across re-indexing** — if a file is modified and re-indexed, chunk indices may shift. Do not use chunk IDs as persistent external references.
 
 The index is stored at `.pi/index/lancedb` (LanceDB) and `.pi/index/mtime-cache.json` (file cache). Both are project-local and should be added to `.gitignore`.
 
