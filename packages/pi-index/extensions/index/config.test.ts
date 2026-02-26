@@ -1,5 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { parseConfig, loadConfig, vectorDimsForModel, resolveDbPath } from "./config.js";
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    existsSync: vi.fn().mockReturnValue(true),
+  };
+});
+
+// Imported after mock so we get the mocked version
+const { existsSync } = await import("node:fs");
 
 describe("vectorDimsForModel", () => {
   it("returns 1536 for text-embedding-3-small", () => {
@@ -28,6 +39,15 @@ describe("resolveDbPath", () => {
 });
 
 describe("parseConfig", () => {
+  beforeEach(() => {
+    // All dirs exist by default so existing tests don't break
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
   it("returns valid config with required fields only", () => {
     const cfg = parseConfig({ apiKey: "sk-test", indexRoot: "/project" });
     expect(cfg.apiKey).toBe("sk-test");
@@ -70,12 +90,63 @@ describe("parseConfig", () => {
     });
     expect(cfg.indexDirs).toEqual(["/project/src", "/project/assets"]);
   });
+
+  // M-1: mmrLambda tests
+  it("mmrLambda defaults to 0.5", () => {
+    const cfg = parseConfig({ apiKey: "sk-test", indexRoot: "/project" });
+    expect(cfg.mmrLambda).toBe(0.5);
+  });
+
+  it("accepts mmrLambda: 0.8", () => {
+    const cfg = parseConfig({ apiKey: "sk-test", mmrLambda: 0.8, indexRoot: "/project" });
+    expect(cfg.mmrLambda).toBe(0.8);
+  });
+
+  it("throws when mmrLambda is -0.1", () => {
+    expect(() => parseConfig({ apiKey: "sk-test", mmrLambda: -0.1, indexRoot: "/project" })).toThrow("mmrLambda");
+  });
+
+  it("throws when mmrLambda is 1.1", () => {
+    expect(() => parseConfig({ apiKey: "sk-test", mmrLambda: 1.1, indexRoot: "/project" })).toThrow("mmrLambda");
+  });
+
+  // M-2: non-existent dir warning
+  it("warns and removes a non-existent dir, falls back to indexRoot when all removed", () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const cfg = parseConfig({
+      apiKey: "sk-test",
+      indexDirs: "/nonexistent/dir",
+      indexRoot: "/project",
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("/nonexistent/dir"));
+    expect(cfg.indexDirs).toEqual(["/project"]);
+    warnSpy.mockRestore();
+  });
+
+  it("warns and removes only the missing dir, keeps existing ones", () => {
+    vi.mocked(existsSync).mockImplementation((p) => p !== "/missing/dir");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const cfg = parseConfig({
+      apiKey: "sk-test",
+      indexDirs: "/missing/dir,/exists/dir",
+      indexRoot: "/project",
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("/missing/dir"));
+    expect(cfg.indexDirs).toEqual(["/exists/dir"]);
+    warnSpy.mockRestore();
+  });
 });
 
 describe("loadConfig", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
+    vi.mocked(existsSync).mockReturnValue(true);
     delete process.env.OPENAI_API_KEY;
     delete process.env.PI_INDEX_API_KEY;
     delete process.env.PI_INDEX_MODEL;
@@ -84,10 +155,12 @@ describe("loadConfig", () => {
     delete process.env.PI_INDEX_AUTO;
     delete process.env.PI_INDEX_MAX_FILE_KB;
     delete process.env.PI_INDEX_MIN_SCORE;
+    delete process.env.PI_INDEX_MMR_LAMBDA;
   });
 
   afterEach(() => {
     Object.assign(process.env, originalEnv);
+    vi.mocked(existsSync).mockReturnValue(true);
   });
 
   it("throws when no API key env var is set", () => {
@@ -112,5 +185,13 @@ describe("loadConfig", () => {
     process.env.PI_INDEX_AUTO = "true";
     const cfg = loadConfig("/project");
     expect(cfg.autoIndex).toBe(true);
+  });
+
+  // M-1: PI_INDEX_MMR_LAMBDA env var
+  it("reads PI_INDEX_MMR_LAMBDA env var", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_MMR_LAMBDA = "0.7";
+    const cfg = loadConfig("/project");
+    expect(cfg.mmrLambda).toBe(0.7);
   });
 });

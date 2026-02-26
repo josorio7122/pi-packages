@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 export type IndexConfig = {
   apiKey: string;
@@ -10,6 +11,7 @@ export type IndexConfig = {
   autoIndex: boolean;
   maxFileKB: number;
   minScore: number;
+  mmrLambda: number;
 };
 
 const EMBEDDING_DIMENSIONS: Record<string, number> = {
@@ -44,6 +46,10 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
   const minScore = typeof raw.minScore === "number" ? raw.minScore : 0.2;
   if (minScore < 0 || minScore > 1) throw new Error("minScore must be between 0.0 and 1.0");
 
+  const mmrLambda = typeof raw.mmrLambda === "number" ? raw.mmrLambda : 0.5;
+  if (mmrLambda < 0 || mmrLambda > 1)
+    throw new Error("mmrLambda must be between 0.0 and 1.0 (0 = max diversity, 1 = max relevance)");
+
   const dbPath =
     typeof raw.dbPath === "string"
       ? resolveDbPath(raw.dbPath, indexRoot)
@@ -59,6 +65,19 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
     indexDirs = [indexRoot];
   }
 
+  // Warn and filter out non-existent dirs
+  indexDirs = indexDirs.filter((dir) => {
+    if (!existsSync(dir)) {
+      console.warn(
+        `[pi-index] Warning: index directory does not exist and will be skipped: ${dir}`
+      );
+      return false;
+    }
+    return true;
+  });
+  // If all dirs were removed, default to indexRoot
+  if (indexDirs.length === 0) indexDirs = [indexRoot];
+
   return {
     apiKey: raw.apiKey,
     model,
@@ -69,6 +88,7 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
     autoIndex: raw.autoIndex === true,
     maxFileKB,
     minScore,
+    mmrLambda,
   };
 }
 
@@ -86,6 +106,9 @@ export function loadConfig(indexRoot: string): IndexConfig {
   const minScore = process.env.PI_INDEX_MIN_SCORE
     ? parseFloat(process.env.PI_INDEX_MIN_SCORE)
     : undefined;
+  const mmrLambda = process.env.PI_INDEX_MMR_LAMBDA
+    ? parseFloat(process.env.PI_INDEX_MMR_LAMBDA)
+    : undefined;
 
   return parseConfig({
     apiKey,
@@ -95,6 +118,7 @@ export function loadConfig(indexRoot: string): IndexConfig {
     autoIndex: process.env.PI_INDEX_AUTO === "true",
     maxFileKB,
     minScore,
+    mmrLambda,
     indexRoot,
   });
 }
