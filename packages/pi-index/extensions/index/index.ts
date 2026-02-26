@@ -8,6 +8,8 @@ import { createIndexTools } from "./tools.js";
 import { readMtimeCache, writeMtimeCache } from "./walker.js";
 import { relativeTime } from "./utils.js";
 
+const RULE = "─".repeat(39);
+
 export default function (pi: ExtensionAPI): void {
   // The index root is the directory where pi is running (the project root)
   const indexRoot = process.cwd();
@@ -28,7 +30,6 @@ export default function (pi: ExtensionAPI): void {
       } as never);
     }
     // Register /index-status with API-key-missing warning output
-    const RULE = "─".repeat(39);
     pi.registerCommand("index-status", {
       description: "Show pi-index status",
       handler: async (_args, ctx) => {
@@ -99,8 +100,6 @@ export default function (pi: ExtensionAPI): void {
 
   // ─── Slash commands ──────────────────────────────────────────────────────
 
-  const RULE = "─".repeat(39);
-
   pi.registerCommand("index-status", {
     description: "Show pi-index status — chunk count, files indexed, last indexed time",
     handler: async (_args, ctx) => {
@@ -137,7 +136,7 @@ export default function (pi: ExtensionAPI): void {
           `Index path:    ${cfg.dbPath}`,
           `Total chunks:  ${status.chunkCount.toLocaleString()}`,
           `Files indexed: ${status.fileCount.toLocaleString()}`,
-          `Last indexed:  ${lastStr}  (${new Date(status.lastIndexedAt!).toISOString().slice(0, 16).replace("T", " ")})`,
+          `Last indexed:  ${lastStr}  ${status.lastIndexedAt ? `(${new Date(status.lastIndexedAt).toISOString().slice(0, 16).replace("T", " ")})` : ""}`,
           `Model:         ${cfg.model}`,
           `Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
           `Index dirs:    ${cfg.indexDirs.join(", ")}`,

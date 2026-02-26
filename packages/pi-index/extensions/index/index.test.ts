@@ -237,6 +237,72 @@ describe("pi-index extension entry point", () => {
     expect(summaryMsg).not.toMatch(/\d+\.\d+s/);
   });
 
+  it("/index-rebuild success shows rebuilt summary", async () => {
+    const cmdCall = registerCommand.mock.calls.find((c: [string]) => c[0] === "index-rebuild");
+    const handler = cmdCall![1].handler as (args: unknown, ctx: { ui: { notify: ReturnType<typeof vi.fn> } }) => Promise<void>;
+    const localCtx = { ui: { notify: vi.fn() } };
+    await handler({}, localCtx);
+    expect(localCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Index rebuilt:"),
+      "info",
+    );
+  });
+
+  it("/index-clear success shows cleared message", async () => {
+    const cmdCall = registerCommand.mock.calls.find((c: [string]) => c[0] === "index-clear");
+    const handler = cmdCall![1].handler as (args: unknown, ctx: { ui: { notify: ReturnType<typeof vi.fn> } }) => Promise<void>;
+    const localCtx = { ui: { notify: vi.fn() } };
+    await handler({}, localCtx);
+    expect(localCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Index cleared"),
+      "info",
+    );
+  });
+
+  it("registers before_agent_start hook when autoIndex is true", async () => {
+    vi.resetModules();
+    vi.doMock("./config.js", () => ({
+      loadConfig: vi.fn().mockReturnValue({
+        apiKey: "sk-test", model: "text-embedding-3-small", dimensions: 1536,
+        dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
+        indexDirs: ["/project"], autoIndex: true, maxFileKB: 500, minScore: 0.2,
+      }),
+    }));
+    const mod2 = await import("./index.js");
+    const ext2 = mod2.default as (pi: typeof pi) => void;
+    const newOnFn = vi.fn();
+    const newPi = { registerTool: vi.fn(), registerCommand: vi.fn(), on: newOnFn };
+    ext2(newPi as never);
+    expect(newOnFn).toHaveBeenCalledWith("before_agent_start", expect.any(Function));
+  });
+
+  it("/index-status shows chunk count when index has data", async () => {
+    vi.resetModules();
+    vi.doMock("./db.js", () => ({
+      IndexDB: function (this: Record<string, unknown>) {
+        this.getStatus = vi.fn().mockResolvedValue({ chunkCount: 50, fileCount: 10, lastIndexedAt: 1700000000000 });
+        this.deleteAll = vi.fn().mockResolvedValue(undefined);
+        this.vectorSearch = vi.fn().mockResolvedValue([]);
+        this.hybridSearch = vi.fn().mockResolvedValue([]);
+        this.insertChunks = vi.fn().mockResolvedValue(undefined);
+        this.deleteByFilePath = vi.fn().mockResolvedValue(undefined);
+      },
+    }));
+    const mod2 = await import("./index.js");
+    const ext2 = mod2.default as (pi: typeof pi) => void;
+    const rc2 = vi.fn();
+    ext2({ registerTool: vi.fn(), registerCommand: rc2, on: vi.fn() } as never);
+
+    const statusCall = rc2.mock.calls.find((c: [string]) => c[0] === "index-status");
+    const handler = statusCall![1].handler as (args: unknown, ctx: { ui: { notify: ReturnType<typeof vi.fn> } }) => Promise<void>;
+    const localCtx = { ui: { notify: vi.fn() } };
+    await handler({}, localCtx);
+    expect(localCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("50"),
+      "info",
+    );
+  });
+
   // Fix 6: /index-status error is reported gracefully (not as "error" level)
   it("/index-status reports unreadable state gracefully with info level", async () => {
     vi.resetModules();
