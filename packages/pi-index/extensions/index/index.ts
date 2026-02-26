@@ -6,6 +6,7 @@ import { Indexer } from "./indexer.js";
 import { Searcher } from "./searcher.js";
 import { createIndexTools } from "./tools.js";
 import { readMtimeCache, writeMtimeCache } from "./walker.js";
+import { relativeTime } from "./utils.js";
 
 export default function (pi: ExtensionAPI): void {
   // The index root is the directory where pi is running (the project root)
@@ -96,7 +97,7 @@ export default function (pi: ExtensionAPI): void {
           `  Index path:    ${cfg.dbPath}`,
           `  Total chunks:  ${status.chunkCount.toLocaleString()}`,
           `  Files indexed: ${status.fileCount.toLocaleString()}`,
-          `  Last indexed:  ${lastStr}`,
+          `  Last indexed:  ${lastStr}  (${new Date(status.lastIndexedAt!).toISOString().slice(0, 16).replace("T", " ")})`,
           `  Model:         ${cfg.model}`,
           `  Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
           `  Index dirs:    ${cfg.indexDirs.join(", ")}`,
@@ -159,14 +160,3 @@ export default function (pi: ExtensionAPI): void {
   });
 }
 
-function relativeTime(ms: number): string {
-  const diffMs = Date.now() - ms;
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? "s" : ""} ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hour${diffHr !== 1 ? "s" : ""} ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay} day${diffDay !== 1 ? "s" : ""} ago`;
-}

@@ -3,6 +3,7 @@ import type { Searcher } from "./searcher.js";
 import type { IndexDB } from "./db.js";
 import type { IndexConfig } from "./config.js";
 import { readMtimeCache } from "./walker.js";
+import { relativeTime } from "./utils.js";
 
 export type IndexTool = {
   name: string;
@@ -10,18 +11,6 @@ export type IndexTool = {
   parameters: Record<string, unknown>;
   handler: (args: Record<string, unknown>) => Promise<string>;
 };
-
-function relativeTime(ms: number): string {
-  const diffMs = Date.now() - ms;
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? "s" : ""} ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hour${diffHr !== 1 ? "s" : ""} ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay} day${diffDay !== 1 ? "s" : ""} ago`;
-}
 
 function formatSummary(summary: IndexSummary): string {
   const lines = [
