@@ -123,7 +123,7 @@ export class Searcher {
     private readonly cfg: IndexConfig,
   ) {}
 
-  async search(query: string, limit = 8): Promise<string> {
+  async search(query: string, limit = 8, minScore?: number): Promise<string> {
     // Cap and floor the limit
     const safeLimit = Math.min(Math.max(limit, 0), 20);
 
@@ -164,13 +164,14 @@ export class Searcher {
       return `Error: [SEARCH_FAILED] Search encountered an error: ${String(err)}`;
     }
 
-    // Apply minimum score threshold
-    const filtered = rawResults.filter((r) => r.score >= this.cfg.minScore);
+    // Apply minimum score threshold (override takes precedence over config)
+    const scoreThreshold = minScore ?? this.cfg.minScore;
+    const filtered = rawResults.filter((r) => r.score >= scoreThreshold);
 
     // MMR reranking for diversity (skip if < 2 results)
     const reranked =
       filtered.length >= 2
-        ? mmrRerank(filtered, safeLimit)
+        ? mmrRerank(filtered, safeLimit, this.cfg.mmrLambda)
         : filtered.slice(0, safeLimit);
 
     return formatResults(reranked, query);

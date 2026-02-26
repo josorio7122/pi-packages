@@ -49,12 +49,17 @@ export function createIndexTools(
           type: "number",
           description: "Maximum number of results (1–20). Default: 8.",
         },
+        minScore: {
+          type: "number",
+          description: "Minimum relevance score 0–1 to include a result. Default: config value (typically 0.2).",
+        },
       },
       required: ["query"],
     },
     handler: async (args) => {
       const query = String(args.query ?? "");
       const limit = typeof args.limit === "number" ? args.limit : 8;
+      const minScore = typeof args.minScore === "number" ? args.minScore : undefined;
 
       try {
         const status = await db.getStatus();
@@ -66,7 +71,7 @@ export function createIndexTools(
       }
 
       try {
-        return await searcher.search(query, limit);
+        return await searcher.search(query, limit, minScore);
       } catch (err) {
         const msg = String(err);
         if (msg.includes("CONFIG_MISSING_API_KEY")) {

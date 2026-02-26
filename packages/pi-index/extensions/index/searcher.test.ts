@@ -164,6 +164,7 @@ describe("Searcher", () => {
       autoIndex: false,
       maxFileKB: 500,
       minScore: 0.0, // set low so all results pass threshold in tests
+      mmrLambda: 0.5,
       ...override,
     };
   }
@@ -266,6 +267,39 @@ describe("Searcher", () => {
   it("returns empty result message for limit 0", async () => {
     const searcher = new Searcher(makeDb(), makeEmb(), makeConfig());
     const result = await searcher.search("auth", 0);
+    expect(result).toContain("No results found");
+  });
+
+  it("minScore override filters more aggressively than config minScore", async () => {
+    // Config minScore = 0.0 (allow all), but we pass minScore=0.95 override
+    const searcher = new Searcher(
+      makeDb([makeChunk("a", 0.9)]), // score 0.9 < override 0.95
+      makeEmb(),
+      makeConfig({ minScore: 0.0 }),
+    );
+    const result = await searcher.search("auth", 8, 0.95);
+    expect(result).toContain("No results found");
+  });
+
+  it("minScore override allows results below config threshold", async () => {
+    // Config minScore = 0.5, override = 0.1 — chunk with score 0.3 should pass
+    const searcher = new Searcher(
+      makeDb([makeChunk("lowscore", 0.3)]),
+      makeEmb(),
+      makeConfig({ minScore: 0.5 }),
+    );
+    const result = await searcher.search("auth", 8, 0.1);
+    expect(result).toContain("lowscore");
+  });
+
+  it("falls back to cfg.minScore when minScore not provided", async () => {
+    // Config minScore = 0.5, no override — chunk with score 0.3 should be filtered
+    const searcher = new Searcher(
+      makeDb([makeChunk("lowscore", 0.3)]),
+      makeEmb(),
+      makeConfig({ minScore: 0.5 }),
+    );
+    const result = await searcher.search("auth");
     expect(result).toContain("No results found");
   });
 });

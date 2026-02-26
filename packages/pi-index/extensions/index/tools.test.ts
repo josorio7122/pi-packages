@@ -71,7 +71,7 @@ describe("createIndexTools", () => {
       const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_search")!;
       await tool.handler({ query: "auth logic" });
-      expect(searcher.search).toHaveBeenCalledWith("auth logic", 8);
+      expect(searcher.search).toHaveBeenCalledWith("auth logic", 8, undefined);
     });
 
     it("passes custom limit to searcher", async () => {
@@ -79,7 +79,23 @@ describe("createIndexTools", () => {
       const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_search")!;
       await tool.handler({ query: "auth", limit: 5 });
-      expect(searcher.search).toHaveBeenCalledWith("auth", 5);
+      expect(searcher.search).toHaveBeenCalledWith("auth", 5, undefined);
+    });
+
+    it("passes minScore to searcher.search when provided", async () => {
+      const searcher = makeSearcher();
+      const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_search")!;
+      await tool.handler({ query: "auth", minScore: 0.7 });
+      expect(searcher.search).toHaveBeenCalledWith("auth", 8, 0.7);
+    });
+
+    it("passes undefined minScore when not provided in args", async () => {
+      const searcher = makeSearcher();
+      const { tools } = createIndexTools(searcher, makeIndexer(), makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_search")!;
+      await tool.handler({ query: "auth" });
+      expect(searcher.search).toHaveBeenCalledWith("auth", 8, undefined);
     });
 
     it("returns INDEX_NOT_INITIALIZED when chunkCount is 0", async () => {

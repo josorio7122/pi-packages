@@ -23,11 +23,14 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 /**
  * Maximal Marginal Relevance reranking.
  * Greedily selects results balancing relevance and diversity.
- * λ = 0.5 gives equal weight to relevance vs novelty.
  *
- * score(candidate) = 0.5 * relevance - 0.5 * max_cosine_sim_to_selected
+ * score(candidate) = λ * relevance - (1 - λ) * max_cosine_sim_to_selected
+ *
+ * λ = 1.0 → pure relevance ranking
+ * λ = 0.0 → pure diversity (maximum marginal relevance)
+ * λ = 0.5 → equal weight (default)
  */
-export function mmrRerank(items: ScoredChunk[], limit: number): ScoredChunk[] {
+export function mmrRerank(items: ScoredChunk[], limit: number, lambda = 0.5): ScoredChunk[] {
   if (items.length === 0 || limit <= 0) return [];
 
   const candidates = [...items]; // shallow copy — do not mutate input
@@ -45,7 +48,7 @@ export function mmrRerank(items: ScoredChunk[], limit: number): ScoredChunk[] {
           : Math.max(
               ...selected.map((s) => cosineSimilarity(candidates[i].vector, s.vector)),
             );
-      const mmrScore = 0.5 * relevance - 0.5 * maxSim;
+      const mmrScore = lambda * relevance - (1 - lambda) * maxSim;
       if (mmrScore > bestScore) {
         bestScore = mmrScore;
         bestIdx = i;
