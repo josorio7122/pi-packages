@@ -139,11 +139,18 @@ export class IndexDB {
       if (filter) q = q.where(filter) as typeof q;
       const rows = (await q.toArray()) as (CodeChunk & { _relevance_score?: number })[];
       const n = rows.length;
-      // Assign scores based on RRF-ranked position
-      return rows.map((row, i) => ({
-        ...row,
-        score: n > 1 ? 1 - i / (n - 1) : 1,
-      }));
+      // Normalize RRF scores to 0-1; fall back to positional when unavailable
+      const maxRelevance = Math.max(...rows.map((r) => r._relevance_score ?? 0));
+      return rows.map((row, i) => {
+        const raw = row._relevance_score;
+        const score =
+          typeof raw === "number" && raw >= 0 && maxRelevance > 0
+            ? raw / maxRelevance
+            : n > 1
+              ? 1 - i / (n - 1)
+              : 1;
+        return { ...row, score };
+      });
     } catch {
       // Fallback to vector-only if hybrid fails (FTS index not ready, etc.)
       return this.vectorSearch(queryVector, limit, filter);
