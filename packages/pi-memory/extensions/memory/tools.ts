@@ -31,7 +31,7 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
       _ctx: unknown
     ): Promise<ToolResult> {
       const vector = await emb.embed(params.query);
-      const results = await db.search(vector, params.limit ?? 5, 0.3);
+      const results = await db.search(vector, params.limit ?? 5, 0.1);
 
       if (results.length === 0) {
         return {
@@ -40,19 +40,21 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
         };
       }
 
-      const lines = results.map((r, i) => {
-        const pct = Math.round(r.score * 100);
-        return `${i + 1}. [${r.entry.category}] ${r.entry.text} (${pct}%)`;
-      });
+      const text = results
+        .map(
+          (r, i) =>
+            `${i + 1}. [${r.entry.category}] ${r.entry.text} (${(r.score * 100).toFixed(0)}%)`,
+        )
+        .join("\n");
 
-      // Sanitize: strip vector field
+      // Sanitize: strip vector field before serialization
       const memories = results.map((r) => {
         const { vector: _v, ...rest } = r.entry;
-        return rest;
+        return { ...rest, score: r.score };
       });
 
       return {
-        content: [{ type: "text", text: lines.join("\n") }],
+        content: [{ type: "text", text: `Found ${results.length} memories:\n\n${text}` }],
         details: { count: results.length, memories },
       };
     },
@@ -120,7 +122,7 @@ export function createMemoryTools(db: MemoryDB, emb: Pick<Embeddings, "embed">, 
       });
 
       return {
-        content: [{ type: "text", text: `Memory stored with id ${entry.id}.` }],
+        content: [{ type: "text", text: `Stored: "${params.text.slice(0, 100)}..."` }],
         details: { action: "created", id: entry.id },
       };
     },

@@ -48,7 +48,7 @@ describe("createMemoryTools", () => {
       expect(result.details).toEqual({ count: 0 });
     });
 
-    it("returns formatted memories when found", async () => {
+    it("returns formatted memories when found with 'Found N memories:' prefix", async () => {
       await db.store({
         text: "I prefer dark mode",
         vector: FIXED_VEC,
@@ -58,6 +58,7 @@ describe("createMemoryTools", () => {
       const { createMemoryTools } = await import("./tools.js");
       const { recallTool } = createMemoryTools(db, mockEmb as any, cfg);
       const result = await exec(recallTool, { query: "dark mode" });
+      expect(result.content[0].text).toMatch(/^Found \d+ memories:/);
       expect(result.content[0].text).toContain("1. [preference]");
       expect(result.content[0].text).toContain("I prefer dark mode");
     });
@@ -108,6 +109,8 @@ describe("createMemoryTools", () => {
       const result = await exec(storeTool, { text: "I love TypeScript" });
       expect(result.details.action).toBe("created");
       expect(result.details.id).toBeTruthy();
+      // Match OpenClaw's exact text format
+      expect(result.content[0].text).toMatch(/^Stored: "/);
     });
 
     it('returns action: "duplicate" when similar memory exists', async () => {
