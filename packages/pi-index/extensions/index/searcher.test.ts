@@ -342,4 +342,50 @@ describe("Searcher", () => {
     const result = await searcher.search("auth");
     expect(result).toContain("No results found");
   });
+
+  it("returns [INDEX_EMPTY] when db count is 0", async () => {
+    const emptyDb = {
+      hybridSearch: vi.fn().mockResolvedValue([]),
+      vectorSearch: vi.fn().mockResolvedValue([]),
+      getStatus: vi.fn().mockResolvedValue({ chunkCount: 0 }),
+      count: vi.fn().mockResolvedValue(0),
+      insertChunks: vi.fn(),
+      deleteByFilePath: vi.fn(),
+      deleteAll: vi.fn(),
+    } as unknown as IndexDB;
+    const searcher = new Searcher(emptyDb, makeEmb(), makeConfig());
+    const result = await searcher.search("auth");
+    expect(result).toContain("[INDEX_EMPTY]");
+  });
+
+  it("[INDEX_EMPTY] message mentions codebase_index or /index-rebuild", async () => {
+    const emptyDb = {
+      hybridSearch: vi.fn().mockResolvedValue([]),
+      vectorSearch: vi.fn().mockResolvedValue([]),
+      getStatus: vi.fn().mockResolvedValue({ chunkCount: 0 }),
+      count: vi.fn().mockResolvedValue(0),
+      insertChunks: vi.fn(),
+      deleteByFilePath: vi.fn(),
+      deleteAll: vi.fn(),
+    } as unknown as IndexDB;
+    const searcher = new Searcher(emptyDb, makeEmb(), makeConfig());
+    const result = await searcher.search("auth");
+    expect(result).toMatch(/codebase_index|index-rebuild/);
+  });
+
+  it("[INDEX_EMPTY] does not call embed when db is empty", async () => {
+    const emptyDb = {
+      hybridSearch: vi.fn().mockResolvedValue([]),
+      vectorSearch: vi.fn().mockResolvedValue([]),
+      getStatus: vi.fn().mockResolvedValue({ chunkCount: 0 }),
+      count: vi.fn().mockResolvedValue(0),
+      insertChunks: vi.fn(),
+      deleteByFilePath: vi.fn(),
+      deleteAll: vi.fn(),
+    } as unknown as IndexDB;
+    const emb = makeEmb();
+    const searcher = new Searcher(emptyDb, emb, makeConfig());
+    await searcher.search("auth");
+    expect(emb.embed).not.toHaveBeenCalled();
+  });
 });

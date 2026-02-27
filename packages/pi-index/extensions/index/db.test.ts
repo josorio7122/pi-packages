@@ -100,7 +100,7 @@ describe("IndexDB", () => {
     expect(await db.count()).toBe(0);
   }, 30_000);
 
-  it("getStatus returns correct chunk and file counts", async () => {
+  it("getStatus returns only chunkCount (fileCount/lastIndexedAt come from mtime cache)", async () => {
     const db = new IndexDB(join(tmpDir, "lancedb"), 4);
     await db.insertChunks([
       makeChunk("src/a.ts", 0, "content a"),
@@ -109,7 +109,13 @@ describe("IndexDB", () => {
     ]);
     const status = await db.getStatus();
     expect(status.chunkCount).toBe(3);
-    expect(status.fileCount).toBe(2);
+    expect(status).toEqual({ chunkCount: 3 });
+  }, 30_000);
+
+  it("getStatus on empty table returns { chunkCount: 0 }", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const status = await db.getStatus();
+    expect(status).toEqual({ chunkCount: 0 });
   }, 30_000);
 
   it("hybridSearch returns scored results", async () => {
@@ -186,8 +192,7 @@ describe("IndexDB integration", () => {
     await db.insertChunks([chunk]);
     const status = await db.getStatus();
     expect(status.chunkCount).toBe(1);
-    expect(status.fileCount).toBe(1);
-    expect(status.lastIndexedAt).toBeGreaterThan(0);
+    expect(status).toEqual({ chunkCount: 1 });
   }, 30_000);
 
   it("deleteByFilePath removes only matching chunks", async () => {
@@ -200,6 +205,6 @@ describe("IndexDB integration", () => {
     await db.deleteByFilePath("a.ts");
     const status = await db.getStatus();
     expect(status.chunkCount).toBe(1);
-    expect(status.fileCount).toBe(1);
+    expect(status).toEqual({ chunkCount: 1 });
   }, 30_000);
 });

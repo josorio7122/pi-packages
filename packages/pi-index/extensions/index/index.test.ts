@@ -285,7 +285,7 @@ describe("pi-index extension entry point", () => {
     vi.resetModules();
     vi.doMock("./db.js", () => ({
       IndexDB: function (this: Record<string, unknown>) {
-        this.getStatus = vi.fn().mockResolvedValue({ chunkCount: 50, fileCount: 10, lastIndexedAt: 1700000000000 });
+        this.getStatus = vi.fn().mockResolvedValue({ chunkCount: 50 });
         this.deleteAll = vi.fn().mockResolvedValue(undefined);
         this.vectorSearch = vi.fn().mockResolvedValue([]);
         this.hybridSearch = vi.fn().mockResolvedValue([]);
@@ -312,7 +312,7 @@ describe("pi-index extension entry point", () => {
     vi.resetModules();
     vi.doMock("./db.js", () => ({
       IndexDB: function (this: Record<string, unknown>) {
-        this.getStatus = vi.fn().mockResolvedValue({ chunkCount: 100, fileCount: 20, lastIndexedAt: 1700000000000 });
+        this.getStatus = vi.fn().mockResolvedValue({ chunkCount: 100 });
         this.deleteAll = vi.fn().mockResolvedValue(undefined);
         this.vectorSearch = vi.fn().mockResolvedValue([]);
         this.hybridSearch = vi.fn().mockResolvedValue([]);
@@ -320,6 +320,18 @@ describe("pi-index extension entry point", () => {
         this.deleteByFilePath = vi.fn().mockResolvedValue(undefined);
       },
     }));
+    // Provide mtime cache with indexedAt = 1700000000000 so the formatted date appears
+    vi.doMock("./walker.js", () => {
+      const cache = new Map([
+        ["src/foo.ts", { filePath: "src/foo.ts", mtime: 1000, chunkCount: 5, indexedAt: 1700000000000 }],
+      ]);
+      return {
+        readMtimeCache: vi.fn().mockResolvedValue(cache),
+        writeMtimeCache: vi.fn().mockResolvedValue(undefined),
+        walkDirs: vi.fn().mockResolvedValue({ files: [], skippedLarge: 0 }),
+        diffFileSet: vi.fn().mockReturnValue({ toAdd: [], toUpdate: [], toDelete: [] }),
+      };
+    });
     const mod2 = await import("./index.js");
     const ext2 = mod2.default as (pi: typeof pi) => void;
     const rc2 = vi.fn();

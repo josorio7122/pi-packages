@@ -3,8 +3,6 @@ import type { CodeChunk } from "./chunker.js";
 
 export type DBStatus = {
   chunkCount: number;
-  fileCount: number;
-  lastIndexedAt: number | null;
 };
 
 // Lazy singleton import — same pattern as pi-memory's db.ts
@@ -164,16 +162,7 @@ export class IndexDB {
 
   async getStatus(): Promise<DBStatus> {
     await this.ensureInitialized();
-    const total = await this.count();
-    if (total === 0) {
-      return { chunkCount: 0, fileCount: 0, lastIndexedAt: null };
-    }
-    const rows = (await this.table!
-      .query()
-      .select(["filePath", "createdAt"])
-      .toArray()) as { filePath: string; createdAt: number }[];
-    const filePaths = new Set(rows.map((r) => r.filePath));
-    const lastIndexedAt = Math.max(...rows.map((r) => r.createdAt));
-    return { chunkCount: total, fileCount: filePaths.size, lastIndexedAt };
+    const chunkCount = await this.table!.countRows();
+    return { chunkCount };
   }
 }

@@ -104,8 +104,10 @@ export default function (pi: ExtensionAPI): void {
     description: "Show pi-index status — chunk count, files indexed, last indexed time",
     handler: async (_args, ctx) => {
       try {
-        const status = await db.getStatus();
-        const cache = await readMtimeCache(cfg.mtimeCachePath);
+        const [status, cache] = await Promise.all([
+          db.getStatus(),
+          readMtimeCache(cfg.mtimeCachePath),
+        ]);
 
         if (status.chunkCount === 0 && cache.size === 0) {
           ctx.ui.notify(
@@ -125,18 +127,21 @@ export default function (pi: ExtensionAPI): void {
           return;
         }
 
+        const fileCount = cache.size;
+        const lastIndexedAt =
+          cache.size > 0
+            ? Math.max(...[...cache.values()].map((v) => v.indexedAt))
+            : null;
         const rebuilding = indexer.isRunning;
-        const lastStr = status.lastIndexedAt
-          ? relativeTime(status.lastIndexedAt)
-          : "never";
+        const lastStr = lastIndexedAt ? relativeTime(lastIndexedAt) : "never";
 
         const lines = [
           "pi-index status",
           RULE,
           `Index path:    ${cfg.dbPath}`,
           `Total chunks:  ${status.chunkCount.toLocaleString()}`,
-          `Files indexed: ${status.fileCount.toLocaleString()}`,
-          `Last indexed:  ${lastStr}${status.lastIndexedAt ? `  (${new Date(status.lastIndexedAt).toISOString().slice(0, 16).replace("T", " ")})` : ""}`,
+          `Files indexed: ${fileCount.toLocaleString()}`,
+          `Last indexed:  ${lastStr}${lastIndexedAt ? `  (${new Date(lastIndexedAt).toISOString().slice(0, 16).replace("T", " ")})` : ""}`,
           `Model:         ${cfg.model}`,
           `Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,
           `Index dirs:    ${cfg.indexDirs.join(", ")}`,

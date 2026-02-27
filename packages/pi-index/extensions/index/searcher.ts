@@ -135,6 +135,12 @@ export class Searcher {
       return formatResults([], query);
     }
 
+    // Early return when the index is empty — avoids burning an embedding call
+    const count = await this.db.count();
+    if (count === 0) {
+      return "[INDEX_EMPTY] The codebase index is empty. Run codebase_index (or /index-rebuild) to build the index first.";
+    }
+
     // Parse scope filters
     let cleanQuery: string;
     let filters: ScopeFilter[];

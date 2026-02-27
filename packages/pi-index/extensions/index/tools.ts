@@ -126,8 +126,10 @@ export function createIndexTools(
     },
     handler: async (_args) => {
       try {
-        const status = await db.getStatus();
-        const cache = await readMtimeCache(cfg.mtimeCachePath);
+        const [status, cache] = await Promise.all([
+          db.getStatus(),
+          readMtimeCache(cfg.mtimeCachePath),
+        ]);
 
         if (status.chunkCount === 0 && cache.size === 0) {
           return [
@@ -139,13 +141,18 @@ export function createIndexTools(
           ].join("\n");
         }
 
-        const lastStr = status.lastIndexedAt ? relativeTime(status.lastIndexedAt) : "never";
+        const fileCount = cache.size;
+        const lastIndexedAt =
+          cache.size > 0
+            ? Math.max(...[...cache.values()].map((v) => v.indexedAt))
+            : null;
+        const lastStr = lastIndexedAt ? relativeTime(lastIndexedAt) : "never";
 
         let statusStr = [
           "pi-index status:",
           `  Index path:    ${cfg.dbPath}`,
           `  Total chunks:  ${status.chunkCount}`,
-          `  Files indexed: ${status.fileCount}`,
+          `  Files indexed: ${fileCount}`,
           `  Last indexed:  ${lastStr}`,
           `  Model:         ${cfg.model}`,
           `  Auto-index:    ${cfg.autoIndex ? "on" : "off"}`,

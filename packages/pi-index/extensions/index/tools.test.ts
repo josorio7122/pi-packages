@@ -1,13 +1,25 @@
 import { describe, it, expect, vi } from "vitest";
 import { createIndexTools } from "./tools.js";
+import { readMtimeCache } from "./walker.js";
 import type { Indexer, IndexSummary } from "./indexer.js";
 import type { Searcher } from "./searcher.js";
 import type { IndexDB } from "./db.js";
 import type { IndexConfig } from "./config.js";
+import type { MtimeEntry } from "./walker.js";
 
 vi.mock("./walker.js", () => ({
   readMtimeCache: vi.fn().mockResolvedValue(new Map()),
 }));
+
+/** Build a fake mtime cache with `size` entries all having `indexedAt = maxIndexedAt`. */
+function makeMtimeCache(size: number, maxIndexedAt = Date.now()): Map<string, MtimeEntry> {
+  const cache = new Map<string, MtimeEntry>();
+  for (let i = 0; i < size; i++) {
+    const fp = `file${i}.ts`;
+    cache.set(fp, { filePath: fp, mtime: 1000, chunkCount: 1, indexedAt: maxIndexedAt });
+  }
+  return cache;
+}
 
 function makeSearcher(result = "Found 1 result"): Searcher {
   return { search: vi.fn().mockResolvedValue(result) } as unknown as Searcher;
@@ -27,9 +39,7 @@ function makeIndexer(
   } as unknown as Indexer;
 }
 
-function makeDb(
-  status = { chunkCount: 5, fileCount: 2, lastIndexedAt: Date.now() }
-): IndexDB {
+function makeDb(status = { chunkCount: 5 }): IndexDB {
   return {
     getStatus: vi.fn().mockResolvedValue(status),
     count: vi.fn().mockResolvedValue(status.chunkCount),
@@ -101,7 +111,7 @@ describe("createIndexTools", () => {
     });
 
     it("returns INDEX_NOT_INITIALIZED when chunkCount is 0", async () => {
-      const db = makeDb({ chunkCount: 0, fileCount: 0, lastIndexedAt: null });
+      const db = makeDb({ chunkCount: 0 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_search")!;
       const result = await tool.handler({ query: "anything" });
@@ -225,7 +235,8 @@ describe("createIndexTools", () => {
 
   describe("codebase_status", () => {
     it("returns status string with chunk count and file count", async () => {
-      const db = makeDb({ chunkCount: 1234, fileCount: 88, lastIndexedAt: Date.now() });
+      vi.mocked(readMtimeCache).mockResolvedValueOnce(makeMtimeCache(88));
+      const db = makeDb({ chunkCount: 1234 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
@@ -234,7 +245,7 @@ describe("createIndexTools", () => {
     });
 
     it("shows Not built message when chunkCount is 0 and cache is empty", async () => {
-      const db = makeDb({ chunkCount: 0, fileCount: 0, lastIndexedAt: null });
+      const db = makeDb({ chunkCount: 0 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
@@ -249,7 +260,8 @@ describe("createIndexTools", () => {
     });
 
     it("shows relative time for lastIndexedAt (just now)", async () => {
-      const db = makeDb({ chunkCount: 5, fileCount: 2, lastIndexedAt: Date.now() - 5000 });
+      vi.mocked(readMtimeCache).mockResolvedValueOnce(makeMtimeCache(2, Date.now() - 5000));
+      const db = makeDb({ chunkCount: 5 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
@@ -257,7 +269,8 @@ describe("createIndexTools", () => {
     });
 
     it("shows relative time in minutes", async () => {
-      const db = makeDb({ chunkCount: 5, fileCount: 2, lastIndexedAt: Date.now() - 5 * 60 * 1000 });
+      vi.mocked(readMtimeCache).mockResolvedValueOnce(makeMtimeCache(2, Date.now() - 5 * 60 * 1000));
+      const db = makeDb({ chunkCount: 5 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
@@ -281,7 +294,7 @@ describe("createIndexTools", () => {
     });
 
     it("codebase_status not-built includes dbPath", async () => {
-      const db = makeDb({ chunkCount: 0, fileCount: 0, lastIndexedAt: null });
+      const db = makeDb({ chunkCount: 0 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
@@ -291,7 +304,8 @@ describe("createIndexTools", () => {
 
     it("codebase_status shows relative time in hours", async () => {
       const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
-      const db = makeDb({ chunkCount: 10, fileCount: 3, lastIndexedAt: twoHoursAgo });
+      vi.mocked(readMtimeCache).mockResolvedValueOnce(makeMtimeCache(3, twoHoursAgo));
+      const db = makeDb({ chunkCount: 10 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
@@ -300,7 +314,8 @@ describe("createIndexTools", () => {
 
     it("codebase_status shows relative time in days", async () => {
       const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-      const db = makeDb({ chunkCount: 10, fileCount: 3, lastIndexedAt: threeDaysAgo });
+      vi.mocked(readMtimeCache).mockResolvedValueOnce(makeMtimeCache(3, threeDaysAgo));
+      const db = makeDb({ chunkCount: 10 });
       const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
