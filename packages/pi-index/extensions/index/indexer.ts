@@ -182,7 +182,13 @@ export class Indexer {
         if (chunks.length > 0) {
           fileChunks.push({ file, chunks });
         } else {
-          // File is empty/whitespace-only: cache with chunkCount=0 so future runs skip it
+          // File is empty/whitespace-only: delete any old DB chunks (safe no-op for new files),
+          // then cache with chunkCount=0 so future runs skip it
+          try {
+            await this.db.deleteByFilePath(file.relativePath);
+          } catch {
+            // best-effort — failure leaves stale chunks but doesn't block cache update
+          }
           cache.set(file.relativePath, {
             filePath: file.relativePath,
             mtime: file.mtime,

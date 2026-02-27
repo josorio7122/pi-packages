@@ -475,6 +475,27 @@ describe("Indexer", () => {
     expect((db.insertChunks as ReturnType<typeof vi.fn>).mock.calls.length).toBe(insertCallsBefore);
   });
 
+  it("clears DB chunks when a previously-indexed file becomes empty", async () => {
+    const filePath = join(tmpDir, "nowempty.ts");
+    // First run: file has content → indexed normally
+    writeFileSync(filePath, "export function hello() { return 42; }");
+    const db = makeDb();
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    await indexer.run();
+
+    // Clear file content (simulates file becoming empty after being edited)
+    writeFileSync(filePath, "");
+
+    vi.mocked(db.deleteByFilePath).mockClear();
+    vi.mocked(db.insertChunks).mockClear();
+    await indexer.run();
+
+    // deleteByFilePath must be called to remove the old stale chunks
+    expect(db.deleteByFilePath).toHaveBeenCalledWith("nowempty.ts");
+    // insertChunks must NOT be called (nothing to insert for empty file)
+    expect(db.insertChunks).not.toHaveBeenCalled();
+  });
+
   it("onProgress is throttled — not called more than once per second per batch", async () => {
     // Create many files to trigger multiple progress calls
     for (let i = 0; i < 5; i++) {
