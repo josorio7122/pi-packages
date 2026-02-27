@@ -174,12 +174,21 @@ export class Indexer {
       const results = await Promise.all(
         batchGroup.map(async (batch) => {
           const batchResults: typeof embedded = [];
-          for (const { file, chunk } of batch) {
-            try {
-              const enriched = `File: ${chunk.filePath} (${chunk.language})\nSymbol: ${chunk.symbol}\n---\n${chunk.text}`;
-              const vector = await this.emb.embed(enriched);
-              batchResults.push({ file, chunk, vector });
-            } catch {
+          try {
+            // Build enriched texts for all chunks in the batch
+            const enrichedTexts = batch.map(({ chunk }) =>
+              `File: ${chunk.filePath} (${chunk.language})\nSymbol: ${chunk.symbol}\n---\n${chunk.text}`
+            );
+            // ONE API call for the whole batch
+            const vectors = await this.emb.embed(enrichedTexts);
+            // Zip vectors back to their chunks
+            for (let j = 0; j < batch.length; j++) {
+              const { file, chunk } = batch[j];
+              batchResults.push({ file, chunk, vector: vectors[j] });
+            }
+          } catch {
+            // Entire batch failed — mark ALL files in this batch as failed
+            for (const { file } of batch) {
               if (!failedSet.has(file.relativePath)) {
                 failedSet.add(file.relativePath);
                 failedFiles.push(file.relativePath);

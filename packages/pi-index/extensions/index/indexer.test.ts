@@ -40,7 +40,10 @@ function makeDb(): IndexDB {
 
 function makeEmb(): Embeddings {
   return {
-    embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3, 0.4]),
+    embed: vi.fn().mockImplementation(async (texts: string | string[]) => {
+      if (Array.isArray(texts)) return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
+      return [0.1, 0.2, 0.3, 0.4];
+    }),
   } as unknown as Embeddings;
 }
 
@@ -260,24 +263,19 @@ describe("Indexer", () => {
   });
 
   it("file with any failed chunk embedding is not partially inserted to DB", async () => {
-    // Create a file that produces multiple chunks — fail the second one
+    // Create a file that produces multiple chunks — fail the entire batch embed call
+    // (With batch embed, a batch either fully succeeds or fully fails — no partial writes possible)
     writeFileSync(
       join(tmpDir, "multi.ts"),
-      // Large enough content to produce multiple chunks
       Array.from({ length: 100 }, (_, i) => `export const v${i} = ${i};`).join("\n"),
     );
     const db = makeDb();
     const emb = makeEmb();
-    let callCount = 0;
     const authError = Object.assign(new Error("Forbidden"), { status: 403 });
-    vi.mocked(emb.embed).mockImplementation(async () => {
-      callCount++;
-      if (callCount === 2) throw authError; // fail the 2nd chunk
-      return [0.1, 0.2, 0.3, 0.4];
-    });
+    vi.mocked(emb.embed).mockRejectedValue(authError);
     const indexer = new Indexer(makeConfig(), db, emb);
     const summary = await indexer.run();
-    // insertChunks must NOT be called for multi.ts — no partial writes
+    // insertChunks must NOT be called — the failed batch must not produce partial writes
     expect(db.insertChunks).not.toHaveBeenCalled();
     expect(summary.failedFiles).toContain("multi.ts");
   });
@@ -305,7 +303,7 @@ describe("Indexer", () => {
   });
 
   it("updated count excludes files that failed to embed", async () => {
-    // First run: index one file successfully
+    // First run: index two files successfully
     const goodPath = join(tmpDir, "good.ts");
     const badPath = join(tmpDir, "bad.ts");
     writeFileSync(goodPath, "export const x = 1;");
@@ -320,16 +318,41 @@ describe("Indexer", () => {
     writeFileSync(goodPath, "export const x = 2;");
     writeFileSync(badPath, "export const y = 3;");
 
-    // Make bad.ts fail to embed on second run — check the enriched text to be order-independent
-    vi.mocked(emb.embed).mockImplementation(async (text: string) => {
-      if (text.includes("bad.ts")) throw new Error("Embed error for bad.ts");
-      return [0.1, 0.2, 0.3, 0.4];
+    // Fail the embed batch that contains bad.ts chunks.
+    // Both good.ts and bad.ts are small (1 chunk each) so they land in the same batch;
+    // rejecting that batch marks both files as failed.
+    vi.mocked(emb.embed).mockImplementation(async (texts: string | string[]) => {
+      const arr = Array.isArray(texts) ? texts : [texts];
+      if (arr.some((t) => t.includes("bad.ts"))) throw new Error("Embed error for bad.ts");
+      return arr.map(() => [0.1, 0.2, 0.3, 0.4]);
     });
 
     const summary = await indexer.run();
-    // bad.ts failed to embed, so updated should be 1 (only good.ts), not 2
+    // Both files were in the failing batch, so neither counts as updated
     expect(summary.failedFiles).toContain("bad.ts");
-    expect(summary.updated).toBe(1);
+    expect(summary.updated).toBe(0);
+  });
+
+  it("calls embed once per batch with all chunk texts as array (not once per chunk)", async () => {
+    // Three small files → ~3 chunks total, well within one batch of 20
+    for (let i = 0; i < 3; i++) {
+      writeFileSync(join(tmpDir, `batch${i}.ts`), `export const v${i} = ${i};`);
+    }
+    const db = makeDb();
+    const batchEmb: Embeddings = {
+      embed: vi.fn().mockImplementation(async (texts: string | string[]) => {
+        if (Array.isArray(texts)) return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
+        return [0.1, 0.2, 0.3, 0.4];
+      }),
+    } as unknown as Embeddings;
+    const indexer = new Indexer(makeConfig(), db, batchEmb);
+    await indexer.run();
+    // embed must be called once (one batch for all chunks), not once per chunk
+    expect(batchEmb.embed).toHaveBeenCalledTimes(1);
+    // The single argument must be an array of strings (batch embed), not a bare string
+    const [arg] = vi.mocked(batchEmb.embed).mock.calls[0];
+    expect(Array.isArray(arg)).toBe(true);
+    expect((arg as string[]).length).toBeGreaterThan(0);
   });
 
   it("embed concurrency never exceeds EMBED_CONCURRENCY batches at once", async () => {
@@ -341,12 +364,13 @@ describe("Indexer", () => {
     const emb = makeEmb();
     let concurrent = 0;
     let maxConcurrent = 0;
-    vi.mocked(emb.embed).mockImplementation(async () => {
+    vi.mocked(emb.embed).mockImplementation(async (texts: string | string[]) => {
       concurrent++;
       maxConcurrent = Math.max(maxConcurrent, concurrent);
       await new Promise((r) => setTimeout(r, 5));
       concurrent--;
-      return [0.1, 0.2, 0.3, 0.4];
+      const arr = Array.isArray(texts) ? texts : [texts];
+      return arr.map(() => [0.1, 0.2, 0.3, 0.4]);
     });
     const indexer = new Indexer(makeConfig(), db, emb);
     await indexer.run();
