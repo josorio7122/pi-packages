@@ -331,3 +331,62 @@ describe("walkDirs .gitignore integration", () => {
     expect(files.some((f) => f.includes("app.ts"))).toBe(true);
   });
 });
+
+describe("subdirectory .gitignore integration", () => {
+  let tmpDir2: string;
+
+  beforeEach(async () => {
+    tmpDir2 = join(tmpdir(), `walker-subgit-test-${randomUUID()}`);
+    await mkdir(tmpDir2, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir2, { recursive: true, force: true });
+  });
+
+  it("applies subdirectory .gitignore patterns to files in that subdirectory", async () => {
+    // packages/frontend has its own node_modules that should be excluded
+    await mkdir(join(tmpDir2, "packages", "frontend", "node_modules", "lodash"), { recursive: true });
+    await writeFile(join(tmpDir2, "packages", "frontend", "node_modules", "lodash", "index.ts"), "module");
+    await writeFile(join(tmpDir2, "packages", "frontend", "app.ts"), "app");
+    await writeFile(join(tmpDir2, "packages", "frontend", ".gitignore"), "node_modules/\n");
+
+    const result = await walkDirs([tmpDir2], tmpDir2, [".ts"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    expect(files.some((f) => f.includes("node_modules"))).toBe(false);
+    expect(files.some((f) => f.includes("app.ts"))).toBe(true);
+  });
+
+  it("subdirectory .gitignore does not affect files outside its directory", async () => {
+    // root app.ts should not be affected by packages/api/.gitignore
+    await mkdir(join(tmpDir2, "packages", "api"), { recursive: true });
+    await writeFile(join(tmpDir2, "packages", "api", ".gitignore"), "*.ts\n"); // exclude .ts in api
+    await writeFile(join(tmpDir2, "packages", "api", "excluded.ts"), "excluded");
+    await writeFile(join(tmpDir2, "app.ts"), "not excluded"); // root file, not in api/
+
+    const result = await walkDirs([tmpDir2], tmpDir2, [".ts"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    expect(files.some((f) => f.includes("excluded.ts"))).toBe(false); // excluded by api/.gitignore
+    expect(files.some((f) => f === "app.ts")).toBe(true); // root file unaffected
+  });
+
+  it("rooted /dist pattern matches only root dist, not nested dist", async () => {
+    await mkdir(join(tmpDir2, "dist"), { recursive: true });
+    await mkdir(join(tmpDir2, "packages", "frontend", "dist"), { recursive: true });
+    await writeFile(join(tmpDir2, "dist", "bundle.js"), "built");
+    await writeFile(join(tmpDir2, "packages", "frontend", "dist", "bundle.js"), "built");
+    await writeFile(join(tmpDir2, "app.ts"), "app");
+    await writeFile(join(tmpDir2, ".gitignore"), "/dist\n"); // rooted: only root dist
+
+    const result = await walkDirs([tmpDir2], tmpDir2, [".ts", ".js"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    // root dist/bundle.js excluded
+    expect(files.some((f) => f === "dist/bundle.js")).toBe(false);
+    // nested dist is NOT excluded by root /dist — should be included
+    expect(files.some((f) => f === "packages/frontend/dist/bundle.js")).toBe(true);
+    expect(files.some((f) => f === "app.ts")).toBe(true);
+  });
+});
