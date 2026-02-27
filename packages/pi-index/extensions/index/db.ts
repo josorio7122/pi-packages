@@ -79,6 +79,23 @@ export class IndexDB {
     }
   }
 
+  async rebuildFtsIndex(): Promise<void> {
+    await this.ensureInitialized();
+    const lancedb = await loadLanceDB();
+    try {
+      await this.table!.createIndex("text", {
+        config: lancedb.Index.fts(),
+        replace: true,
+      });
+    } catch (err) {
+      // FTS rebuild is best-effort — log but don't fail the indexing operation
+      console.warn(
+        "[pi-index] FTS index rebuild failed (hybrid search may be degraded):",
+        String(err),
+      );
+    }
+  }
+
   async insertChunks(chunks: CodeChunk[]): Promise<void> {
     if (chunks.length === 0) return;
     await this.ensureInitialized();
@@ -109,10 +126,18 @@ export class IndexDB {
     let q = this.table!.vectorSearch(queryVector).limit(limit);
     if (filter) q = q.where(filter) as typeof q;
     const rows = (await q.toArray()) as (CodeChunk & { _distance?: number })[];
-    return rows.map((row) => {
+    // Compute raw scores, then normalize relative to the best result so that
+    // scores span [0, 1] with the same semantics as hybridSearch's RRF normalization.
+    // This ensures minScore thresholds behave consistently across both paths.
+    const rawScores = rows.map((row) => {
       const distance = row._distance ?? 0;
-      return { ...row, score: 1 / (1 + distance) };
+      return 1 / (1 + distance);
     });
+    const maxScore = rawScores.length > 0 ? Math.max(...rawScores) : 1;
+    return rows.map((row, i) => ({
+      ...row,
+      score: maxScore > 0 ? rawScores[i] / maxScore : rawScores[i],
+    }));
   }
 
   async hybridSearch(

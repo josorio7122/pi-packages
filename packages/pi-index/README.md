@@ -49,7 +49,7 @@ pi-index reads from environment variables and optionally `pi.config.json` in you
 | `PI_INDEX_DIRS` | current directory | Comma-separated list of directories to index |
 | `PI_INDEX_AUTO_INDEX` | `false` | Auto-index on every session start |
 | `PI_INDEX_MAX_FILE_KB` | `500` | Skip files larger than this (KB) |
-| `PI_INDEX_MIN_SCORE` | `0.2` | Minimum relevance score (0–1) |
+| `PI_INDEX_MIN_SCORE` | `0.2` | Minimum relevance score (0–1). Scores are normalized per-query, so 0.2 will filter the bottom 20% of results. Try `0.4` for stricter filtering. |
 
 Or via `pi.config.json`:
 
@@ -146,6 +146,15 @@ searcher.ts            — query parsing, scope filters, result formatting
 tools.ts               — LLM tool definitions + handlers
 utils.ts               — shared helpers (relativeTime)
 ```
+
+### Scoring
+
+All search paths normalize result scores to a **relative 0–1 scale per query**:
+
+- **Hybrid search** — RRF (Reciprocal Rank Fusion) scores from LanceDB are divided by the maximum score in the result set. The top result always receives score `1.0`.
+- **Vector-only search** — raw `1/(1+distance)` scores are divided by the maximum score in the result set, giving the same relative semantics.
+
+Because both paths normalize to `[0, 1]` relative to the best result, `minScore` behaves consistently: a value of `0.2` filters results scoring below 20% of the top result, regardless of which search path is used.
 
 ### Chunk IDs
 

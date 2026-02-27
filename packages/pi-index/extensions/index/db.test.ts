@@ -94,6 +94,23 @@ describe("IndexDB", () => {
     }
   }, 30_000);
 
+  it("vectorSearch normalizes scores so the top result is always 1.0", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([
+      makeChunk("src/a.ts", 0, "authentication logic"),
+      makeChunk("src/b.ts", 1, "payment processing"),
+    ]);
+    const results = await db.vectorSearch([1, 0, 0, 0], 2);
+    expect(results.length).toBeGreaterThan(0);
+    // After normalization the top result must have score exactly 1.0
+    expect(results[0].score).toBe(1.0);
+    // Subsequent results must be strictly less than 1.0
+    for (const r of results.slice(1)) {
+      expect(r.score).toBeLessThan(1.0);
+      expect(r.score).toBeGreaterThanOrEqual(0);
+    }
+  }, 30_000);
+
   it("insertChunks is a no-op for empty array", async () => {
     const db = new IndexDB(join(tmpDir, "lancedb"), 4);
     await db.insertChunks([]);
@@ -130,6 +147,43 @@ describe("IndexDB", () => {
       expect(r.score).toBeGreaterThanOrEqual(0);
       expect(r.score).toBeLessThanOrEqual(1);
     }
+  }, 30_000);
+
+  it("rebuildFtsIndex calls createIndex with replace: true", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    // Initialize by triggering count — ensures table is open
+    await db.count();
+    // Access internal table to spy on createIndex
+    type DbInternal = {
+      table: { createIndex: (...args: unknown[]) => Promise<void> };
+      ensureInitialized: () => Promise<void>;
+    };
+    const dbInternal = db as unknown as DbInternal;
+    const createIndexSpy = vi
+      .spyOn(dbInternal.table, "createIndex")
+      .mockResolvedValue(undefined as never);
+
+    await db.rebuildFtsIndex();
+
+    expect(createIndexSpy).toHaveBeenCalledWith(
+      "text",
+      expect.objectContaining({ replace: true }),
+    );
+  }, 30_000);
+
+  it("rebuildFtsIndex swallows errors and does not throw", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.count();
+    type DbInternal = {
+      table: { createIndex: (...args: unknown[]) => Promise<void> };
+    };
+    const dbInternal = db as unknown as DbInternal;
+    vi.spyOn(dbInternal.table, "createIndex").mockRejectedValue(
+      new Error("FTS rebuild failed"),
+    );
+
+    // Should not throw
+    await expect(db.rebuildFtsIndex()).resolves.toBeUndefined();
   }, 30_000);
 
   it("hybridSearch falls back to vectorSearch when hybrid query throws", async () => {
