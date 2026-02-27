@@ -110,7 +110,7 @@ The runtime configuration derived from environment variables at extension startu
 | `dbPath` | string | Yes | Absolute path to the index database directory. |
 | `mtimeCachePath` | string | Yes | Absolute path to the mtime-cache.json file. Always `.pi/index/mtime-cache.json` relative to `indexRoot`. |
 | `indexRoot` | string | Yes | Absolute path to the project root directory (where `process.cwd()` points when pi starts). |
-| `indexDirs` | string[] | Yes | Absolute paths of directories to walk during indexing. At least one entry. Defaults to `[indexRoot]`. |
+| `indexDirs` | string[] | Yes | Paths of directories to walk during indexing. At least one entry. Defaults to `[indexRoot]`. May be absolute or relative to `process.cwd()`. |
 | `autoIndex` | boolean | Yes | Whether to trigger incremental indexing on session start. Default: `false`. |
 | `autoIndexInterval` | number | Yes | Minutes between automatic re-indexes when `autoIndex` is true. `0` = once per session only. Default: `0`. |
 | `maxFileKB` | number | Yes | Maximum file size in kilobytes. Files larger than this are skipped. Default: `500`. |
@@ -125,7 +125,7 @@ The runtime configuration derived from environment variables at extension startu
 - `maxFileKB` must be greater than 0.
 - `mmrLambda` must be in `[0.0, 1.0]`.
 - `autoIndexInterval` must be >= 0.
-- `indexDirs` contains only directories that exist at config load time. Non-existent directories are filtered out with a console warning.
+- `indexDirs` contains only directories that exist at config load time. Non-existent directories are filtered out with a console warning. Paths are resolved from `process.cwd()` if relative.
 
 ---
 

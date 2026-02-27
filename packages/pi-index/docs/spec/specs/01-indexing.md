@@ -85,7 +85,7 @@ For each chunk produced, the indexer constructs an enriched input string (DATA-M
 
 Embedding calls are batched: up to **20 chunks per API call** (`EMBED_BATCH_SIZE`). Up to **3 API calls are made concurrently** (`EMBED_CONCURRENCY`). Each batch is a single OpenAI `embeddings.create` call with an array of 20 enriched text strings.
 
-If the embedding service returns a rate-limit error (HTTP 429), the `Embeddings` class retries with exponential backoff: 1s, 2s, 4s, 8s (4 total attempts). After all retries are exhausted, the error propagates to the indexer. Other HTTP errors (401, 403, 500, etc.) fail immediately without retrying.
+If the embedding service returns a rate-limit error (HTTP 429), the `Embeddings` class retries with exponential backoff: delays of 1s, 2s, 4s between attempts (4 total attempts; up to 7s wait before the final attempt). After all 4 attempts fail, the error propagates to the indexer. Other HTTP errors (401, 403, 500, etc.) fail immediately without retrying.
 
 If a batch fails, **all files in that batch** are marked as failed — partial writes are never made. The mtime entry for a failed file is not updated, so the file will be retried on the next run.
 
@@ -171,7 +171,7 @@ Then the second call immediately returns `Error: [INDEX_ALREADY_RUNNING] ...`.
 
 Given the embedding service returns HTTP 429 on the first attempt,
 When the `Embeddings` class sends a batch,
-Then it retries with exponential backoff (1s, 2s, 4s, 8s) before marking the batch as failed.
+Then it retries with exponential backoff (delays of 1s, 2s, 4s between 4 total attempts) before marking the batch as failed.
 
 **Scenario 8 — Edge case: file becomes empty**
 

@@ -227,7 +227,7 @@ The stored `text` field is always the raw source lines — never the enriched fo
 
 ### Retry logic
 
-The `withRetry()` wrapper inside `Embeddings` retries only on HTTP 429 (rate limit). Other errors (401 auth, 403 forbidden, 500 server error) fail immediately. Retries use exponential backoff: 1s, 2s, 4s, 8s for a maximum of 4 total attempts.
+The `withRetry()` wrapper inside `Embeddings` retries only on HTTP 429 (rate limit). Other errors (401 auth, 403 forbidden, 500 server error) fail immediately. There are 4 total attempts with delays of 1s, 2s, 4s between them (up to 7s wait before the final attempt). The delay before the 4th attempt would be 8s, but the loop detects it is the last attempt and throws immediately instead — so only three delays fire.
 
 If a batch fails after all retries, all files in that batch are marked as failed. The indexer continues processing other batches — one bad batch doesn't stop the whole run.
 
@@ -445,7 +445,7 @@ Both files should be added to `.gitignore` — they are derived build artifacts,
 | Max chunk lines | 80 | ~512 tokens for typical source code; balances context vs. granularity |
 | Embed batch size | 20 chunks | OpenAI allows up to 2048 inputs per call; 20 is conservative |
 | Embed concurrency | 3 batches | Avoids overwhelming the rate limit; empirically fast |
-| Max retries (429) | 4 | 1s+2s+4s+8s=15s max delay before giving up |
+| Max retries (429) | 4 | 1s+2s+4s=7s max wait; 4th attempt fires then throws (no 8s delay) |
 | Over-fetch factor | 3× | Ensures enough candidates for score filtering + MMR |
 | MMR λ default | 0.5 | Equal weight: neither pure relevance nor pure diversity |
 | Min score default | 0.2 | Filters noise; top result scores 1.0, so 0.2 = bottom 20% |

@@ -50,7 +50,7 @@ export function createIndexTools(
         },
         limit: {
           type: "number",
-          description: "Maximum number of results (1–20). Default: 8.",
+          description: "Maximum number of results (0–20). Default: 8.",
         },
         minScore: {
           type: "number",

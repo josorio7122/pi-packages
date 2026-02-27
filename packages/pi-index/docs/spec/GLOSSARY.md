@@ -1,7 +1,7 @@
 # pi-index — Glossary
 
-**Version:** 0.1.0
-**Status:** Draft
+**Version:** 0.2.0
+**Status:** Current
 
 ---
 
