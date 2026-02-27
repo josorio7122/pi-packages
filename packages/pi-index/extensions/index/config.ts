@@ -62,9 +62,12 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
 
   const mtimeCachePath = resolve(indexRoot, ".pi/index/mtime-cache.json");
 
-  // indexDirs: comma-separated string or array
+  // indexDirs: comma-separated string, array of strings, or default to indexRoot
   let indexDirs: string[];
-  if (typeof raw.indexDirs === "string" && raw.indexDirs.trim()) {
+  if (Array.isArray(raw.indexDirs) && raw.indexDirs.length > 0) {
+    indexDirs = (raw.indexDirs as unknown[]).filter((d) => typeof d === "string") as string[];
+    if (indexDirs.length === 0) indexDirs = [indexRoot];
+  } else if (typeof raw.indexDirs === "string" && raw.indexDirs.trim()) {
     indexDirs = raw.indexDirs.split(",").map((s) => s.trim()).filter(Boolean);
   } else {
     indexDirs = [indexRoot];

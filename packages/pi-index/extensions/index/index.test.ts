@@ -66,6 +66,15 @@ vi.mock("./tools.js", () => ({
       { name: "codebase_status", description: "status", parameters: {}, handler: vi.fn() },
     ],
   }),
+  formatSummary: (summary: { added: number; addedChunks: number; updated: number; updatedChunks: number; skipped: number; skippedTooLarge: number; totalChunks: number; elapsedMs: number }) => [
+    "Index rebuilt:",
+    `  Added:   ${summary.added} file${summary.added !== 1 ? "s" : ""} (${summary.addedChunks} chunk${summary.addedChunks !== 1 ? "s" : ""})`,
+    `  Updated: ${summary.updated} file${summary.updated !== 1 ? "s" : ""} (${summary.updatedChunks} chunk${summary.updatedChunks !== 1 ? "s" : ""})`,
+    `  Skipped: ${summary.skipped} file${summary.skipped !== 1 ? "s" : ""} (unchanged)`,
+    `  Too large: ${summary.skippedTooLarge} file${summary.skippedTooLarge !== 1 ? "s" : ""} (size limit)`,
+    `  Total:   ${summary.totalChunks} chunk${summary.totalChunks !== 1 ? "s" : ""}`,
+    `  Time:    ${Math.round(summary.elapsedMs / 1000)}s`,
+  ].join("\n"),
 }));
 
 vi.mock("./utils.js", () => ({
@@ -173,8 +182,8 @@ describe("pi-index extension entry point", () => {
     expect(contLine).toMatch(/^ {15}Run/);
   });
 
-  // Fix 7: /index-rebuild skipped uses skippedTooLarge and label "(too large)"
-  it("/index-rebuild output shows skippedTooLarge with '(too large)' label, not failedFiles", async () => {
+  // Fix 7: /index-rebuild skipped uses skippedTooLarge and label "(size limit)" (via formatSummary)
+  it("/index-rebuild output shows skippedTooLarge with '(size limit)' label, not failedFiles", async () => {
     // Use vi.doMock (not hoisted) + vi.resetModules to override indexer for this test
     vi.resetModules();
     vi.doMock("./indexer.js", () => ({
@@ -205,9 +214,38 @@ describe("pi-index extension entry point", () => {
     // First notify is "Rebuilding...", second is the summary
     expect(notified.length).toBe(2);
     const summaryMsg = notified[1][0];
-    expect(summaryMsg).toContain("3 files (too large)");
-    expect(summaryMsg).not.toContain("2 files");
+    expect(summaryMsg).toContain("3 files (size limit)");
     expect(summaryMsg).not.toContain("(errors)");
+  });
+
+  // Fix 5: /index-rebuild uses formatSummary — output includes Updated and Skipped (unchanged)
+  it("/index-rebuild output includes 'Updated' and 'Skipped (unchanged)' fields (uses formatSummary)", async () => {
+    vi.resetModules();
+    vi.doMock("./indexer.js", () => ({
+      Indexer: function (this: Record<string, unknown>) {
+        this.run = vi.fn().mockResolvedValue({
+          added: 2, addedChunks: 8, updated: 3, updatedChunks: 12,
+          removed: 0, skipped: 10, skippedTooLarge: 0,
+          failedFiles: [], totalChunks: 20, elapsedMs: 3000,
+        });
+        Object.defineProperty(this, "isRunning", { get: () => false });
+      },
+    }));
+    const mod2 = await import("./index.js");
+    const ext2 = mod2.default as typeof extension;
+    const rc2 = vi.fn();
+    ext2({ registerTool: vi.fn(), registerCommand: rc2, on: vi.fn() } as never);
+
+    const rebuildCall = rc2.mock.calls.find((c: [string]) => c[0] === "index-rebuild");
+    const handler = rebuildCall![1].handler;
+    const notified: Array<[string, string]> = [];
+    const ctx = { ui: { notify: (msg: string, level: string) => notified.push([msg, level]) } };
+    await handler([], ctx);
+
+    const summaryMsg = notified[1][0];
+    expect(summaryMsg).toContain("Updated:");
+    expect(summaryMsg).toContain("Skipped:");
+    expect(summaryMsg).toContain("(unchanged)");
   });
 
   // Fix 8: /index-rebuild time uses integer seconds (Math.round)

@@ -4,7 +4,7 @@ import { IndexDB } from "./db.js";
 import { Embeddings } from "./embeddings.js";
 import { Indexer } from "./indexer.js";
 import { Searcher } from "./searcher.js";
-import { createIndexTools } from "./tools.js";
+import { createIndexTools, formatSummary } from "./tools.js";
 import { readMtimeCache, writeMtimeCache } from "./walker.js";
 import { relativeTime } from "./utils.js";
 
@@ -208,15 +208,7 @@ export default function (pi: ExtensionAPI): void {
           force: true,
           onProgress: (msg) => ctx.ui.notify(msg, "info"),
         });
-        ctx.ui.notify(
-          [
-            "Index rebuilt:",
-            `  Added:   ${summary.added} files (${summary.addedChunks} chunks)`,
-            `  Skipped: ${summary.skippedTooLarge} files (too large)`,
-            `  Time:    ${Math.round(summary.elapsedMs / 1000)}s`,
-          ].join("\n"),
-          "info",
-        );
+        ctx.ui.notify(formatSummary(summary), "info");
       } catch (err) {
         const msg = String(err);
         if (msg.includes("INDEX_ALREADY_RUNNING")) {

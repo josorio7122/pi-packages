@@ -126,6 +126,19 @@ describe("parseConfig", () => {
   });
 
   // M-2: non-existent dir warning
+  it("accepts indexDirs as an array of valid paths", () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    // Use a different dir than indexRoot so we can tell if the array was used
+    const cfg = parseConfig({ apiKey: "sk-test", indexDirs: ["/custom/dir"], indexRoot: "/project" });
+    expect(cfg.indexDirs).toEqual(["/custom/dir"]);
+  });
+
+  it("falls back to indexRoot when indexDirs is an empty array", () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    const cfg = parseConfig({ apiKey: "sk-test", indexDirs: [], indexRoot: "/project" });
+    expect(cfg.indexDirs).toEqual(["/project"]);
+  });
+
   it("warns and removes a non-existent dir, falls back to indexRoot when all removed", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});

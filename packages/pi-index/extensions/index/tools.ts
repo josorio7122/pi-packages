@@ -12,15 +12,15 @@ export type IndexTool = {
   handler: (args: Record<string, unknown>) => Promise<string>;
 };
 
-function formatSummary(summary: IndexSummary): string {
+export function formatSummary(summary: IndexSummary): string {
   const lines = [
-    "Index updated:",
+    "Index rebuilt:",
     `  Added:   ${summary.added} file${summary.added !== 1 ? "s" : ""} (${summary.addedChunks} chunk${summary.addedChunks !== 1 ? "s" : ""})`,
     `  Updated: ${summary.updated} file${summary.updated !== 1 ? "s" : ""} (${summary.updatedChunks} chunk${summary.updatedChunks !== 1 ? "s" : ""})`,
     `  Skipped: ${summary.skipped} file${summary.skipped !== 1 ? "s" : ""} (unchanged)`,
     `  Too large: ${summary.skippedTooLarge} file${summary.skippedTooLarge !== 1 ? "s" : ""} (size limit)`,
     `  Total:   ${summary.totalChunks} chunk${summary.totalChunks !== 1 ? "s" : ""}`,
-    `  Time:    ${(summary.elapsedMs / 1000).toFixed(1)}s`,
+    `  Time:    ${Math.round(summary.elapsedMs / 1000)}s`,
   ];
   return lines.join("\n");
 }

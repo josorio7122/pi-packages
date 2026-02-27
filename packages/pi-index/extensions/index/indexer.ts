@@ -50,7 +50,6 @@ const EMBED_CONCURRENCY = 3;
 
 export class Indexer {
   private running = false;
-  private mtimeCache: Map<string, MtimeEntry> | null = null;
 
   get isRunning(): boolean {
     return this.running;
@@ -72,19 +71,19 @@ export class Indexer {
     const start = Date.now();
 
     try {
-      // Set up throttled progress notifier
+      // Set up throttled progress notifier (for intermediate updates) and an unthrottled one for completion
       const notify: ProgressCallback = opts.onProgress ? throttle(opts.onProgress) : () => {};
+      const complete: ProgressCallback = opts.onProgress ?? (() => {});
 
-      // force: wipe everything and start fresh
+      // Load mtime cache from disk (or start fresh on force rebuild)
+      let cache: Map<string, MtimeEntry>;
       if (opts.force) {
         await this.db.deleteAll();
-        this.mtimeCache = new Map();
-        await writeMtimeCache(this.cfg.mtimeCachePath, this.mtimeCache);
+        cache = new Map();
+        await writeMtimeCache(this.cfg.mtimeCachePath, cache);
+      } else {
+        cache = await readMtimeCache(this.cfg.mtimeCachePath);
       }
-
-      // Load mtime cache from disk
-      const cache = await readMtimeCache(this.cfg.mtimeCachePath);
-      this.mtimeCache = cache;
 
       // Discover all eligible files
       const indexRoot = this.cfg.indexRoot;
@@ -126,7 +125,13 @@ export class Indexer {
       }
 
       const totalChunks = await this.db.count();
-      notify(`✅ Index updated — ${totalChunks} chunks across ${toProcess.length - failedFiles.length} file(s)`);
+      if (toProcess.length > 0) {
+        complete(`✅ Index updated — ${totalChunks} chunks across ${toProcess.length - failedFiles.length} file(s)`);
+      } else if (diff.toDelete.length > 0) {
+        complete(`✅ Removed ${diff.toDelete.length} deleted file(s) — ${totalChunks} chunks total`);
+      } else {
+        complete(`✅ Index is up to date — ${totalChunks} chunks, no changes detected`);
+      }
 
       // added/updated = files processed minus those that failed (spec: failedFiles excluded)
       const addedSet = new Set(diff.toAdd.map((f) => f.relativePath));

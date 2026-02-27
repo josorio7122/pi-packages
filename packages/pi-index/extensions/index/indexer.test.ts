@@ -433,6 +433,20 @@ describe("Indexer", () => {
     expect(messages.some((m) => m.includes("Indexing") || m.includes("Embedding") || m.includes("Scanned"))).toBe(true);
   });
 
+  it("emits 'up to date' notify when nothing changed (incremental, no files modified)", async () => {
+    // First run indexes the file
+    writeFileSync(join(tmpDir, "uptodate.ts"), "export const x = 1;");
+    const db = makeDb();
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    await indexer.run();
+
+    // Second run — nothing changed
+    const messages: string[] = [];
+    await indexer.run({ onProgress: (msg) => messages.push(msg) });
+    expect(messages.some((m) => m.includes("up to date"))).toBe(true);
+    expect(messages.every((m) => !m.includes("0 file(s)"))).toBe(true);
+  });
+
   it("onProgress is throttled — not called more than once per second per batch", async () => {
     // Create many files to trigger multiple progress calls
     for (let i = 0; i < 5; i++) {
