@@ -98,6 +98,11 @@ export class Indexer {
       // Persist updated mtime cache atomically
       await writeMtimeCache(this.cfg.mtimeCachePath, cache);
 
+      // Rebuild FTS index after any inserts so hybrid search stays current
+      if (toProcess.length > 0) {
+        await this.db.rebuildFtsIndex();
+      }
+
       const totalChunks = await this.db.count();
 
       // added/updated = files processed minus those that failed (spec: failedFiles excluded)

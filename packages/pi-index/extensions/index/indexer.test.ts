@@ -35,6 +35,7 @@ function makeDb(): IndexDB {
     vectorSearch: vi.fn().mockResolvedValue([]),
     hybridSearch: vi.fn().mockResolvedValue([]),
     getStatus: vi.fn().mockResolvedValue({ chunkCount: 0, fileCount: 0, lastIndexedAt: null }),
+    rebuildFtsIndex: vi.fn().mockResolvedValue(undefined),
   } as unknown as IndexDB;
 }
 
@@ -353,6 +354,27 @@ describe("Indexer", () => {
     const [arg] = vi.mocked(batchEmb.embed).mock.calls[0];
     expect(Array.isArray(arg)).toBe(true);
     expect((arg as string[]).length).toBeGreaterThan(0);
+  });
+
+  it("calls db.rebuildFtsIndex after processing files with changes", async () => {
+    writeFileSync(join(tmpDir, "new.ts"), "export const x = 1;");
+    const db = makeDb();
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    await indexer.run();
+    expect(db.rebuildFtsIndex).toHaveBeenCalledOnce();
+  });
+
+  it("does not call db.rebuildFtsIndex when no files were added or updated", async () => {
+    // First run indexes the file
+    writeFileSync(join(tmpDir, "stable.ts"), "export const x = 1;");
+    const db = makeDb();
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    await indexer.run();
+
+    // Second run: file unchanged — no toProcess entries, no rebuildFtsIndex
+    vi.mocked(db.rebuildFtsIndex).mockClear();
+    await indexer.run();
+    expect(db.rebuildFtsIndex).not.toHaveBeenCalled();
   });
 
   it("embed concurrency never exceeds EMBED_CONCURRENCY batches at once", async () => {
