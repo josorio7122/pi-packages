@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   walkDirs,
   readMtimeCache,
@@ -188,5 +190,79 @@ describe("diffFileSet", () => {
     expect(diff.toAdd.map((f) => f.relativePath)).toEqual(["new.ts"]);
     expect(diff.toUpdate.map((f) => f.relativePath)).toEqual(["changed.ts"]);
     expect(diff.toDelete).toEqual(["deleted.ts"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// .gitignore integration tests — use real temp dirs with async fs
+// ---------------------------------------------------------------------------
+
+describe("walkDirs .gitignore integration", () => {
+  let tmpGitDir: string;
+
+  beforeEach(async () => {
+    tmpGitDir = join(tmpdir(), `walker-git-test-${randomUUID()}`);
+    await mkdir(tmpGitDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpGitDir, { recursive: true, force: true });
+  });
+
+  it("excludes files and directories matching .gitignore patterns", async () => {
+    // .gitignore ignores *.log files and the build/ directory
+    await writeFile(join(tmpGitDir, ".gitignore"), "*.log\nbuild/\n");
+    await writeFile(join(tmpGitDir, "app.ts"), "const x = 1;");
+    await writeFile(join(tmpGitDir, "error.log"), "some log");
+    await mkdir(join(tmpGitDir, "build"), { recursive: true });
+    await writeFile(join(tmpGitDir, "build", "output.ts"), "compiled");
+
+    const result = await walkDirs([tmpGitDir], tmpGitDir, [".ts", ".log"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    // app.ts is not ignored — must appear
+    expect(files.some((f) => f.includes("app.ts"))).toBe(true);
+    // error.log is ignored via *.log pattern
+    expect(files.some((f) => f.includes("error.log"))).toBe(false);
+    // build/output.ts is inside the ignored build/ directory
+    expect(files.some((f) => f.includes("build"))).toBe(false);
+  });
+
+  it("excludes node_modules even without a .gitignore file", async () => {
+    // No .gitignore present — node_modules must be excluded via hardcoded rule
+    await mkdir(join(tmpGitDir, "node_modules", "somepackage"), { recursive: true });
+    await writeFile(join(tmpGitDir, "node_modules", "somepackage", "index.ts"), "module");
+    await writeFile(join(tmpGitDir, "app.ts"), "const x = 1;");
+
+    const result = await walkDirs([tmpGitDir], tmpGitDir, [".ts"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    expect(files.some((f) => f.includes("node_modules"))).toBe(false);
+    expect(files.some((f) => f.includes("app.ts"))).toBe(true);
+  });
+
+  it("excludes files exceeding maxFileKB (async variant)", async () => {
+    const bigContent = "x".repeat(2 * 1024); // 2 KB
+    await writeFile(join(tmpGitDir, "big.ts"), bigContent);
+    await writeFile(join(tmpGitDir, "small.ts"), "const x = 1;");
+
+    const result = await walkDirs([tmpGitDir], tmpGitDir, [".ts"], 1); // 1 KB limit
+    const files = result.files.map((f) => f.relativePath);
+
+    expect(files.some((f) => f.includes("big.ts"))).toBe(false);
+    expect(files.some((f) => f.includes("small.ts"))).toBe(true);
+  });
+
+  it("only indexes files whose extension is in the supported list", async () => {
+    await writeFile(join(tmpGitDir, "script.ts"), "const x = 1;");
+    await writeFile(join(tmpGitDir, "image.png"), "binary data");
+    await writeFile(join(tmpGitDir, "data.csv"), "a,b,c");
+
+    const result = await walkDirs([tmpGitDir], tmpGitDir, [".ts"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    expect(files.some((f) => f.includes("script.ts"))).toBe(true);
+    expect(files.some((f) => f.includes("image.png"))).toBe(false);
+    expect(files.some((f) => f.includes("data.csv"))).toBe(false);
   });
 });

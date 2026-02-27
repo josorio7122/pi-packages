@@ -1,6 +1,58 @@
 import { readdir, stat, readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { join, relative, resolve, extname, basename } from "node:path";
 
+// ---------------------------------------------------------------------------
+// .gitignore support
+// ---------------------------------------------------------------------------
+
+/** Directories that are always excluded, regardless of .gitignore. */
+const ALWAYS_EXCLUDED_DIRS = new Set(["node_modules", ".git"]);
+
+/**
+ * Convert a single .gitignore pattern line to a RegExp that matches
+ * relative POSIX paths.
+ *
+ * Supported patterns (subset sufficient for common usage):
+ *   *.log        → any file ending in .log anywhere in the tree
+ *   build/       → any path segment named "build" (directory marker)
+ *   src/*.ts     → rooted glob (contains slash, not trailing)
+ */
+function gitPatternToRegex(pattern: string): RegExp {
+  const isDirOnly = pattern.endsWith("/");
+  const p = isDirOnly ? pattern.slice(0, -1) : pattern;
+
+  // Escape regex metacharacters except * (handled separately)
+  const escaped = p.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  // Convert * to match any character except path separator
+  const regexBody = escaped.replace(/\*/g, "[^/]*");
+
+  if (isDirOnly || !p.includes("/")) {
+    // Match the pattern as any path segment (anywhere in the tree)
+    return new RegExp(`(?:^|/)${regexBody}(?:/|$)`);
+  } else {
+    // Rooted pattern — match from the start of the relative path
+    return new RegExp(`^${regexBody}(?:/|$)`);
+  }
+}
+
+/** Read .gitignore from rootDir and return compiled matchers. */
+async function loadGitignorePatterns(rootDir: string): Promise<RegExp[]> {
+  try {
+    const content = await readFile(join(rootDir, ".gitignore"), "utf-8");
+    return content
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map(gitPatternToRegex);
+  } catch {
+    return [];
+  }
+}
+
+function isIgnoredByPatterns(relativePath: string, patterns: RegExp[]): boolean {
+  return patterns.some((re) => re.test(relativePath));
+}
+
 export type FileRecord = {
   relativePath: string;
   absolutePath: string;
@@ -38,6 +90,7 @@ async function walkDir(
   indexRoot: string,
   supportedExtensions: Set<string>,
   maxFileKB: number,
+  gitignorePatterns: RegExp[],
   results: FileRecord[],
   counts: { skippedLarge: number },
 ): Promise<void> {
@@ -50,11 +103,20 @@ async function walkDir(
 
   for (const entry of entries) {
     const abs = join(dir, entry.name);
+    const rel = relative(indexRoot, abs).replace(/\\/g, "/");
+
     if (entry.isDirectory()) {
-      await walkDir(abs, indexRoot, supportedExtensions, maxFileKB, results, counts);
+      // Always skip hardcoded directories
+      if (ALWAYS_EXCLUDED_DIRS.has(entry.name)) continue;
+      // Skip directories that match .gitignore patterns (check with trailing /)
+      if (isIgnoredByPatterns(rel + "/", gitignorePatterns)) continue;
+      if (isIgnoredByPatterns(rel, gitignorePatterns)) continue;
+      await walkDir(abs, indexRoot, supportedExtensions, maxFileKB, gitignorePatterns, results, counts);
     } else if (entry.isFile()) {
       const ext = getExt(entry.name);
       if (!supportedExtensions.has(ext)) continue;
+      // Skip files that match .gitignore patterns
+      if (isIgnoredByPatterns(rel, gitignorePatterns)) continue;
       try {
         const s = await stat(abs);
         const sizeKB = s.size / 1024;
@@ -63,7 +125,7 @@ async function walkDir(
           continue;
         }
         results.push({
-          relativePath: relative(indexRoot, abs).replace(/\\/g, "/"),
+          relativePath: rel,
           absolutePath: abs,
           mtime: s.mtimeMs,
           sizeKB,
@@ -83,10 +145,11 @@ export async function walkDirs(
   maxFileKB: number,
 ): Promise<WalkResult> {
   const extSet = new Set(supportedExtensions);
+  const gitignorePatterns = await loadGitignorePatterns(indexRoot);
   const results: FileRecord[] = [];
   const counts = { skippedLarge: 0 };
   for (const dir of dirs) {
-    await walkDir(dir, indexRoot, extSet, maxFileKB, results, counts);
+    await walkDir(dir, indexRoot, extSet, maxFileKB, gitignorePatterns, results, counts);
   }
   return { files: results, skippedLarge: counts.skippedLarge };
 }
