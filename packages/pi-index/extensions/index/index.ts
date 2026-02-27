@@ -231,6 +231,13 @@ export default function (pi: ExtensionAPI): void {
   pi.registerCommand("index-clear", {
     description: "Delete the entire codebase index (chunks and mtime cache)",
     handler: async (_args, ctx) => {
+      if (indexer.isRunning) {
+        ctx.ui.notify(
+          "Cannot clear index: an index operation is currently in progress. Wait for it to complete first.",
+          "error",
+        );
+        return;
+      }
       try {
         await db.deleteAll();
         await writeMtimeCache(cfg.mtimeCachePath, new Map());

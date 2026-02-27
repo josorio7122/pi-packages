@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createIndexTools } from "./tools.js";
+import { createIndexTools, formatSummary } from "./tools.js";
 import { readMtimeCache } from "./walker.js";
 import type { Indexer, IndexSummary } from "./indexer.js";
 import type { Searcher } from "./searcher.js";
@@ -385,7 +385,34 @@ describe("createIndexTools", () => {
       expect(result).toContain("[CONFIG_MISSING_API_KEY]");
     });
   });
+});
 
+describe("formatSummary", () => {
+  it("formatSummary includes Removed line", () => {
+    const summary: IndexSummary = {
+      added: 3, addedChunks: 12,
+      updated: 1, updatedChunks: 4,
+      removed: 2,
+      skipped: 50, skippedTooLarge: 0,
+      failedFiles: [],
+      totalChunks: 100,
+      elapsedMs: 5000,
+    };
+    const output = formatSummary(summary);
+    expect(output).toContain("Removed: 2 files");
+  });
 
-
+  it("formatSummary uses singular for Removed: 1 file", () => {
+    const summary: IndexSummary = {
+      added: 0, addedChunks: 0,
+      updated: 0, updatedChunks: 0,
+      removed: 1,
+      skipped: 0, skippedTooLarge: 0,
+      failedFiles: [],
+      totalChunks: 10,
+      elapsedMs: 1000,
+    };
+    expect(formatSummary(summary)).toContain("Removed: 1 file");
+    expect(formatSummary(summary)).not.toContain("1 files");
+  });
 });

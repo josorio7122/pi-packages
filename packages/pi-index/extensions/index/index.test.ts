@@ -337,6 +337,51 @@ describe("pi-index extension entry point", () => {
     );
   });
 
+  it("/index-clear rejects when indexer is currently running", async () => {
+    vi.resetModules();
+    const deleteAllMock = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("./db.js", () => ({
+      IndexDB: function (this: Record<string, unknown>) {
+        this.count = vi.fn().mockResolvedValue(0);
+        this.getStatus = vi.fn().mockResolvedValue({ chunkCount: 0, fileCount: 0, lastIndexedAt: null });
+        this.insertChunks = vi.fn().mockResolvedValue(undefined);
+        this.deleteByFilePath = vi.fn().mockResolvedValue(undefined);
+        this.deleteAll = deleteAllMock;
+        this.vectorSearch = vi.fn().mockResolvedValue([]);
+        this.hybridSearch = vi.fn().mockResolvedValue([]);
+      },
+    }));
+    vi.doMock("./indexer.js", () => ({
+      Indexer: function (this: Record<string, unknown>) {
+        this.run = vi.fn().mockResolvedValue({
+          added: 0, addedChunks: 0, updated: 0, updatedChunks: 0,
+          removed: 0, skipped: 0, skippedTooLarge: 0,
+          failedFiles: [], totalChunks: 0, elapsedMs: 1,
+        });
+        Object.defineProperty(this, "isRunning", { get: () => true });
+      },
+    }));
+
+    const mod2 = await import("./index.js");
+    const ext2 = mod2.default as typeof extension;
+    const rc2 = vi.fn();
+    ext2({ registerTool: vi.fn(), registerCommand: rc2, on: vi.fn() } as never);
+
+    const clearCall = rc2.mock.calls.find((c: [string]) => c[0] === "index-clear");
+    expect(clearCall).toBeDefined();
+    const handler = clearCall![1].handler;
+
+    const notified: Array<[string, string]> = [];
+    const ctx = { ui: { notify: (msg: string, level: string) => notified.push([msg, level]) } };
+    await handler([], ctx);
+
+    expect(notified.length).toBe(1);
+    const [msg, level] = notified[0];
+    expect(level).toBe("error");
+    expect(msg).toMatch(/Cannot clear|in progress/);
+    expect(deleteAllMock).not.toHaveBeenCalled();
+  });
+
   it("registers before_agent_start hook when autoIndex is true", async () => {
     vi.resetModules();
     vi.doMock("./config.js", () => ({
