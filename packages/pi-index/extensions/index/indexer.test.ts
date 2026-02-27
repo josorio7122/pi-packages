@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Indexer } from "./indexer.js";
+import { readMtimeCache } from "./walker.js";
 import type { IndexDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import type { IndexConfig } from "./config.js";
@@ -445,6 +446,33 @@ describe("Indexer", () => {
     await indexer.run({ onProgress: (msg) => messages.push(msg) });
     expect(messages.some((m) => m.includes("up to date"))).toBe(true);
     expect(messages.every((m) => !m.includes("0 file(s)"))).toBe(true);
+  });
+
+  it("empty file is tracked in mtime cache after first run (not re-attempted on second run)", async () => {
+    writeFileSync(join(tmpDir, "empty.ts"), "");                  // truly empty
+    writeFileSync(join(tmpDir, "blank.ts"), "   \n  ");           // whitespace only
+    writeFileSync(join(tmpDir, "real.ts"), "export const x = 1;");
+
+    const cfg = makeConfig();
+    const db = makeDb();
+    const indexer = new Indexer(cfg, db, makeEmb());
+
+    await indexer.run();
+
+    // Read the mtime cache — empty.ts and blank.ts should be cached with chunkCount=0
+    const cache = await readMtimeCache(cfg.mtimeCachePath);
+    expect(cache.has("empty.ts")).toBe(true);
+    expect(cache.get("empty.ts")!.chunkCount).toBe(0);
+    expect(cache.has("blank.ts")).toBe(true);
+    expect(cache.get("blank.ts")!.chunkCount).toBe(0);
+
+    // Second run — empty/blank files should be skipped as unchanged (not re-processed)
+    const insertCallsBefore = (db.insertChunks as ReturnType<typeof vi.fn>).mock.calls.length;
+    const r2 = await indexer.run();
+    expect(r2.added).toBe(0);
+    expect(r2.updated).toBe(0);
+    // No new insertChunks calls for empty files
+    expect((db.insertChunks as ReturnType<typeof vi.fn>).mock.calls.length).toBe(insertCallsBefore);
   });
 
   it("onProgress is throttled — not called more than once per second per batch", async () => {

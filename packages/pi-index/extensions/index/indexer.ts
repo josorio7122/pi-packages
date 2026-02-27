@@ -181,6 +181,14 @@ export class Indexer {
         const chunks = chunkFile(file.relativePath, content, file.mtime);
         if (chunks.length > 0) {
           fileChunks.push({ file, chunks });
+        } else {
+          // File is empty/whitespace-only: cache with chunkCount=0 so future runs skip it
+          cache.set(file.relativePath, {
+            filePath: file.relativePath,
+            mtime: file.mtime,
+            chunkCount: 0,
+            indexedAt: Date.now(),
+          });
         }
       } catch {
         failedFiles.push(file.relativePath);

@@ -372,6 +372,35 @@ describe("subdirectory .gitignore integration", () => {
     expect(files.some((f) => f === "app.ts")).toBe(true); // root file unaffected
   });
 
+  it("? in .gitignore matches exactly one character", async () => {
+    await writeFile(join(tmpDir2, ".gitignore"), "?.ts\n");
+    // Files that should be excluded: a.ts (? matches 'a'), b.ts (? matches 'b')
+    await writeFile(join(tmpDir2, "a.ts"), "content");
+    await writeFile(join(tmpDir2, "b.ts"), "content");
+    // Files that should be INCLUDED: ab.ts (two chars before .ts, ? matches only 1)
+    await writeFile(join(tmpDir2, "ab.ts"), "content");
+    // Files that should be INCLUDED: config.ts (more than 1 char before .ts)
+    await writeFile(join(tmpDir2, "config.ts"), "content");
+
+    const result = await walkDirs([tmpDir2], tmpDir2, [".ts"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    expect(files).not.toContain("a.ts");      // excluded: ? matches 'a'
+    expect(files).not.toContain("b.ts");      // excluded: ? matches 'b'
+    expect(files).toContain("ab.ts");         // included: 2 chars before .ts
+    expect(files).toContain("config.ts");     // included: 6 chars before .ts
+  });
+
+  it("? in .gitignore does not match a path separator", async () => {
+    await mkdir(join(tmpDir2, "src"), { recursive: true });
+    await writeFile(join(tmpDir2, ".gitignore"), "?rc/\n");
+    await writeFile(join(tmpDir2, "src", "index.ts"), "content");
+
+    const result = await walkDirs([tmpDir2], tmpDir2, [".ts"], 500);
+    const files = result.files.map((f) => f.relativePath);
+    expect(files).not.toContain("src/index.ts"); // excluded: ?rc/ matches src/
+  });
+
   it("rooted /dist pattern matches only root dist, not nested dist", async () => {
     await mkdir(join(tmpDir2, "dist"), { recursive: true });
     await mkdir(join(tmpDir2, "packages", "frontend", "dist"), { recursive: true });

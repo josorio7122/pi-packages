@@ -208,7 +208,7 @@ export default function (pi: ExtensionAPI): void {
           force: true,
           onProgress: (msg) => ctx.ui.notify(msg, "info"),
         });
-        ctx.ui.notify(formatSummary(summary), "info");
+        ctx.ui.notify(formatSummary(summary, true), "info");
       } catch (err) {
         const msg = String(err);
         if (msg.includes("INDEX_ALREADY_RUNNING")) {

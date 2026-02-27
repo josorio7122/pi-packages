@@ -110,9 +110,16 @@ describe("createIndexTools", () => {
       expect(searcher.search).toHaveBeenCalledWith("auth", 8, undefined);
     });
 
-    it("returns INDEX_NOT_INITIALIZED when chunkCount is 0", async () => {
+    it("returns INDEX_NOT_INITIALIZED when searcher reports empty index", async () => {
+      // After Fix 4: tools.ts no longer calls db.getStatus(). The searcher (via db.count())
+      // returns [INDEX_EMPTY] when the index is empty, and tools.ts normalizes it.
+      const emptyIndexSearcher = {
+        search: vi.fn().mockResolvedValue(
+          "[INDEX_EMPTY] The codebase index is empty. Run codebase_index (or /index-rebuild) to build the index first."
+        ),
+      } as unknown as Searcher;
       const db = makeDb({ chunkCount: 0 });
-      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+      const { tools } = createIndexTools(emptyIndexSearcher, makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_search")!;
       const result = await tool.handler({ query: "anything" });
       expect(result).toContain("[INDEX_NOT_INITIALIZED]");
@@ -126,14 +133,14 @@ describe("createIndexTools", () => {
       expect(result).toBe("Found 3 results for auth");
     });
 
-    it("returns INDEX_NOT_INITIALIZED when db.getStatus throws", async () => {
-      const db = {
-        getStatus: vi.fn().mockRejectedValue(new Error("DB connection lost")),
-      } as unknown as IndexDB;
-      const { tools } = createIndexTools(makeSearcher(), makeIndexer(), db, makeConfig());
+    it("does not call db.getStatus before search (Fix 4: no pre-check in tools layer)", async () => {
+      // After Fix 4: db.getStatus() is not called — searcher handles the empty-index check
+      const db = makeDb({ chunkCount: 5 });
+      const searcher = makeSearcher("Found 1 result");
+      const { tools } = createIndexTools(searcher, makeIndexer(), db, makeConfig());
       const tool = tools.find((t) => t.name === "codebase_search")!;
-      const result = await tool.handler({ query: "auth" });
-      expect(result).toContain("[INDEX_NOT_INITIALIZED]");
+      await tool.handler({ query: "auth" });
+      expect(db.getStatus).not.toHaveBeenCalled();
     });
 
     it("codebase_search returns SEARCH_FAILED for unexpected errors", async () => {
@@ -172,6 +179,24 @@ describe("createIndexTools", () => {
       expect(result).toContain("Added:");
       expect(result).toContain("Updated:");
       expect(result).toContain("Skipped:");
+    });
+
+    it("returns 'Index updated:' header for incremental run (force=false)", async () => {
+      const indexer = makeIndexer();
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      const result = await tool.handler({ force: false });
+      expect(result).toContain("Index updated:");
+      expect(result).not.toContain("Index rebuilt:");
+    });
+
+    it("returns 'Index rebuilt:' header for force=true run", async () => {
+      const indexer = makeIndexer();
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      const result = await tool.handler({ force: true });
+      expect(result).toContain("Index rebuilt:");
+      expect(result).not.toContain("Index updated:");
     });
 
     it("includes chunk counts in Added and Updated lines", async () => {
@@ -360,5 +385,7 @@ describe("createIndexTools", () => {
       expect(result).toContain("[CONFIG_MISSING_API_KEY]");
     });
   });
+
+
 
 });

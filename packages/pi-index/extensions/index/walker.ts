@@ -36,7 +36,8 @@ function gitPatternToRegex(pattern: string): RegExp {
   const regexBody = escaped
     .replace(/\*\*/g, "\x00")   // step 1: stash ** as null byte
     .replace(/\*/g, "[^/]*")    // step 2: single-segment wildcard
-    .replace(/\x00/g, ".*");    // step 3: restore ** as cross-segment wildcard
+    .replace(/\x00/g, ".*")     // step 3: restore ** as cross-segment wildcard
+    .replace(/\?/g, "[^/]");    // step 4: ? matches exactly one non-separator char
 
   // Rooted (leading /) OR contains / in pattern body → anchor to start
   if (isRooted || p.includes("/")) {

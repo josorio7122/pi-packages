@@ -12,9 +12,10 @@ export type IndexTool = {
   handler: (args: Record<string, unknown>) => Promise<string>;
 };
 
-export function formatSummary(summary: IndexSummary): string {
+export function formatSummary(summary: IndexSummary, rebuilt = false): string {
+  const header = rebuilt ? "Index rebuilt:" : "Index updated:";
   const lines = [
-    "Index rebuilt:",
+    header,
     `  Added:   ${summary.added} file${summary.added !== 1 ? "s" : ""} (${summary.addedChunks} chunk${summary.addedChunks !== 1 ? "s" : ""})`,
     `  Updated: ${summary.updated} file${summary.updated !== 1 ? "s" : ""} (${summary.updatedChunks} chunk${summary.updatedChunks !== 1 ? "s" : ""})`,
     `  Skipped: ${summary.skipped} file${summary.skipped !== 1 ? "s" : ""} (unchanged)`,
@@ -63,16 +64,12 @@ export function createIndexTools(
       const minScore = typeof args.minScore === "number" ? args.minScore : undefined;
 
       try {
-        const status = await db.getStatus();
-        if (status.chunkCount === 0) {
+        const result = await searcher.search(query, limit, minScore);
+        // Normalize searcher's INDEX_EMPTY into the tools-layer error format
+        if (result.startsWith("[INDEX_EMPTY]")) {
           return "Error: [INDEX_NOT_INITIALIZED] Run codebase_index to build the index before searching.";
         }
-      } catch {
-        return "Error: [INDEX_NOT_INITIALIZED] Run codebase_index to build the index before searching.";
-      }
-
-      try {
-        return await searcher.search(query, limit, minScore);
+        return result;
       } catch (err) {
         const msg = String(err);
         if (msg.includes("CONFIG_MISSING_API_KEY")) {
@@ -106,7 +103,7 @@ export function createIndexTools(
           force,
           onProgress: opts.notify ? (msg) => opts.notify!(msg, "info") : undefined,
         });
-        return formatSummary(summary);
+        return formatSummary(summary, force);
       } catch (err) {
         const msg = String(err);
         if (msg.includes("INDEX_ALREADY_RUNNING")) {
