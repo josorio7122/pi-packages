@@ -200,7 +200,23 @@ describe("createIndexTools", () => {
       expect(result).not.toContain("Failed:");
     });
 
+    it("calls notify with an info-level message when codebase_index runs successfully", async () => {
+      const notify = vi.fn();
+      const indexer: Indexer = {
+        run: vi.fn().mockImplementation(async (opts: { force?: boolean; onProgress?: (msg: string) => void } = {}) => {
+          opts.onProgress?.("⚡ Indexing 1 file(s)...");
+          return { added: 1, addedChunks: 3, updated: 0, updatedChunks: 0, removed: 0, skipped: 0, skippedTooLarge: 0, failedFiles: [], totalChunks: 5, elapsedMs: 1000 };
+        }),
+        isRunning: false,
+      } as unknown as Indexer;
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig(), { notify });
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      await tool.handler({});
+      expect(notify).toHaveBeenCalledWith(expect.any(String), "info");
+    });
+
     it("returns INDEX_ALREADY_RUNNING error when indexer throws that", async () => {
+
       const indexer = {
         run: vi.fn().mockRejectedValue(new Error("INDEX_ALREADY_RUNNING: still running")),
         isRunning: false,

@@ -30,6 +30,7 @@ export function createIndexTools(
   indexer: Indexer,
   db: IndexDB,
   cfg: IndexConfig,
+  opts: { notify?: (msg: string, level: string) => void } = {},
 ): { tools: IndexTool[] } {
   const searchTool: IndexTool = {
     name: "codebase_search",
@@ -99,9 +100,12 @@ export function createIndexTools(
       },
     },
     handler: async (args) => {
-      const force = args.force === true;
+      const force = typeof args.force === "boolean" ? args.force : false;
       try {
-        const summary = await indexer.run({ force });
+        const summary = await indexer.run({
+          force,
+          onProgress: opts.notify ? (msg) => opts.notify!(msg, "info") : undefined,
+        });
         return formatSummary(summary);
       } catch (err) {
         const msg = String(err);

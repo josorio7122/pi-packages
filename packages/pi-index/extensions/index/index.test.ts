@@ -242,6 +242,41 @@ describe("pi-index extension entry point", () => {
     expect(summaryMsg).not.toMatch(/\d+\.\d+s/);
   });
 
+  it("/index-rebuild passes onProgress to indexer.run and calls ctx.ui.notify with progress messages", async () => {
+    vi.resetModules();
+    vi.doMock("./indexer.js", () => ({
+      Indexer: function (this: Record<string, unknown>) {
+        this.run = vi.fn().mockImplementation(async (opts: { force?: boolean; onProgress?: (msg: string) => void } = {}) => {
+          opts.onProgress?.("🔍 Scanned — 1 file(s) to check");
+          opts.onProgress?.("⚡ Indexing 1 file(s)...");
+          return {
+            added: 1, addedChunks: 4, updated: 0, updatedChunks: 0,
+            removed: 0, skipped: 0, skippedTooLarge: 0,
+            failedFiles: [], totalChunks: 4, elapsedMs: 500,
+          };
+        });
+        Object.defineProperty(this, "isRunning", { get: () => false });
+      },
+    }));
+    const mod2 = await import("./index.js");
+    const ext2 = mod2.default as (pi: { registerTool: ReturnType<typeof vi.fn>; registerCommand: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> }) => void;
+    const rc2 = vi.fn();
+    ext2({ registerTool: vi.fn(), registerCommand: rc2, on: vi.fn() } as never);
+
+    const rebuildCall = rc2.mock.calls.find((c: [string]) => c[0] === "index-rebuild");
+    expect(rebuildCall).toBeDefined();
+    const handler = rebuildCall![1].handler;
+    const notified: Array<[string, string]> = [];
+    const ctx = { ui: { notify: (msg: string, level: string) => notified.push([msg, level]) } };
+    await handler([], ctx);
+
+    // Should have: "Rebuilding..." + progress messages + final summary
+    expect(notified.length).toBeGreaterThanOrEqual(3);
+    const messages = notified.map(([msg]) => msg);
+    expect(messages.some((m) => m.includes("Scanned") || m.includes("Indexing"))).toBe(true);
+    expect(messages.some((m) => m.includes("Index rebuilt:"))).toBe(true);
+  });
+
   it("/index-rebuild success shows rebuilt summary", async () => {
     const cmdCall = registerCommand.mock.calls.find((c: [string]) => c[0] === "index-rebuild");
     const handler = cmdCall![1].handler as (args: unknown, ctx: { ui: { notify: ReturnType<typeof vi.fn> } }) => Promise<void>;

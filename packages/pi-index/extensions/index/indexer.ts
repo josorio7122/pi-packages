@@ -12,6 +12,20 @@ import {
   type FileRecord,
 } from "./walker.js";
 
+export type ProgressCallback = (message: string) => void;
+
+/** Returns a wrapper that calls cb at most once per `minIntervalMs`. */
+function throttle(cb: ProgressCallback, minIntervalMs = 1000): ProgressCallback {
+  let lastCallMs = 0;
+  return (msg: string) => {
+    const now = Date.now();
+    if (now - lastCallMs >= minIntervalMs) {
+      lastCallMs = now;
+      cb(msg);
+    }
+  };
+}
+
 export type IndexSummary = {
   added: number;
   addedChunks: number;
@@ -48,7 +62,7 @@ export class Indexer {
     private readonly emb: Embeddings,
   ) {}
 
-  async run(opts: { force?: boolean } = {}): Promise<IndexSummary> {
+  async run(opts: { force?: boolean; onProgress?: ProgressCallback } = {}): Promise<IndexSummary> {
     if (this.running) {
       throw new Error(
         "INDEX_ALREADY_RUNNING: A previous index operation is still in progress.",
@@ -58,6 +72,9 @@ export class Indexer {
     const start = Date.now();
 
     try {
+      // Set up throttled progress notifier
+      const notify: ProgressCallback = opts.onProgress ? throttle(opts.onProgress) : () => {};
+
       // force: wipe everything and start fresh
       if (opts.force) {
         await this.db.deleteAll();
@@ -78,11 +95,16 @@ export class Indexer {
         this.cfg.maxFileKB,
       );
       const allFiles = walkResult.files;
+      notify(`🔍 Scanned — ${allFiles.length} file(s) to check`);
 
       // Three-way diff
       const diff = diffFileSet(allFiles, cache);
       const toProcess: FileRecord[] = [...diff.toAdd, ...diff.toUpdate];
       const failedFiles: string[] = [];
+
+      if (toProcess.length > 0) {
+        notify(`⚡ Indexing ${toProcess.length} file(s) (${diff.toAdd.length} new, ${diff.toUpdate.length} changed)...`);
+      }
 
       // Delete chunks for files that no longer exist on disk
       for (const filePath of diff.toDelete) {
@@ -93,7 +115,7 @@ export class Indexer {
       // after embedding succeeds, to preserve stale-but-present data on failure
 
       // Process all new/changed files: chunk-level batching with bounded concurrency
-      await this.processBatch(toProcess, cache, failedFiles);
+      await this.processBatch(toProcess, cache, failedFiles, notify);
 
       // Persist updated mtime cache atomically
       await writeMtimeCache(this.cfg.mtimeCachePath, cache);
@@ -104,6 +126,7 @@ export class Indexer {
       }
 
       const totalChunks = await this.db.count();
+      notify(`✅ Index updated — ${totalChunks} chunks across ${toProcess.length - failedFiles.length} file(s)`);
 
       // added/updated = files processed minus those that failed (spec: failedFiles excluded)
       const addedSet = new Set(diff.toAdd.map((f) => f.relativePath));
@@ -140,6 +163,7 @@ export class Indexer {
     files: FileRecord[],
     cache: Map<string, MtimeEntry>,
     failedFiles: string[],
+    notify: ProgressCallback,
   ): Promise<void> {
     // O(1) deduplication guard — kept in sync with failedFiles array
     const failedSet = new Set<string>(failedFiles);
@@ -157,6 +181,7 @@ export class Indexer {
         failedFiles.push(file.relativePath);
       }
     }
+    notify(`📚 Reading files... (${fileChunks.length}/${files.length})`);
 
     // Step 2: flatten all chunks, embed in batches of EMBED_BATCH_SIZE with EMBED_CONCURRENCY
     const allRaw = fileChunks.flatMap(({ file, chunks }) =>
@@ -205,6 +230,8 @@ export class Indexer {
         }),
       );
       embedded.push(...results.flat());
+      const embeddedSoFar = Math.min((i + EMBED_CONCURRENCY) * EMBED_BATCH_SIZE, allRaw.length);
+      notify(`🧠 Embedding chunks... (${embeddedSoFar}/${allRaw.length})`);
     }
 
     // Step 3: group embedded chunks by file and write to DB
