@@ -10,6 +10,7 @@ export type IndexConfig = {
   indexDirs: string[];
   indexRoot: string;
   autoIndex: boolean;
+  autoIndexInterval: number; // minutes between auto re-index (0 = once per session)
   maxFileKB: number;
   minScore: number;
   mmrLambda: number;
@@ -51,6 +52,9 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
   if (mmrLambda < 0 || mmrLambda > 1)
     throw new Error("mmrLambda must be between 0.0 and 1.0 (0 = max diversity, 1 = max relevance)");
 
+  const autoIndexInterval = typeof raw.autoIndexInterval === "number" ? raw.autoIndexInterval : 0;
+  if (autoIndexInterval < 0) throw new Error("autoIndexInterval must be >= 0");
+
   const dbPath =
     typeof raw.dbPath === "string"
       ? resolveDbPath(raw.dbPath, indexRoot)
@@ -88,6 +92,7 @@ export function parseConfig(raw: Record<string, unknown>): IndexConfig {
     indexDirs,
     indexRoot,
     autoIndex: raw.autoIndex === true,
+    autoIndexInterval,
     maxFileKB,
     minScore,
     mmrLambda,
@@ -123,6 +128,9 @@ export function loadConfig(indexRoot: string): IndexConfig {
   const mmrLambda = process.env.PI_INDEX_MMR_LAMBDA
     ? parseEnvFloat("PI_INDEX_MMR_LAMBDA", process.env.PI_INDEX_MMR_LAMBDA)
     : undefined;
+  const autoIndexInterval = process.env.PI_INDEX_AUTO_INTERVAL
+    ? parseEnvInt("PI_INDEX_AUTO_INTERVAL", process.env.PI_INDEX_AUTO_INTERVAL)
+    : undefined;
 
   return parseConfig({
     apiKey,
@@ -130,6 +138,7 @@ export function loadConfig(indexRoot: string): IndexConfig {
     dbPath: process.env.PI_INDEX_DB_PATH,
     indexDirs: process.env.PI_INDEX_DIRS,
     autoIndex: process.env.PI_INDEX_AUTO === "true",
+    autoIndexInterval,
     maxFileKB,
     minScore,
     mmrLambda,

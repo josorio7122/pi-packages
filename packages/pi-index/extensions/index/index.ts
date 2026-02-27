@@ -86,14 +86,38 @@ export default function (pi: ExtensionAPI): void {
     } as never);
   }
 
-  // Auto-index hook: triggers incremental refresh on every session start
+  // Auto-index hook: triggers incremental refresh on every message, respecting interval
   if (cfg.autoIndex) {
+    let lastAutoIndexedAt = 0; // timestamp of last auto-index
+    let isRunning = false;
+    let isIndexed = false;
+
     pi.on("before_agent_start", async (_event, _ctx) => {
-      try {
-        await indexer.run();
-      } catch {
-        // Silent — auto-index failures never block the session
-      }
+      if (!cfg.autoIndex || isRunning) return;
+
+      const intervalMs = cfg.autoIndexInterval * 60 * 1000;
+      const needsReindex =
+        !isIndexed || // never indexed this session
+        (intervalMs > 0 && Date.now() - lastAutoIndexedAt > intervalMs); // interval elapsed
+
+      if (!needsReindex) return;
+
+      isRunning = true;
+      lastAutoIndexedAt = Date.now(); // update immediately to prevent concurrent triggers
+
+      indexer
+        .run()
+        .then(() => {
+          isIndexed = true;
+          isRunning = false;
+          lastAutoIndexedAt = Date.now();
+        })
+        .catch(() => {
+          // On failure: allow retry next message
+          isRunning = false;
+          lastAutoIndexedAt = 0; // reset so it retries sooner
+        });
+
       return undefined;
     });
   }
@@ -172,7 +196,10 @@ export default function (pi: ExtensionAPI): void {
     handler: async (_args, ctx) => {
       ctx.ui.notify("Rebuilding index… (this may take several minutes on first run)", "info");
       try {
-        const summary = await indexer.run({ force: true });
+        const summary = await indexer.run({
+          force: true,
+          onProgress: (msg) => ctx.ui.notify(msg, "info"),
+        });
         ctx.ui.notify(
           [
             "Index rebuilt:",

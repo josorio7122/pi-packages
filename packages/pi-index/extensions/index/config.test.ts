@@ -110,6 +110,21 @@ describe("parseConfig", () => {
     expect(() => parseConfig({ apiKey: "sk-test", mmrLambda: 1.1, indexRoot: "/project" })).toThrow("mmrLambda");
   });
 
+  // autoIndexInterval tests
+  it("autoIndexInterval defaults to 0", () => {
+    const cfg = parseConfig({ apiKey: "sk-test", indexRoot: "/project" });
+    expect(cfg.autoIndexInterval).toBe(0);
+  });
+
+  it("accepts autoIndexInterval: 30", () => {
+    const cfg = parseConfig({ apiKey: "sk-test", autoIndexInterval: 30, indexRoot: "/project" });
+    expect(cfg.autoIndexInterval).toBe(30);
+  });
+
+  it("throws when autoIndexInterval is -1", () => {
+    expect(() => parseConfig({ apiKey: "sk-test", autoIndexInterval: -1, indexRoot: "/project" })).toThrow("autoIndexInterval must be >= 0");
+  });
+
   // M-2: non-existent dir warning
   it("warns and removes a non-existent dir, falls back to indexRoot when all removed", () => {
     vi.mocked(existsSync).mockReturnValue(false);
@@ -156,6 +171,7 @@ describe("loadConfig", () => {
     delete process.env.PI_INDEX_MAX_FILE_KB;
     delete process.env.PI_INDEX_MIN_SCORE;
     delete process.env.PI_INDEX_MMR_LAMBDA;
+    delete process.env.PI_INDEX_AUTO_INTERVAL;
   });
 
   afterEach(() => {
@@ -234,5 +250,18 @@ describe("loadConfig", () => {
     process.env.PI_INDEX_MMR_LAMBDA = "0.8";
     const cfg = loadConfig("/project");
     expect(cfg.mmrLambda).toBe(0.8);
+  });
+
+  it("sets autoIndexInterval=45 when PI_INDEX_AUTO_INTERVAL=45", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_AUTO_INTERVAL = "45";
+    const cfg = loadConfig("/project");
+    expect(cfg.autoIndexInterval).toBe(45);
+  });
+
+  it("throws CONFIG_INVALID_VALUE when PI_INDEX_AUTO_INTERVAL=abc", () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PI_INDEX_AUTO_INTERVAL = "abc";
+    expect(() => loadConfig("/project")).toThrow("CONFIG_INVALID_VALUE");
   });
 });

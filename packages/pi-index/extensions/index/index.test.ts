@@ -485,3 +485,136 @@ describe("pi-index extension — config fails (missing API key)", () => {
     expect(msg).toContain("CONFIG_MISSING_API_KEY");
   });
 });
+
+// ─── Auto-index interval behavior tests ─────────────────────────────────────
+
+const RESOLVED_RESULT = {
+  added: 0, addedChunks: 0, updated: 0, updatedChunks: 0,
+  removed: 0, skipped: 0, skippedTooLarge: 0,
+  failedFiles: [], totalChunks: 0, elapsedMs: 1,
+};
+
+describe("auto-index interval behavior", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.useRealTimers();
+  });
+
+  it("autoIndexInterval=0: second before_agent_start does NOT re-trigger index (once per session)", async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    const runMock = vi.fn().mockResolvedValue(RESOLVED_RESULT);
+    vi.doMock("./indexer.js", () => ({
+      Indexer: function (this: Record<string, unknown>) {
+        this.run = runMock;
+        Object.defineProperty(this, "isRunning", { get: () => false });
+      },
+    }));
+    vi.doMock("./config.js", () => ({
+      loadConfig: vi.fn().mockReturnValue({
+        apiKey: "sk-test", model: "text-embedding-3-small", dimensions: 1536,
+        dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
+        indexDirs: ["/project"], indexRoot: "/project", autoIndex: true,
+        maxFileKB: 500, minScore: 0.2, autoIndexInterval: 0,
+      }),
+    }));
+
+    const mod = await import("./index.js");
+    const ext = mod.default as (pi: Record<string, unknown>) => void;
+    const onFn = vi.fn();
+    ext({ registerTool: vi.fn(), registerCommand: vi.fn(), on: onFn } as never);
+
+    const handler = onFn.mock.calls.find((c: [string]) => c[0] === "before_agent_start")?.[1];
+    expect(handler).toBeDefined();
+
+    // First call — triggers index
+    await handler({}, {});
+    await Promise.resolve(); // flush .then() callback
+    expect(runMock).toHaveBeenCalledTimes(1);
+
+    // Second call — should NOT re-index (interval=0 means once per session)
+    await handler({}, {});
+    await Promise.resolve();
+    expect(runMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("autoIndexInterval=30: re-indexes when last index > 30 min ago", async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    const runMock = vi.fn().mockResolvedValue(RESOLVED_RESULT);
+    vi.doMock("./indexer.js", () => ({
+      Indexer: function (this: Record<string, unknown>) {
+        this.run = runMock;
+        Object.defineProperty(this, "isRunning", { get: () => false });
+      },
+    }));
+    vi.doMock("./config.js", () => ({
+      loadConfig: vi.fn().mockReturnValue({
+        apiKey: "sk-test", model: "text-embedding-3-small", dimensions: 1536,
+        dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
+        indexDirs: ["/project"], indexRoot: "/project", autoIndex: true,
+        maxFileKB: 500, minScore: 0.2, autoIndexInterval: 30,
+      }),
+    }));
+
+    const mod = await import("./index.js");
+    const ext = mod.default as (pi: Record<string, unknown>) => void;
+    const onFn = vi.fn();
+    ext({ registerTool: vi.fn(), registerCommand: vi.fn(), on: onFn } as never);
+
+    const handler = onFn.mock.calls.find((c: [string]) => c[0] === "before_agent_start")?.[1];
+    expect(handler).toBeDefined();
+
+    // First call at T=0
+    vi.setSystemTime(new Date(0));
+    await handler({}, {});
+    await Promise.resolve();
+    expect(runMock).toHaveBeenCalledTimes(1);
+
+    // Advance 31 minutes — past the 30-min interval
+    vi.setSystemTime(new Date(31 * 60 * 1000));
+    await handler({}, {});
+    await Promise.resolve();
+    expect(runMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("autoIndexInterval=30: does NOT re-index when last index < 30 min ago", async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    const runMock = vi.fn().mockResolvedValue(RESOLVED_RESULT);
+    vi.doMock("./indexer.js", () => ({
+      Indexer: function (this: Record<string, unknown>) {
+        this.run = runMock;
+        Object.defineProperty(this, "isRunning", { get: () => false });
+      },
+    }));
+    vi.doMock("./config.js", () => ({
+      loadConfig: vi.fn().mockReturnValue({
+        apiKey: "sk-test", model: "text-embedding-3-small", dimensions: 1536,
+        dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
+        indexDirs: ["/project"], indexRoot: "/project", autoIndex: true,
+        maxFileKB: 500, minScore: 0.2, autoIndexInterval: 30,
+      }),
+    }));
+
+    const mod = await import("./index.js");
+    const ext = mod.default as (pi: Record<string, unknown>) => void;
+    const onFn = vi.fn();
+    ext({ registerTool: vi.fn(), registerCommand: vi.fn(), on: onFn } as never);
+
+    const handler = onFn.mock.calls.find((c: [string]) => c[0] === "before_agent_start")?.[1];
+    expect(handler).toBeDefined();
+
+    // First call at T=0
+    vi.setSystemTime(new Date(0));
+    await handler({}, {});
+    await Promise.resolve();
+    expect(runMock).toHaveBeenCalledTimes(1);
+
+    // Advance only 10 minutes — interval not elapsed
+    vi.setSystemTime(new Date(10 * 60 * 1000));
+    await handler({}, {});
+    await Promise.resolve();
+    expect(runMock).toHaveBeenCalledTimes(1); // still 1, no re-index
+  });
+});
