@@ -45,10 +45,21 @@ function gitPatternToRegex(pattern: string): RegExp {
 async function loadGitignorePatterns(rootDir: string): Promise<RegExp[]> {
   try {
     const content = await readFile(join(rootDir, ".gitignore"), "utf-8");
-    return content
+    const lines = content
       .split("\n")
       .map((l) => l.trim())
-      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .filter((l) => l.length > 0 && !l.startsWith("#"));
+
+    const negationLines = lines.filter((l) => l.startsWith("!"));
+    if (negationLines.length > 0) {
+      console.warn(
+        `[pi-index] .gitignore negation patterns (!) are not supported and will be ignored: ${negationLines.join(", ")}. ` +
+          `Files that would be un-excluded by these patterns may be excluded from indexing.`,
+      );
+    }
+
+    return lines
+      .filter((l) => !l.startsWith("!")) // skip negation patterns
       .map(gitPatternToRegex);
   } catch {
     return [];

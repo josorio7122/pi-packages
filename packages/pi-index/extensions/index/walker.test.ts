@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -281,6 +281,37 @@ describe("walkDirs .gitignore integration", () => {
     expect(files.some((f) => f.includes("util.js"))).toBe(false);
     // app.ts is not a .js file — must still appear
     expect(files.some((f) => f.includes("app.ts"))).toBe(true);
+  });
+
+  it("emits console.warn and skips negation patterns (lines starting with !) from .gitignore", async () => {
+    // .gitignore has a negation pattern — it should be skipped (not create broken regex)
+    // and a console.warn should be emitted once for that file
+    await writeFile(
+      join(tmpGitDir, ".gitignore"),
+      "*.log\n!important.log\nbuild/\n",
+    );
+    await writeFile(join(tmpGitDir, "app.ts"), "const x = 1;");
+    await writeFile(join(tmpGitDir, "error.log"), "some log");
+    await writeFile(join(tmpGitDir, "important.log"), "important log");
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await walkDirs([tmpGitDir], tmpGitDir, [".ts", ".log"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    // console.warn must have been called once with a message about negation
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const warnMsg = warnSpy.mock.calls[0][0] as string;
+    expect(warnMsg).toContain("!important.log");
+    expect(warnMsg).toContain("not supported");
+
+    // *.log pattern still excludes both .log files (negation was NOT applied)
+    expect(files.some((f) => f.includes("error.log"))).toBe(false);
+    expect(files.some((f) => f.includes("important.log"))).toBe(false);
+    // .ts file must still appear
+    expect(files.some((f) => f.includes("app.ts"))).toBe(true);
+
+    warnSpy.mockRestore();
   });
 
   it("dist/** excludes files directly inside dist/ and in nested subdirectories", async () => {
