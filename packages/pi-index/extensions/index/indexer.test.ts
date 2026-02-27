@@ -335,6 +335,38 @@ describe("Indexer", () => {
     expect(summary.updated).toBe(0);
   });
 
+  it("updatedChunks is 0 when a changed file fails to embed (stale cache entry excluded)", async () => {
+    // First run: index a file with multiple chunks
+    const filePath = join(tmpDir, "changing.ts");
+    writeFileSync(
+      filePath,
+      [
+        "export function a() { return 1; }",
+        "export function b() { return 2; }",
+        "export function c() { return 3; }",
+      ].join("\n"),
+    );
+    const db = makeDb();
+    const emb = makeEmb();
+    const indexer = new Indexer(makeConfig(), db, emb);
+    const firstRun = await indexer.run();
+    // Verify the first run produced at least 1 chunk (so the stale entry is non-zero)
+    expect(firstRun.addedChunks).toBeGreaterThan(0);
+
+    // Modify the file so it's treated as changed on the next run
+    writeFileSync(filePath, "export function a() { return 99; }");
+
+    // Make embed fail on second run
+    vi.mocked(emb.embed).mockRejectedValue(new Error("API error"));
+
+    const summary = await indexer.run();
+    // updated (file count) must exclude the failed file
+    expect(summary.updated).toBe(0);
+    // updatedChunks must be 0 — the stale cache chunkCount from the old run must NOT leak through
+    expect(summary.updatedChunks).toBe(0);
+    expect(summary.failedFiles).toContain("changing.ts");
+  });
+
   it("calls embed once per batch with all chunk texts as array (not once per chunk)", async () => {
     // Three small files → ~3 chunks total, well within one batch of 20
     for (let i = 0; i < 3; i++) {

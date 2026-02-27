@@ -139,12 +139,16 @@ export class Indexer {
       const failedAddedCount = failedFiles.filter((f) => addedSet.has(f)).length;
       const failedUpdatedCount = failedFiles.filter((f) => updateSet.has(f)).length;
 
-      // Count chunks created for added vs updated files
+      // Count chunks created for added vs updated files.
+      // Exclude files that failed to embed: failed new files are not in cache (safe);
+      // failed changed files are still in cache with their OLD chunkCount — must be excluded
+      // so the summary does not misreport e.g. "Updated: 0 files (5 chunks)".
+      const failedFilesSet = new Set(failedFiles);
       let addedChunks = 0;
       let updatedChunks = 0;
       for (const [path, entry] of cache.entries()) {
-        if (addedSet.has(path)) addedChunks += entry.chunkCount;
-        else if (updateSet.has(path)) updatedChunks += entry.chunkCount;
+        if (addedSet.has(path) && !failedFilesSet.has(path)) addedChunks += entry.chunkCount;
+        else if (updateSet.has(path) && !failedFilesSet.has(path)) updatedChunks += entry.chunkCount;
       }
 
       return {
