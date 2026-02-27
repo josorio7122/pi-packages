@@ -63,7 +63,7 @@ The chunking algorithm uses structural boundary detection to align chunk boundar
 
 | Language | Patterns that start a new chunk (must appear at column 0) |
 | --- | --- |
-| `typescript` / `javascript` | `export function`, `export async function`, `export class`, `export abstract class`, `export const name = (`, `export const name = async (`, `function name`, `abstract class name`, `class name` |
+| `typescript` / `javascript` | `export function`, `export async function`, `export class`, `export abstract class`, `export const name = (`, `export const name = async (`, `function name`, `async function name`, `abstract class name`, `class name` |
 | `python` | `def name`, `async def name`, `class name` (top-level only — indented defs do not trigger a boundary) |
 | `sql` | `CREATE`, `ALTER`, `DROP`, `INSERT`, `UPDATE`, `DELETE` (case-insensitive) |
 | `markdown` | `## heading` or `### heading` (H2 and H3 only; H1 becomes preamble content) |

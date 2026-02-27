@@ -294,7 +294,7 @@ When the LLM calls `codebase_search`, the `Searcher` runs:
 ```
 → clean query: `"auth token validation"`
 → filters: `[{scope:"dir", value:"src/auth"}, {scope:"lang", value:"typescript"}]`
-→ SQL WHERE: `(filePath LIKE 'src/auth/%' ESCAPE '\') AND language = 'typescript'`
+→ SQL WHERE: `(filePath LIKE 'src/auth/%' ESCAPE '\' OR filePath = 'src/auth') AND language = 'typescript'`
 
 Unknown `@scope:` tokens throw `INVALID_SCOPE_FILTER` immediately.
 

@@ -1,7 +1,7 @@
 # pi-index — Overview
 
 **Version:** 0.2.0
-**Status:** Draft
+**Status:** Current
 
 ---
 
