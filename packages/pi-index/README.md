@@ -64,6 +64,7 @@ pi-index is configured entirely via environment variables:
 | `PI_INDEX_AUTO_INTERVAL` | `0` | Minutes between automatic re-indexes when `PI_INDEX_AUTO=true`. `0` = once per session only. Example: `30` re-indexes every 30 minutes if files change. |
 | `PI_INDEX_MAX_FILE_KB` | `500` | Skip files larger than this (KB) |
 | `PI_INDEX_MIN_SCORE` | `0.2` | Minimum relevance score 0–1. Scores are normalized per-query (top result = 1.0). Values below 0.3 rarely filter anything; `0.4`–`0.6` is a useful range. |
+| `PI_INDEX_MMR_LAMBDA` | `0.5` | MMR diversity weight 0–1. `1.0` = pure relevance ranking; `0.0` = maximum diversity; `0.5` = balanced (default). |
 
 ---
 
