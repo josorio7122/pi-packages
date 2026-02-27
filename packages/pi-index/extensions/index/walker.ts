@@ -21,10 +21,16 @@ function gitPatternToRegex(pattern: string): RegExp {
   const isDirOnly = pattern.endsWith("/");
   const p = isDirOnly ? pattern.slice(0, -1) : pattern;
 
-  // Escape regex metacharacters except * (handled separately)
+  // Escape regex metacharacters except * (handled separately below)
   const escaped = p.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  // Convert * to match any character except path separator
-  const regexBody = escaped.replace(/\*/g, "[^/]*");
+  // Replace ** and * in two safe passes using a null-byte placeholder so that
+  // the .* produced for ** is never re-processed by the * replacement:
+  //   ** = match across any number of path segments (placeholder → .*)
+  //   *  = match within a single path segment ([^/]*)
+  const regexBody = escaped
+    .replace(/\*\*/g, "\x00")   // step 1: stash ** as null byte
+    .replace(/\*/g, "[^/]*")    // step 2: single-segment wildcard
+    .replace(/\x00/g, ".*");    // step 3: restore ** as cross-segment wildcard
 
   if (isDirOnly || !p.includes("/")) {
     // Match the pattern as any path segment (anywhere in the tree)

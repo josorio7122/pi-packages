@@ -265,4 +265,38 @@ describe("walkDirs .gitignore integration", () => {
     expect(files.some((f) => f.includes("image.png"))).toBe(false);
     expect(files.some((f) => f.includes("data.csv"))).toBe(false);
   });
+
+  it("dist/** excludes .js files nested two levels deep", async () => {
+    // Use **/*.js pattern — intermediate directories (src/deep) don't match *.js,
+    // so directory-level exclusion cannot hide the bug. Only the file-path check is exercised.
+    await writeFile(join(tmpGitDir, ".gitignore"), "**/*.js\n");
+    await mkdir(join(tmpGitDir, "src", "deep"), { recursive: true });
+    await writeFile(join(tmpGitDir, "src", "deep", "util.js"), "module.exports = {};");
+    await writeFile(join(tmpGitDir, "app.ts"), "const x = 1;");
+
+    const result = await walkDirs([tmpGitDir], tmpGitDir, [".ts", ".js"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    // util.js is 2 levels deep and must be excluded by **/*.js
+    expect(files.some((f) => f.includes("util.js"))).toBe(false);
+    // app.ts is not a .js file — must still appear
+    expect(files.some((f) => f.includes("app.ts"))).toBe(true);
+  });
+
+  it("dist/** excludes files directly inside dist/ and in nested subdirectories", async () => {
+    await writeFile(join(tmpGitDir, ".gitignore"), "dist/**\n");
+    await mkdir(join(tmpGitDir, "dist", "sub"), { recursive: true });
+    // A file directly in dist/ (one level deep)
+    await writeFile(join(tmpGitDir, "dist", "bundle.js"), "code");
+    // A file nested inside dist/sub/ (two levels deep)
+    await writeFile(join(tmpGitDir, "dist", "sub", "chunk.js"), "code");
+    await writeFile(join(tmpGitDir, "app.ts"), "const x = 1;");
+
+    const result = await walkDirs([tmpGitDir], tmpGitDir, [".ts", ".js"], 500);
+    const files = result.files.map((f) => f.relativePath);
+
+    expect(files.some((f) => f.includes("bundle.js"))).toBe(false);
+    expect(files.some((f) => f.includes("chunk.js"))).toBe(false);
+    expect(files.some((f) => f.includes("app.ts"))).toBe(true);
+  });
 });
