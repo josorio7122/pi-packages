@@ -52,34 +52,18 @@ Then add to your pi config:
 
 ## Configuration
 
-pi-index reads from environment variables and optionally `pi.config.json` in your project root.
+pi-index is configured entirely via environment variables:
 
 | Variable / Key | Default | Description |
 |---|---|---|
 | `OPENAI_API_KEY` or `PI_INDEX_API_KEY` | — | **Required.** OpenAI API key |
-| `PI_INDEX_MODEL` | `text-embedding-3-small` | Embedding model |
-| `PI_INDEX_DIMENSIONS` | `1536` | Embedding dimensions |
+| `PI_INDEX_MODEL` | `text-embedding-3-small` | Embedding model. Dimensions are derived automatically from the model (`text-embedding-3-small` = 1536, `text-embedding-3-large` = 3072). |
 | `PI_INDEX_DB_PATH` | `.pi/index/lancedb` | LanceDB path (relative to project root) |
 | `PI_INDEX_DIRS` | current directory | Comma-separated list of directories to index |
-| `PI_INDEX_AUTO_INDEX` | `false` | Auto-index on every session start |
+| `PI_INDEX_AUTO` | `false` | Auto-index on every session start when set to `true`. |
 | `PI_INDEX_AUTO_INTERVAL` | `0` | Minutes between automatic re-indexes when `PI_INDEX_AUTO=true`. `0` = once per session only. Example: `30` re-indexes every 30 minutes if files change. |
 | `PI_INDEX_MAX_FILE_KB` | `500` | Skip files larger than this (KB) |
 | `PI_INDEX_MIN_SCORE` | `0.2` | Minimum relevance score 0–1. Scores are normalized per-query (top result = 1.0). Values below 0.3 rarely filter anything; `0.4`–`0.6` is a useful range. |
-
-Or via `pi.config.json`:
-
-```json
-{
-  "index": {
-    "model": "text-embedding-3-small",
-    "dimensions": 1536,
-    "indexDirs": ["src", "packages"],
-    "autoIndex": false,
-    "maxFileKB": 500,
-    "minScore": 0.2
-  }
-}
-```
 
 ---
 
