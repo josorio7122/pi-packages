@@ -316,3 +316,19 @@
 - **Tests:** 242 passing
 - **Notes:** The vectorSearch normalization changes the effective behavior of `minScore=0.2`: it now filters the bottom 20% of each result set rather than using an absolute distance-derived threshold. The README Scoring section documents this clearly. Negation lines in .gitignore are fully unsupported — the warning is explicit about what files may be affected.
 - **Timestamp:** 2026-02-27
+
+### Task: PI_INDEX_AUTO_INTERVAL — config option for periodic auto-reindex
+- **Status:** ✅ Complete
+- **Commit:** 40c9117
+- **Built:** Added `autoIndexInterval: number` to `IndexConfig` (default 0 = once per session); `parseConfig` validates >= 0; `loadConfig` reads `PI_INDEX_AUTO_INTERVAL` env var via `parseEnvInt`. The `before_agent_start` hook changed from blocking `await indexer.run()` to non-blocking fire-and-forget with `lastAutoIndexedAt` + `isIndexed` + `isRunning` closure state tracking the interval.
+- **Tests:** 254 passing (8 new: 3 parseConfig + 2 loadConfig in config.test.ts, 3 interval behavior in index.test.ts)
+- **Notes:** The `onProgress` wiring in index-rebuild (other implementer's change) was already in the working tree — preserved as-is in this commit. `autoIndexInterval=0` means once per session (second call is no-op after first completes). Interval check uses `Date.now()` vs `lastAutoIndexedAt` which is set immediately on trigger (preventing concurrent triggers), then updated again in `.then()` after completion.
+- **Timestamp:** 2026-02-27
+
+### Task C3: Progress Feedback for Indexer.run()
+- **Status:** ✅ Complete
+- **Commit:** 2ba5980
+- **Built:** Added `ProgressCallback` type + `throttle()` helper to indexer.ts; updated `Indexer.run()` to accept `onProgress?` and `processBatch()` to accept `notify`; emits 4 progress events (scan, indexing, embedding per batch group, completion); added `notify` option to `createIndexTools()` for tool-level progress; wired `onProgress` in `/index-rebuild` slash command (already present in index.ts from prior task).
+- **Tests:** 258 passing (added 4 new tests: 2 in indexer.test.ts, 1 in tools.test.ts, 1 in index.test.ts)
+- **Notes:** The `edit` tool failed to write to disk (reported success but no-op) — used `Write` tool and bash python scripts instead. Previous task (40c9117) had already added `onProgress` wiring to index.ts. The `read` tool showed stale content for index.ts that didn't match disk state.
+- **Timestamp:** 2026-02-27
