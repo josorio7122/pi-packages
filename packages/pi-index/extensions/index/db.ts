@@ -174,8 +174,9 @@ export class IndexDB {
               : 1;
         return { ...row, score };
       });
-    } catch {
-      // Fallback to vector-only if hybrid fails (FTS index not ready, etc.)
+    } catch (err) {
+      // Fallback to vector-only if hybrid fails (FTS index not ready, rebuilding, etc.)
+      console.warn("[pi-index] hybridSearch fell back to vector-only:", String(err));
       return this.vectorSearch(queryVector, limit, filter);
     }
   }

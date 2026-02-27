@@ -377,6 +377,26 @@ describe("Indexer", () => {
     expect(db.rebuildFtsIndex).not.toHaveBeenCalled();
   });
 
+  it("does not call db.rebuildFtsIndex on a delete-only run", async () => {
+    // First run: index a file
+    const filePath = join(tmpDir, "to-delete.ts");
+    writeFileSync(filePath, "export const x = 1;");
+    const db = makeDb();
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    await indexer.run();
+
+    // Remove the file from disk — next run is delete-only (toProcess.length === 0)
+    rmSync(filePath);
+    vi.mocked(db.rebuildFtsIndex).mockClear();
+    const summary = await indexer.run();
+
+    expect(summary.removed).toBe(1);
+    expect(summary.added).toBe(0);
+    expect(summary.updated).toBe(0);
+    // No new data was indexed — FTS rebuild is unnecessary
+    expect(db.rebuildFtsIndex).not.toHaveBeenCalled();
+  });
+
   it("embed concurrency never exceeds EMBED_CONCURRENCY batches at once", async () => {
     // Create 25 small files so we get ≥ 25 chunks total (more than one batch of 20)
     for (let i = 0; i < 25; i++) {
