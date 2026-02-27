@@ -17,6 +17,20 @@ Semantic codebase search for [pi](https://github.com/mariozechner/pi) — the AI
 
 ---
 
+## Prerequisites
+
+pi-index uses [LanceDB](https://lancedb.github.io/lancedb/) which compiles a native Node.js addon from Rust. Before installing, make sure your machine has:
+
+| Platform | Required |
+|---|---|
+| **macOS** | Xcode Command Line Tools: `xcode-select --install` |
+| **Linux** | `build-essential`, `python3`: `apt install build-essential python3` |
+| **Windows** | [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) with "Desktop development with C++" |
+
+> **CI/CD**: Ensure your runner has the build tools above. GitHub Actions `ubuntu-latest` and `macos-latest` include them by default.
+
+---
+
 ## Installation
 
 Install from the pi-packages monorepo:
@@ -48,8 +62,9 @@ pi-index reads from environment variables and optionally `pi.config.json` in you
 | `PI_INDEX_DB_PATH` | `.pi/index/lancedb` | LanceDB path (relative to project root) |
 | `PI_INDEX_DIRS` | current directory | Comma-separated list of directories to index |
 | `PI_INDEX_AUTO_INDEX` | `false` | Auto-index on every session start |
+| `PI_INDEX_AUTO_INTERVAL` | `0` | Minutes between automatic re-indexes when `PI_INDEX_AUTO=true`. `0` = once per session only. Example: `30` re-indexes every 30 minutes if files change. |
 | `PI_INDEX_MAX_FILE_KB` | `500` | Skip files larger than this (KB) |
-| `PI_INDEX_MIN_SCORE` | `0.2` | Minimum relevance score (0–1). Scores are normalized per-query, so 0.2 will filter the bottom 20% of results. Try `0.4` for stricter filtering. |
+| `PI_INDEX_MIN_SCORE` | `0.2` | Minimum relevance score 0–1. Scores are normalized per-query (top result = 1.0). Values below 0.3 rarely filter anything; `0.4`–`0.6` is a useful range. |
 
 Or via `pi.config.json`:
 
@@ -68,16 +83,23 @@ Or via `pi.config.json`:
 
 ---
 
-## Gitignore
+## .gitignore Support
 
-pi-index stores its database and cache inside your project. Add these to your `.gitignore`:
+pi-index respects `.gitignore` files at **all levels** of your project:
+
+- The root `.gitignore` applies to the entire project
+- Subdirectory `.gitignore` files (e.g., `packages/frontend/.gitignore`) apply only to their subtree
+
+This means nested `node_modules/`, `dist/`, `.venv/`, and `__pycache__/` directories are automatically excluded if your per-package `.gitignore` files list them.
+
+> **Note:** Negation patterns (`!pattern`) are not supported. Lines starting with `!` are skipped with a warning.
+
+Add the index storage directory to your root `.gitignore`:
 
 ```
 # pi-index
 .pi/index/
 ```
-
-Without this, `git add .` will commit the LanceDB vector database files to your repository.
 
 ---
 
