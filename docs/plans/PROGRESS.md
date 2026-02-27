@@ -284,3 +284,35 @@
 - **Tests:** 233 passing (225 baseline + 8 new)
 - **Notes:** The `codebase_search` tool already had an INDEX_NOT_INITIALIZED guard; the new [INDEX_EMPTY] in the Searcher is a second-level safety net for direct Searcher use. The embeddings.test.ts produces an unhandled 429 error in full-suite runs (pre-existing timing/rate-limit flakiness from the retry test) — all 233 tests still pass.
 - **Timestamp:** 2026-02-26
+
+### Task: Fix embedding batch bug — call embed(string[]) per batch, not per chunk
+- **Status:** ✅ Complete
+- **Commit:** 5005338
+- **Built:** `processBatch` now collects all enriched texts for a batch into `enrichedTexts: string[]` and calls `this.emb.embed(enrichedTexts)` once (returning `number[][]`), then zips `vectors[i]` back to `batch[i]`. If the batch call throws, all files in the batch are marked failed. Reduced API calls from N_chunks to N_chunks/EMBED_BATCH_SIZE (20x fewer).
+- **Tests:** 236 passing
+- **Notes:** `embeddings.ts` already had the `embed(string[]): Promise<number[][]>` overload — no changes needed there. Test mocks updated: `makeEmb()` now returns a mock that handles `string[]` input and returns `number[][]`; "partial chunk failure" test redesigned to fail the whole batch (batch-level failure is the new granularity); "updated count" test updated to reflect that small files sharing a batch all fail together when the batch is rejected.
+- **Timestamp:** 2026-02-26
+
+### Task: Fix ** glob support in gitPatternToRegex in walker.ts
+- **Status:** ✅ Complete
+- **Commit:** ee8809b
+- **Built:** Fixed `gitPatternToRegex` to handle `**` before `*` using a null-byte placeholder to prevent the `.*` produced for `**` from being re-processed by the `*` → `[^/]*` replacement. Added 2 new integration tests: `**/*.js` targeting a file 2 levels deep (tests the bug directly) and `dist/**` excluding files directly in dist/ and in nested subdirectories.
+- **Tests:** 22 passing in walker.test.ts (235 total in suite minus pre-existing indexer failures from in-progress work)
+- **Notes:** The naive two-step replace (`**` → `.*`, then `*` → `[^/]*`) silently breaks because the `.*` result still contains `*` which the second replace corrupts into `.[^/]*`. Fix uses null-byte placeholder: replace `**` → `\x00`, then `*` → `[^/]*`, then `\x00` → `.*`. The pre-existing uncommitted `indexer.ts`/`indexer.test.ts` changes (batch embed work) have a failing test unrelated to this task — not touched.
+- **Timestamp:** 2026-02-26
+
+### Task: C1 — Rebuild FTS index after incremental indexing (was stale after run 1)
+- **Status:** ✅ Complete
+- **Commit:** 94aa084
+- **Built:** Added `rebuildFtsIndex()` to `IndexDB` (calls `createIndex("text", { config: fts(), replace: true })`, swallows errors with console.warn). Called from `Indexer.run()` after `writeMtimeCache` only when `toProcess.length > 0`. Added 2 tests to db.test.ts and 2 tests to indexer.test.ts.
+- **Tests:** 242 passing
+- **Notes:** `rebuildFtsIndex` is best-effort — errors are logged but never propagate. Skipped on delete-only or no-change runs. The db.ts and db.test.ts changes landed in the prior commit (cee767a) because they were already staged; indexer.ts and indexer.test.ts changes are in commit 94aa084.
+- **Timestamp:** 2026-02-27
+
+### Task: C2 + C3 — .gitignore negation patterns + vectorSearch score normalization
+- **Status:** ✅ Complete
+- **Commit:** cee767a (db fix + README), 60f037f (walker fix)
+- **Built:** C2: `loadGitignorePatterns` now skips lines starting with `!` and emits a `console.warn` listing the skipped patterns with a clear consequence message. C3: `vectorSearch` normalizes raw `1/(1+distance)` scores relative to the batch maximum (same as hybridSearch RRF normalization), so `minScore` behaves consistently across both search paths. README updated with `minScore` semantics and a new Scoring section.
+- **Tests:** 242 passing
+- **Notes:** The vectorSearch normalization changes the effective behavior of `minScore=0.2`: it now filters the bottom 20% of each result set rather than using an absolute distance-derived threshold. The README Scoring section documents this clearly. Negation lines in .gitignore are fully unsupported — the warning is explicit about what files may be affected.
+- **Timestamp:** 2026-02-27
