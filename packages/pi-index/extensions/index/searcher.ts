@@ -60,8 +60,10 @@ export function buildFilter(filters: ScopeFilter[]): string | undefined {
         condition = `(filePath = '${v}' OR filePath LIKE '%/${vLike}' ESCAPE '\\')`;
         break;
       case "dir":
-        // Match path prefix
-        condition = `(filePath LIKE '${vLike}/%' ESCAPE '\\' OR filePath = '${v}')`;
+        // Match path prefix — spec: filePath starts with value/ (trailing slash required)
+        // No exact-match OR clause: a bare filePath = 'value' would violate spec semantics
+        // and can never match in practice (indexed files always have supported extensions)
+        condition = `(filePath LIKE '${vLike}/%' ESCAPE '\\')`;
         break;
       case "ext":
         condition = `extension = '${v}'`;
@@ -132,7 +134,10 @@ export class Searcher {
     const safeLimit = Math.min(Math.max(limit, 0), 20);
 
     if (safeLimit === 0) {
-      return formatResults([], query);
+      // Spec (02-search.md, 03-tool-api.md): limit:0 returns "Found 0 results for "..."",
+      // NOT the "No results found / Try a broader query" message which is reserved for
+      // genuine empty-result searches. Bypass formatResults to preserve this distinction.
+      return `Found 0 results for "${query}":`;
     }
 
     // Early return when the index is empty — avoids burning an embedding call

@@ -136,6 +136,19 @@ describe("buildFilter", () => {
     expect(f).not.toContain("ESCAPE");
     expect(f).not.toContain("LIKE");
   });
+
+  it("@dir filter does NOT include exact-match OR clause (spec: only 'starts with value/')", () => {
+    // Spec (CONSTITUTION.md §7, 02-search.md): @dir:value matches filePath starting with value/ only.
+    // Must NOT emit an extra `OR filePath = 'src/auth'` clause — that would incorrectly match
+    // a file named exactly 'src/auth' (no extension, impossible to index, but still spec-violating).
+    const f = buildFilter([{ scope: "dir", value: "src/auth" }]);
+    expect(f).toBeDefined();
+    // The filter must contain the LIKE prefix clause
+    expect(f).toContain("LIKE");
+    expect(f).toContain("src/auth");
+    // Must NOT contain an = exact-match for the bare value (no trailing slash)
+    expect(f).not.toMatch(/filePath\s*=\s*'src\/auth'/);
+  });
 });
 
 // --- formatResults ---
@@ -304,10 +317,14 @@ describe("Searcher", () => {
     expect(fetchLimit).toBeLessThanOrEqual(60);
   });
 
-  it("returns empty result message for limit 0", async () => {
+  it("returns 'Found 0 results for' message when limit is 0 (not 'No results found')", async () => {
+    // Spec (02-search.md edge cases, 03-tool-api.md edge cases):
+    // limit:0 → "Found 0 results for "..."" — NOT the "No results found / Try broader query" message,
+    // which is reserved for genuine empty-result searches.
     const searcher = new Searcher(makeDb(), makeEmb(), makeConfig());
     const result = await searcher.search("auth", 0);
-    expect(result).toContain("No results found");
+    expect(result).toContain("Found 0 results");
+    expect(result).not.toContain("No results found");
   });
 
   it("minScore override filters more aggressively than config minScore", async () => {
