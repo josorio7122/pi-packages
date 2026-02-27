@@ -35,14 +35,19 @@ export class Embeddings {
     this.client = new OpenAI({ apiKey });
   }
 
-  async embed(text: string): Promise<number[]> {
+  async embed(text: string): Promise<number[]>;
+  async embed(text: string[]): Promise<number[][]>;
+  async embed(text: string | string[]): Promise<number[] | number[][]> {
     const response = await withRetry(() =>
       this.client.embeddings.create({
         model: this.model,
-        input: text,
+        input: text as string, // OpenAI SDK accepts string | string[]; cast satisfies TS overload
         encoding_format: "float", // ensure plain number[] (openai 6.x defaults to base64 internally)
       })
     );
+    if (Array.isArray(text)) {
+      return response.data.map((d) => d.embedding);
+    }
     return response.data[0].embedding;
   }
 }
