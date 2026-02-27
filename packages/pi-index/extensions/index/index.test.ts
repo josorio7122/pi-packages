@@ -562,13 +562,15 @@ describe("auto-index interval behavior", () => {
     const handler = onFn.mock.calls.find((c: [string]) => c[0] === "before_agent_start")?.[1];
     expect(handler).toBeDefined();
 
+    const mockCtx = { ui: { notify: vi.fn() } };
+
     // First call — triggers index
-    await handler({}, {});
+    await handler({}, mockCtx);
     await Promise.resolve(); // flush .then() callback
     expect(runMock).toHaveBeenCalledTimes(1);
 
     // Second call — should NOT re-index (interval=0 means once per session)
-    await handler({}, {});
+    await handler({}, mockCtx);
     await Promise.resolve();
     expect(runMock).toHaveBeenCalledTimes(1);
   });
@@ -600,15 +602,17 @@ describe("auto-index interval behavior", () => {
     const handler = onFn.mock.calls.find((c: [string]) => c[0] === "before_agent_start")?.[1];
     expect(handler).toBeDefined();
 
+    const mockCtx = { ui: { notify: vi.fn() } };
+
     // First call at T=0
     vi.setSystemTime(new Date(0));
-    await handler({}, {});
+    await handler({}, mockCtx);
     await Promise.resolve();
     expect(runMock).toHaveBeenCalledTimes(1);
 
     // Advance 31 minutes — past the 30-min interval
     vi.setSystemTime(new Date(31 * 60 * 1000));
-    await handler({}, {});
+    await handler({}, mockCtx);
     await Promise.resolve();
     expect(runMock).toHaveBeenCalledTimes(2);
   });
@@ -640,15 +644,17 @@ describe("auto-index interval behavior", () => {
     const handler = onFn.mock.calls.find((c: [string]) => c[0] === "before_agent_start")?.[1];
     expect(handler).toBeDefined();
 
+    const mockCtx = { ui: { notify: vi.fn() } };
+
     // First call at T=0
     vi.setSystemTime(new Date(0));
-    await handler({}, {});
+    await handler({}, mockCtx);
     await Promise.resolve();
     expect(runMock).toHaveBeenCalledTimes(1);
 
     // Advance only 10 minutes — interval not elapsed
     vi.setSystemTime(new Date(10 * 60 * 1000));
-    await handler({}, {});
+    await handler({}, mockCtx);
     await Promise.resolve();
     expect(runMock).toHaveBeenCalledTimes(1); // still 1, no re-index
   });

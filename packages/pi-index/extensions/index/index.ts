@@ -92,7 +92,7 @@ export default function (pi: ExtensionAPI): void {
     let isRunning = false;
     let isIndexed = false;
 
-    pi.on("before_agent_start", async (_event, _ctx) => {
+    pi.on("before_agent_start", async (_event, ctx) => {
       if (!cfg.autoIndex || isRunning) return;
 
       const intervalMs = cfg.autoIndexInterval * 60 * 1000;
@@ -104,13 +104,21 @@ export default function (pi: ExtensionAPI): void {
 
       isRunning = true;
       lastAutoIndexedAt = Date.now(); // update immediately to prevent concurrent triggers
+      ctx.ui.notify("🔍 pi-index: building codebase index in background…", "info");
 
       indexer
-        .run()
-        .then(() => {
+        .run({ onProgress: (msg) => ctx.ui.notify(msg, "info") })
+        .then((result) => {
           isIndexed = true;
           isRunning = false;
           lastAutoIndexedAt = Date.now();
+          const chunks = result.addedChunks + result.updatedChunks;
+          if (chunks > 0) {
+            ctx.ui.notify(
+              `✅ pi-index: indexed ${result.added + result.updated} file(s) — ${chunks} chunks ready`,
+              "info",
+            );
+          }
         })
         .catch(() => {
           // On failure: allow retry next message
