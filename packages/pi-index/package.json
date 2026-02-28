@@ -2,13 +2,20 @@
   "name": "@josorio/pi-index",
   "version": "0.1.0",
   "description": "Codebase semantic search for pi agents — hybrid vector + BM25 index via LanceDB",
-  "keywords": ["pi-package", "pi-index", "ai-agent", "codebase-search"],
+  "keywords": [
+    "pi-package",
+    "pi-index",
+    "ai-agent",
+    "codebase-search"
+  ],
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "pi": {
-    "extensions": ["./extensions"],
+    "extensions": [
+      "./extensions"
+    ],
     "skills": []
   },
   "scripts": {
@@ -22,8 +29,7 @@
     "openai": "^6.25.0"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*",
-    "@sinclair/typebox": "*"
+    "@mariozechner/pi-coding-agent": "*"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "*",

@@ -82,7 +82,12 @@ export default function (pi: ExtensionAPI): void {
       name: tool.name,
       description: tool.description,
       parameters: tool.parameters,
-      handler: tool.handler,
+      handler: async (args: Record<string, unknown>, ctx: any) => {
+        const notify = ctx?.ui?.notify
+          ? (msg: string, level: string) => ctx.ui.notify(msg, level)
+          : undefined;
+        return tool.handler(args, notify);
+      },
     } as never);
   }
 

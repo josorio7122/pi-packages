@@ -3,6 +3,7 @@ import type { IndexConfig } from "./config.js";
 import type { IndexDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import { chunkFile } from "./chunker.js";
+import { SUPPORTED_EXTENSIONS, EMBED_BATCH_SIZE, EMBED_CONCURRENCY } from "./constants.js";
 import {
   walkDirs,
   readMtimeCache,
@@ -12,6 +13,7 @@ import {
   type FileRecord,
 } from "./walker.js";
 
+/** Called by `Indexer.run` during long operations to report incremental progress messages. */
 export type ProgressCallback = (message: string) => void;
 
 /** Returns a wrapper that calls cb at most once per `minIntervalMs`. */
@@ -26,6 +28,7 @@ function throttle(cb: ProgressCallback, minIntervalMs = 1000): ProgressCallback 
   };
 }
 
+/** Statistics returned by `Indexer.run` describing the outcome of a single index operation. */
 export type IndexSummary = {
   added: number;
   addedChunks: number;
@@ -39,18 +42,18 @@ export type IndexSummary = {
   elapsedMs: number;
 };
 
-// Extensions the indexer will process (matches DATA-MODEL.md Supported Languages)
-const SUPPORTED_EXTENSIONS = [
-  ".ts", ".tsx", ".d.ts", ".js", ".jsx",
-  ".py", ".sql", ".md", ".css", ".html", ".txt",
-];
 
-const EMBED_BATCH_SIZE = 20;
-const EMBED_CONCURRENCY = 3;
-
+/**
+ * Orchestrates incremental indexing of a codebase.
+ *
+ * On each `run`, it walks configured directories, diffs discovered files against the
+ * mtime cache, chunks and embeds only changed files, writes them to the DB, and
+ * persists an updated cache. Only one run may be active at a time.
+ */
 export class Indexer {
   private running = false;
 
+  /** Whether an index operation is currently in progress. */
   get isRunning(): boolean {
     return this.running;
   }
@@ -61,6 +64,18 @@ export class Indexer {
     private readonly emb: Embeddings,
   ) {}
 
+  /**
+   * Run an incremental (or full) index operation.
+   *
+   * Walks all configured directories, computes a three-way diff against the mtime
+   * cache, and processes only new or changed files. Pass `force: true` to wipe the
+   * existing index and rebuild from scratch.
+   *
+   * @param opts.force - If `true`, deletes all existing chunks before indexing (default: `false`)
+   * @param opts.onProgress - Optional callback invoked with progress messages during the run
+   * @returns `IndexSummary` describing what was added, updated, removed, and skipped
+   * @throws {Error} With code `INDEX_ALREADY_RUNNING` if a previous run has not completed
+   */
   async run(opts: { force?: boolean; onProgress?: ProgressCallback } = {}): Promise<IndexSummary> {
     if (this.running) {
       throw new Error(

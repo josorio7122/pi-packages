@@ -2,10 +2,10 @@ import type { IndexDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import type { IndexConfig } from "./config.js";
 import { mmrRerank, type ScoredChunk } from "./mmr.js";
+import { KNOWN_SCOPES, SEARCH_OVERFETCH_FACTOR } from "./constants.js";
 
+/** A parsed `@scope:value` filter extracted from a search query string. */
 export type ScopeFilter = { scope: string; value: string };
-
-const KNOWN_SCOPES = new Set(["file", "dir", "ext", "lang"]);
 
 /**
  * Parse @scope:value filters from a query string.
@@ -122,6 +122,13 @@ export function formatResults(results: ScoredChunk[], originalQuery: string): st
   return lines.join("\n");
 }
 
+/**
+ * Orchestrates semantic search over the codebase index.
+ *
+ * Parses scope filters from the query, embeds the clean query text, runs a hybrid
+ * vector + FTS search, applies the minimum-score threshold, and MMR-reranks results
+ * for diversity before formatting them as a human-readable string.
+ */
 export class Searcher {
   constructor(
     private readonly db: IndexDB,
@@ -129,6 +136,18 @@ export class Searcher {
     private readonly cfg: IndexConfig,
   ) {}
 
+  /**
+   * Search the codebase index and return a formatted result string.
+   *
+   * Handles the full pipeline: scope filter parsing → embedding → hybrid DB search →
+   * score filtering → MMR reranking → result formatting. All recoverable errors are
+   * returned as `"Error: ..."` strings rather than thrown exceptions.
+   *
+   * @param query - Natural-language query, optionally containing `@scope:value` filters
+   * @param limit - Maximum number of results to return (0–20, default 8)
+   * @param minScore - Minimum relevance score threshold (0–1); defaults to `cfg.minScore`
+   * @returns Human-readable search results, or an error string prefixed with `"Error: "`
+   */
   async search(query: string, limit = 8, minScore?: number): Promise<string> {
     // Cap and floor the limit
     const safeLimit = Math.min(Math.max(limit, 0), 20);
@@ -164,7 +183,7 @@ export class Searcher {
     }
 
     const dbFilter = buildFilter(filters);
-    const fetchLimit = safeLimit * 3; // over-fetch for filtering + MMR
+    const fetchLimit = safeLimit * SEARCH_OVERFETCH_FACTOR; // over-fetch for filtering + MMR
 
     // Hybrid search (falls back to vector-only if FTS unavailable)
     let rawResults: ScoredChunk[];

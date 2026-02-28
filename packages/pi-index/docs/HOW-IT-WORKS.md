@@ -480,7 +480,7 @@ The fundamental architecture is similar — LanceDB + OpenAI embeddings — but 
 ## Limitations (Documented, Acceptable)
 
 - **No custom extensions via env var.** Supported extensions are hardcoded in `indexer.ts` as `SUPPORTED_EXTENSIONS`. Adding a new extension requires a code change.
-- **`codebase_index` tool has no progress UI.** Tool handlers don't receive `ctx`, so `opts.notify` is undefined in the tool invocation path. Progress notifications only fire from `/index-rebuild` (which has `ctx`). Auto-index does have progress via the `before_agent_start` `ctx`.
+- **`codebase_index` progress UI now works via ctx bridge.** The `registerTool` handler in `index.ts` bridges `ctx.ui.notify` to the tool's `notify` parameter, so progress notifications fire for LLM-invoked `codebase_index` calls, `/index-rebuild`, and auto-index alike.
 - **Chunk IDs are not stable across re-index.** If a file is modified and re-indexed, chunk indices may shift. Do not use chunk IDs as persistent external references.
 - **`@file:login` (no extension) doesn't match `login.ts`.** The basename match requires the full filename including extension. Use `@file:login.ts`.
 - **Negation patterns in `.gitignore` are skipped.** Lines starting with `!` are ignored with a warning.

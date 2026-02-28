@@ -1,6 +1,12 @@
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 
+/**
+ * Resolved, validated configuration for the pi-index extension.
+ *
+ * Produced by `loadConfig` (from environment variables) or `parseConfig` (from a raw
+ * options object). All paths are absolute; all numeric fields are within their valid ranges.
+ */
 export type IndexConfig = {
   apiKey: string;
   model: string;
@@ -23,17 +29,45 @@ const EMBEDDING_DIMENSIONS: Record<string, number> = {
 
 const DEFAULT_MODEL = "text-embedding-3-small";
 
+/**
+ * Look up the vector dimension for a supported embedding model.
+ *
+ * @param model - OpenAI embedding model name (e.g. `"text-embedding-3-small"`)
+ * @returns Number of dimensions produced by that model
+ * @throws {Error} When the model name is not in the supported model registry
+ */
 export function vectorDimsForModel(model: string): number {
   const dims = EMBEDDING_DIMENSIONS[model];
   if (!dims) throw new Error(`Unsupported embedding model: ${model}`);
   return dims;
 }
 
+/**
+ * Resolve a `dbPath` value to an absolute path.
+ *
+ * Paths already starting with `/` are returned unchanged; relative paths are resolved
+ * against `indexRoot`.
+ *
+ * @param dbPath - Raw `dbPath` string from config (absolute or relative)
+ * @param indexRoot - Absolute path used as the base for relative resolution
+ * @returns Absolute path to the LanceDB directory
+ */
 export function resolveDbPath(dbPath: string, indexRoot: string): string {
   if (dbPath.startsWith("/")) return dbPath;
   return resolve(indexRoot, dbPath);
 }
 
+/**
+ * Parse and validate a raw options object into a fully resolved `IndexConfig`.
+ *
+ * Applies defaults for all optional fields, validates numeric ranges, resolves
+ * `dbPath` to an absolute path, and warns about non-existent `indexDirs` entries.
+ *
+ * @param raw - Raw configuration map (e.g. from a pi extension options block)
+ * @returns Validated `IndexConfig` ready for use by `Indexer`, `Searcher`, and `IndexDB`
+ * @throws {Error} When `apiKey` is missing, an unsupported model is specified, or any
+ *   numeric option falls outside its valid range
+ */
 export function parseConfig(raw: Record<string, unknown>): IndexConfig {
   if (!raw.apiKey || typeof raw.apiKey !== "string") {
     throw new Error("apiKey is required");
@@ -114,6 +148,19 @@ function parseEnvFloat(name: string, value: string): number {
   return v;
 }
 
+/**
+ * Build an `IndexConfig` from environment variables.
+ *
+ * Reads `PI_INDEX_API_KEY` (or `OPENAI_API_KEY`), `PI_INDEX_MODEL`, `PI_INDEX_DB_PATH`,
+ * `PI_INDEX_DIRS`, `PI_INDEX_AUTO`, `PI_INDEX_AUTO_INTERVAL`, `PI_INDEX_MAX_FILE_KB`,
+ * `PI_INDEX_MIN_SCORE`, and `PI_INDEX_MMR_LAMBDA`. Delegates validation to `parseConfig`.
+ *
+ * @param indexRoot - Absolute path to the project root; used as the default `indexDir` and
+ *   base for relative `dbPath` resolution
+ * @returns Validated `IndexConfig`
+ * @throws {Error} With code `CONFIG_MISSING_API_KEY` when no API key env var is set
+ * @throws {Error} With code `CONFIG_INVALID_VALUE` when an env var contains an invalid value
+ */
 export function loadConfig(indexRoot: string): IndexConfig {
   const apiKey = process.env.PI_INDEX_API_KEY ?? process.env.OPENAI_API_KEY;
   if (!apiKey) {

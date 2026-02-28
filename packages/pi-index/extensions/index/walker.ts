@@ -108,6 +108,7 @@ function isIgnoredByScoped(
   return false;
 }
 
+/** Metadata for a single discovered source file, used to drive diff and indexing decisions. */
 export type FileRecord = {
   relativePath: string;
   absolutePath: string;
@@ -116,6 +117,7 @@ export type FileRecord = {
   extension: string;
 };
 
+/** Persisted cache record for a previously indexed file, keyed by relative path. */
 export type MtimeEntry = {
   filePath: string;
   mtime: number;
@@ -123,6 +125,7 @@ export type MtimeEntry = {
   indexedAt: number;
 };
 
+/** Three-way diff result classifying files as new, changed, or deleted since the last index run. */
 export type FileDiff = {
   toAdd: FileRecord[];
   toUpdate: FileRecord[];
@@ -135,6 +138,7 @@ function getExt(filePath: string): string {
   return extname(base);
 }
 
+/** Output of `walkDirs`, containing all discovered files and a count of oversized ones skipped. */
 export type WalkResult = {
   files: FileRecord[];
   skippedLarge: number;
@@ -200,6 +204,18 @@ async function walkDir(
   }
 }
 
+/**
+ * Recursively walk one or more directories and collect all indexable source files.
+ *
+ * Applies `.gitignore` rules found in any directory along the walk, always excludes
+ * `node_modules` and `.git`, and skips files whose size exceeds `maxFileKB`.
+ *
+ * @param dirs - Absolute paths of the root directories to walk
+ * @param indexRoot - Absolute path used as the base for computing relative file paths
+ * @param supportedExtensions - File extensions to include (e.g. `[".ts", ".py"]`)
+ * @param maxFileKB - Maximum file size in kilobytes; larger files are counted in `skippedLarge`
+ * @returns `WalkResult` with all eligible `FileRecord` entries and a count of skipped large files
+ */
 export async function walkDirs(
   dirs: string[],
   indexRoot: string,
@@ -217,6 +233,15 @@ export async function walkDirs(
   return { files: results, skippedLarge: counts.skippedLarge };
 }
 
+/**
+ * Load the mtime cache from disk into a `Map` keyed by relative file path.
+ *
+ * Returns an empty `Map` if the file does not exist or cannot be parsed — this is the
+ * expected state on first run or after a forced rebuild.
+ *
+ * @param cachePath - Absolute path to the JSON cache file
+ * @returns Map of relative file paths to their cached `MtimeEntry` records
+ */
 export async function readMtimeCache(
   cachePath: string,
 ): Promise<Map<string, MtimeEntry>> {
@@ -229,6 +254,16 @@ export async function readMtimeCache(
   }
 }
 
+/**
+ * Persist the mtime cache to disk atomically via a write-then-rename pattern.
+ *
+ * Parent directories are created if they do not exist. The rename is atomic on
+ * POSIX file systems, so readers never observe a partially-written file.
+ *
+ * @param cachePath - Absolute path to the target JSON cache file
+ * @param cache - Current in-memory cache map to serialise
+ * @throws {Error} When the directory cannot be created or the file cannot be written
+ */
 export async function writeMtimeCache(
   cachePath: string,
   cache: Map<string, MtimeEntry>,
@@ -242,6 +277,19 @@ export async function writeMtimeCache(
   await rename(tmp, cachePath); // atomic on POSIX
 }
 
+/**
+ * Compute the three-way diff between the current file set and the mtime cache.
+ *
+ * A file is classified as:
+ * - **toAdd** — present on disk but absent from cache (new file)
+ * - **toUpdate** — present in both but `mtime` has changed (modified file)
+ * - **toDelete** — present in cache but no longer on disk (deleted file)
+ * - *(unchanged)* — present in both with matching `mtime` (skipped)
+ *
+ * @param current - Array of `FileRecord` objects discovered by `walkDirs`
+ * @param cache - Mtime cache loaded by `readMtimeCache`
+ * @returns `FileDiff` partitioning files into add/update/delete buckets
+ */
 export function diffFileSet(
   current: FileRecord[],
   cache: Map<string, MtimeEntry>,
