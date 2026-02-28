@@ -9,7 +9,7 @@ export type IndexTool = {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  handler: (args: Record<string, unknown>) => Promise<string>;
+  handler: (args: Record<string, unknown>, notify?: (msg: string, level: string) => void) => Promise<string>;
 };
 
 export function formatSummary(summary: IndexSummary, rebuilt = false): string {
@@ -97,12 +97,13 @@ export function createIndexTools(
         },
       },
     },
-    handler: async (args) => {
+    handler: async (args, notify) => {
       const force = typeof args.force === "boolean" ? args.force : false;
+      const effectiveNotify = notify ?? opts.notify;
       try {
         const summary = await indexer.run({
           force,
-          onProgress: opts.notify ? (msg) => opts.notify!(msg, "info") : undefined,
+          onProgress: effectiveNotify ? (msg) => effectiveNotify(msg, "info") : undefined,
         });
         return formatSummary(summary, force);
       } catch (err) {

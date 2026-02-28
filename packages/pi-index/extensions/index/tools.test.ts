@@ -240,6 +240,26 @@ describe("createIndexTools", () => {
       expect(notify).toHaveBeenCalledWith(expect.any(String), "info");
     });
 
+    it("codebase_index forwards progress via notify parameter (per-call, not opts)", async () => {
+      const notifications: string[] = [];
+      const notify = (msg: string, level: string) => notifications.push(`${level}:${msg}`);
+      const indexer: Indexer = {
+        run: vi.fn().mockImplementation(async (opts: { force?: boolean; onProgress?: (msg: string) => void } = {}) => {
+          opts.onProgress?.("⚡ Indexing 1 file(s)...");
+          opts.onProgress?.("✅ Done");
+          return { added: 1, addedChunks: 3, updated: 0, updatedChunks: 0, removed: 0, skipped: 0, skippedTooLarge: 0, failedFiles: [], totalChunks: 5, elapsedMs: 1000 };
+        }),
+        isRunning: false,
+      } as unknown as Indexer;
+      // createIndexTools called WITHOUT opts.notify — notify comes per-call via handler 2nd arg
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_index")!;
+      await tool.handler({}, notify);
+      expect(notifications).toHaveLength(2);
+      expect(notifications[0]).toBe("info:⚡ Indexing 1 file(s)...");
+      expect(notifications[1]).toBe("info:✅ Done");
+    });
+
     it("returns INDEX_ALREADY_RUNNING error when indexer throws that", async () => {
 
       const indexer = {
