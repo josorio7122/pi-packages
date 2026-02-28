@@ -1,7 +1,7 @@
 # pi-index — Constitution
 
-**Version:** 0.1.0
-**Status:** Draft
+**Version:** 0.2.0
+**Status:** Current
 
 Cross-cutting rules that apply to every part of `pi-index`. Subsystem specs reference this document rather than restating these rules.
 
@@ -41,12 +41,15 @@ Error: [CODE] Human-readable message describing what failed and what to do.
 | --- | --- | --- |
 | `CONFIG_MISSING_API_KEY` | No OpenAI API key is configured | `OPENAI_API_KEY` and `PI_INDEX_API_KEY` are both absent at startup |
 | `INDEX_NOT_INITIALIZED` | The index has not been built yet | `codebase_search` is called before `codebase_index` has completed successfully |
-| `INDEX_ALREADY_RUNNING` | An index operation is already in progress | `codebase_index` is called while a previous call has not finished |
+| `INDEX_ALREADY_RUNNING` | An index operation is already in progress | `codebase_index` or `/index-rebuild` is called while a previous call has not finished |
+| `INDEX_EMPTY` | The index exists but contains zero chunks | Returned by the search subsystem internally; normalized to `INDEX_NOT_INITIALIZED` at the tool layer |
 | `EMBEDDING_FAILED` | The embedding service returned an error | The embedding API call failed after all retries are exhausted |
 | `SEARCH_FAILED` | The search operation failed | An unexpected error occurred during vector or full-text search |
-| `FILE_TOO_LARGE` | A file exceeds the configured size limit | A file is larger than `PI_INDEX_MAX_FILE_KB` kilobytes |
-| `UNSUPPORTED_EXTENSION` | A file's extension is not in the supported list | `codebase_index` was pointed at a file with an unsupported extension |
 | `INVALID_SCOPE_FILTER` | A scope filter in the query is not recognized | A `@scope:` token in the query does not match any known scope |
+| `INDEX_FAILED` | The indexing operation failed unexpectedly | An unclassified error occurred during indexing |
+| `STATUS_FAILED` | Status retrieval failed | An unexpected error occurred reading index state |
+
+**Note on `FILE_TOO_LARGE` and `UNSUPPORTED_EXTENSION`:** These conditions are handled silently during indexing — oversized files are counted in the `skippedTooLarge` summary field, and unsupported extensions are simply not walked. Neither is returned as an error code to the caller.
 
 ---
 
@@ -62,10 +65,12 @@ All configuration is via environment variables. There is no configuration file. 
 | `PI_INDEX_DB_PATH` | `.pi/index/lancedb` | No | Path to the index database. Resolved relative to the index root. |
 | `PI_INDEX_DIRS` | _(index root)_ | No | Comma-separated list of directories to index. Defaults to the project root. |
 | `PI_INDEX_AUTO` | `false` | No | If `true`, triggers incremental indexing on every session start. |
+| `PI_INDEX_AUTO_INTERVAL` | `0` | No | Minutes between automatic re-indexes when `PI_INDEX_AUTO=true`. `0` = once per session only. Example: `30` re-indexes every 30 minutes. |
 | `PI_INDEX_MAX_FILE_KB` | `500` | No | Files larger than this many kilobytes are skipped. Must be greater than 0. |
 | `PI_INDEX_MIN_SCORE` | `0.2` | No | Relevance score threshold. Results below this value are excluded. Must be between 0.0 and 1.0. |
+| `PI_INDEX_MMR_LAMBDA` | `0.5` | No | MMR diversity weight. `1.0` = pure relevance, `0.0` = maximum diversity, `0.5` = balanced. |
 
-**Validation:** If `OPENAI_API_KEY` and `PI_INDEX_API_KEY` are both absent, all tool calls return `Error: [CONFIG_MISSING_API_KEY] ...`. The extension loads but does not crash.
+**Validation:** If `OPENAI_API_KEY` and `PI_INDEX_API_KEY` are both absent, all tool calls return `Error: [CONFIG_MISSING_API_KEY] ...`. The extension loads but does not crash — stub tools and stub slash commands are registered that return the error message immediately.
 
 **Model change warning:** Changing `PI_INDEX_MODEL` after an index has been built produces results with mixed vector dimensions. The index must be cleared and rebuilt after changing the model.
 
@@ -73,12 +78,13 @@ All configuration is via environment variables. There is no configuration file. 
 
 ## 4. Relevance Scoring
 
-A relevance score is a float in the range `[0.0, 1.0]` produced by RRF fusion of the vector similarity ranking and the BM25 full-text ranking. It is not a probability — it is a relative ranking signal.
+A relevance score is a float in the range `[0.0, 1.0]` produced by normalizing the RRF scores from LanceDB's hybrid search. It is not a probability — it is a relative ranking signal within a single query.
 
 - Higher scores indicate a stronger match for the query.
-- Scores are not comparable across different queries.
-- Results with a score below `PI_INDEX_MIN_SCORE` are excluded before being returned to the caller.
+- Scores are **not** comparable across different queries. The top result always receives score `1.0`.
+- Results with a score below `PI_INDEX_MIN_SCORE` (or the per-call `minScore` override) are excluded before being returned to the caller.
 - MMR reranking may reorder results after score-based filtering, but does not change scores.
+- Vector-only fallback path also normalizes scores to `[0.0, 1.0]` using `1/(1+distance)` relative to the best result, giving `minScore` consistent semantics across both search paths.
 
 ---
 
@@ -93,6 +99,7 @@ All chunking implementations must satisfy these invariants:
 5. The maximum chunk size is 80 lines. No chunk may exceed this limit regardless of content.
 6. `chunkIndex` values within a file start at 0 and increase by 1 with no gaps.
 7. The full file is covered: every line of every indexed file belongs to exactly one chunk (no lines are skipped, no lines appear in two chunks).
+8. Files that produce zero chunks (empty or whitespace-only content) are tracked in the mtime cache with `chunkCount: 0` so future runs skip them as unchanged.
 
 ---
 
@@ -103,8 +110,9 @@ The indexer must satisfy these invariants on every `codebase_index` call:
 1. A file is re-indexed if and only if its current mtime differs from the stored mtime in the mtime cache.
 2. When a file is re-indexed, all its previous chunks are deleted from the index before new chunks are inserted.
 3. When a file no longer exists on disk, all its chunks are deleted from the index and its mtime entry is removed.
-4. The mtime cache is written atomically: the extension writes to a temporary file then renames it to the final path. A crash mid-write leaves the old cache intact.
-5. The mtime cache entry for a file is only updated after its chunks have been successfully written to the index.
+4. When a file becomes empty (produces zero chunks on re-index), its old chunks are deleted from the index and its mtime entry is updated with `chunkCount: 0`.
+5. The mtime cache is written atomically: the extension writes to a temporary file then renames it to the final path. A crash mid-write leaves the old cache intact.
+6. The mtime cache entry for a file is only updated after its chunks have been successfully written to the index.
 
 ---
 
@@ -127,10 +135,12 @@ Scope filters are appended to a query string and restrict search results to a su
 
 | Scope | Match type | Example | Behavior |
 | --- | --- | --- | --- |
-| `@file:` | Basename exact match | `@file:auth.ts` | Only chunks from files whose basename equals `auth.ts` |
-| `@dir:` | Path prefix match | `@dir:src/payments` | Only chunks from files whose `filePath` starts with `src/payments` |
+| `@file:` | Path suffix match | `@file:auth.ts` | Only chunks from files whose `filePath` ends with `/auth.ts` or equals `auth.ts` |
+| `@dir:` | Path prefix match | `@dir:src/payments` | Only chunks from files whose `filePath` starts with `src/payments/` |
 | `@ext:` | Extension exact match | `@ext:.py` | Only chunks from files with that extension (include the dot) |
 | `@lang:` | Language label match | `@lang:typescript` | Only chunks with that language label (see DATA-MODEL.md) |
+
+Multiple filters of the same scope type are combined with OR. Multiple filters of different scope types are combined with AND.
 
 ---
 
@@ -147,3 +157,4 @@ The following are explicitly excluded from this spec and must not appear in any 
 - **npm publishing** — pi-index is installed from the GitHub repository, not from npm.
 - **Web UI or HTTP API** — pi-index has no server component.
 - **Cross-file deduplication** — two chunks from different files with identical content are both stored. Deduplication is only prevented within a single file's re-index cycle (delete-then-insert).
+- **Gitignore negation patterns** — lines starting with `!` in `.gitignore` files are not supported and are skipped with a console warning.

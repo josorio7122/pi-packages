@@ -1,6 +1,6 @@
 # Subsystem Spec: Indexing
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **File:** `specs/01-indexing.md`
 **Depends on:** CONSTITUTION.md, DATA-MODEL.md
 
@@ -11,8 +11,6 @@
 The indexing subsystem is responsible for reading source files from disk, splitting them into chunks, producing an embedding for each chunk, and writing the results to the index. It also maintains the mtime cache — the record of what was last indexed — which enables incremental updates on subsequent runs.
 
 The indexing subsystem runs when the developer or LLM calls `codebase_index`, or automatically on session start when `PI_INDEX_AUTO=true`. It never runs in the background unprompted. The subsystem is designed so that re-running it on an unchanged codebase is nearly instantaneous: only modified files generate any work.
-
-The indexing subsystem connects to the search subsystem (`specs/02-search.md`) by producing the `CodeChunk` records that search reads. It connects to the tool API (`specs/03-tool-api.md`) because `codebase_index` is the public trigger for this subsystem.
 
 ---
 
@@ -36,11 +34,13 @@ The indexing subsystem connects to the search subsystem (`specs/02-search.md`) b
 
 The indexer walks each directory in `IndexConfig.indexDirs` recursively. For each file encountered, it applies the inclusion rules in order (DATA-MODEL.md § File Inclusion Rules):
 
-1. Skip files whose extension is not in the Supported Languages table.
-2. Skip files whose size exceeds `IndexConfig.maxFileKB` kilobytes (emit `FILE_TOO_LARGE` in the summary, not as an error).
-3. Accept all other files.
+1. Always skip directories named `node_modules` or `.git`.
+2. Skip directories and files matching patterns in `.gitignore` files at any level of the tree.
+3. Skip files whose extension is not in the Supported Languages table.
+4. Skip files whose size strictly exceeds `IndexConfig.maxFileKB` kilobytes. These increment the `skippedTooLarge` counter in the summary.
+5. Accept all other files.
 
-The indexer collects the relative path (relative to the index root) and the current mtime for each accepted file.
+The indexer collects the relative path (relative to the index root, using forward slashes) and the current mtime for each accepted file.
 
 ### Incremental Diff
 
@@ -48,55 +48,84 @@ After collecting the current file set, the indexer computes a three-way diff aga
 
 - **New files**: present on disk, absent from the mtime cache → must be indexed.
 - **Changed files**: present on disk and in the mtime cache, but current mtime differs from stored mtime → must be re-indexed.
-- **Deleted files**: absent from disk, present in the mtime cache → chunks must be deleted.
-- **Unchanged files**: present on disk and in the mtime cache, current mtime matches stored mtime → skipped entirely.
+- **Deleted files**: absent from disk, present in the mtime cache → chunks must be deleted and mtime entry removed.
+- **Unchanged files**: present on disk and in the mtime cache, current mtime matches stored mtime → skipped entirely (no reading, no embedding, no writing).
 
 ### Chunking
 
 For each new or changed file, the indexer reads the file content and splits it into chunks. Chunks must satisfy all invariants in CONSTITUTION.md § 5 (Chunking Contract).
 
-The chunking algorithm uses structural boundary detection to align chunk boundaries with function and class definitions where possible. The detection uses pattern matching on line content — it does not parse the file's syntax tree. Detection is best-effort: missed boundaries produce larger chunks, not incorrect behavior.
+**Empty files:** If a file's content is empty or consists only of whitespace, `chunkFile` returns zero chunks. The indexer still updates the mtime cache entry for this file (with `chunkCount: 0`) and deletes any old DB chunks for it. The file is not counted as a failure.
+
+The chunking algorithm uses structural boundary detection to align chunk boundaries with function and class definitions where possible. Detection uses pattern matching on line content — it does not parse the file's syntax tree. Detection is best-effort: missed boundaries produce larger chunks, not incorrect behavior.
 
 **Boundary detection patterns by language:**
 
-| Language | Patterns that start a new chunk |
+| Language | Patterns that start a new chunk (must appear at column 0) |
 | --- | --- |
-| `typescript` / `javascript` | Lines matching `export function`, `export async function`, `export const ... =`, `export class`, `export abstract class`, `function `, `class `, `const ... = (`, `const ... = async (` at the start of the line |
-| `python` | Lines matching `def ` or `async def ` or `class ` at column 0 (top-level only) |
-| `sql` | Lines matching `CREATE`, `ALTER`, `DROP`, `INSERT`, `UPDATE`, `DELETE` at the start of the line |
-| `markdown` | Lines starting with `##` or `###` (section boundaries) |
-| `css` | Lines matching a CSS selector pattern followed by `{` |
+| `typescript` / `javascript` | `export function`, `export async function`, `export class`, `export abstract class`, `export const name = (`, `export const name = async (`, `function name`, `async function name`, `abstract class name`, `class name` |
+| `python` | `def name`, `async def name`, `class name` (top-level only — indented defs do not trigger a boundary) |
+| `sql` | `CREATE`, `ALTER`, `DROP`, `INSERT`, `UPDATE`, `DELETE` (case-insensitive) |
+| `markdown` | `## heading` or `### heading` (H2 and H3 only; H1 becomes preamble content) |
+| `css` | CSS selector lines matching `.classname {` or `element {` patterns |
 | All others | No structural detection — file is split by line count only |
 
 **Split algorithm:**
 
-1. Collect all line indices where a boundary pattern matches. These are candidate chunk starts.
-2. Group consecutive lines between boundaries. If a group exceeds 80 lines, sub-split at the next inner boundary pattern. If no inner boundary is found, hard-split at 80 lines.
-3. Lines before the first boundary (imports, module-level declarations) are collected as a preamble chunk. If the preamble exceeds 40 lines, it is split at blank-line boundaries first.
-4. Assign `chunkIndex` values sequentially starting at 0.
-5. Set `symbol` to the first detected identifier name from the boundary pattern on the chunk's first line. If no boundary was detected on the first line, `symbol` is an empty string.
+1. Collect all 0-based line indices where a boundary pattern matches.
+2. Lines before the first boundary become a preamble range `[0, first_boundary - 1]`.
+3. Each boundary starts a range ending just before the next boundary (or at end of file).
+4. Any range exceeding 80 lines is sub-split at 80-line increments (hard cap, no attempt to split at blank lines or inner boundaries).
+5. Assign `chunkIndex` values sequentially starting at 0 across all final ranges.
+6. `symbol` is set to the extracted identifier name from the boundary pattern on the range's first line. If no boundary was detected on that line (preamble, continuation), `symbol` is an empty string.
 
 ### Embedding
 
 For each chunk produced, the indexer constructs an enriched input string (DATA-MODEL.md § Embedding Input) and sends it to the embedding service.
 
-Embedding calls are batched: up to 20 chunks per API call. Up to 3 API calls are made concurrently. If the embedding service returns a rate-limit error (HTTP 429), the indexer retries with exponential backoff: 1 second, 2 seconds, 4 seconds, 8 seconds. After 4 failed attempts, the error is recorded in the summary and the affected file is skipped (its mtime entry is not updated).
+Embedding calls are batched: up to **20 chunks per API call** (`EMBED_BATCH_SIZE`). Up to **3 API calls are made concurrently** (`EMBED_CONCURRENCY`). Each batch is a single OpenAI `embeddings.create` call with an array of 20 enriched text strings.
+
+If the embedding service returns a rate-limit error (HTTP 429), the `Embeddings` class retries with exponential backoff: delays of 1s, 2s, 4s between attempts (4 total attempts; up to 7s wait before the final attempt). After all 4 attempts fail, the error propagates to the indexer. Other HTTP errors (401, 403, 500, etc.) fail immediately without retrying.
+
+If a batch fails, **all files in that batch** are marked as failed — partial writes are never made. The mtime entry for a failed file is not updated, so the file will be retried on the next run.
 
 ### Writing
 
-For each successfully embedded chunk, the indexer:
-1. Deletes all existing chunks from the index whose `filePath` matches the file being indexed (handles the changed-file case).
-2. Inserts the new chunk records with their vectors.
+For each successfully embedded file:
+1. Delete all existing chunks from the index whose `filePath` matches the file being indexed.
+2. Insert the new chunk records with their vectors.
+3. Update the mtime cache entry.
 
-For each deleted file, the indexer deletes all chunks from the index whose `filePath` matches.
+For deleted files (no longer on disk): delete all chunks where `filePath` matches, remove the mtime entry.
+
+For empty files (re-indexed, now 0 chunks): delete all chunks where `filePath` matches, write mtime entry with `chunkCount: 0`.
 
 ### Mtime Cache Update
 
-After all chunks for a file have been successfully written to the index, the indexer updates the in-memory mtime cache for that file (`filePath`, `mtime`, `chunkCount`, `indexedAt`). The full cache is written to disk atomically after all files have been processed (CONSTITUTION.md § 6).
+After all chunks for a file have been successfully written to the index, the indexer updates the in-memory mtime cache for that file (`filePath`, `mtime`, `chunkCount`, `indexedAt`). The full cache is written to disk atomically after all files have been processed (CONSTITUTION.md § 6 rule 5).
+
+After processing, the FTS index is rebuilt (`rebuildFtsIndex`) if any files were added or updated, so that hybrid search immediately reflects the new chunks.
+
+### Progress Feedback
+
+When a caller provides an `onProgress` callback, the indexer emits progress messages at key phases:
+- After scanning: `"🔍 Scanned — N file(s) to check"`
+- Before processing: `"⚡ Indexing N file(s) (A new, B changed)..."`
+- After reading files: `"📚 Reading files... (N/M)"`
+- During embedding (throttled, max once per second): `"🧠 Embedding chunks... (N/M)"`
+- On completion (unthrottled, always fires): one of three messages based on what happened
 
 ### Concurrency
 
-Only one index operation may run at a time. If `codebase_index` is called while a previous call is still running, it returns `Error: [INDEX_ALREADY_RUNNING] ...` immediately.
+Only one index operation may run at a time. If `codebase_index` is called while a previous call is still running, it throws `INDEX_ALREADY_RUNNING` immediately.
+
+### Auto-Index
+
+When `PI_INDEX_AUTO=true`, the extension registers a `before_agent_start` event handler that runs incremental indexing before every agent turn. The `PI_INDEX_AUTO_INTERVAL` env var (default `0`) controls the minimum minutes between runs:
+- `0` = index once per session, then never again until the session restarts.
+- `30` = re-index if at least 30 minutes have elapsed since the last completed index.
+
+Auto-index runs fire-and-forget (non-blocking). If the indexer is already running (e.g., from a `codebase_index` tool call), auto-index is skipped for that turn and retried on the next.
 
 ---
 
@@ -105,8 +134,8 @@ Only one index operation may run at a time. If `codebase_index` is called while 
 **Scenario 1 — Happy path: first index build**
 
 Given the index is empty and `OPENAI_API_KEY` is set,
-When `codebase_index` is called with `PI_INDEX_DIRS` pointing to a directory containing 3 TypeScript files,
-Then all 3 files are chunked and embedded, all chunks are written to the index, the mtime cache is written with 3 entries, and the tool returns a summary listing 3 files added and 0 skipped.
+When `codebase_index` is called,
+Then all eligible files are chunked and embedded, all chunks are written to the index, the mtime cache is written, and the tool returns a summary listing files added.
 
 **Scenario 2 — Happy path: incremental refresh with one changed file**
 
@@ -118,31 +147,37 @@ Then only the modified file is re-indexed (its old chunks are deleted and new ch
 
 Given `OPENAI_API_KEY` and `PI_INDEX_API_KEY` are both absent,
 When `codebase_index` is called,
-Then the tool returns `Error: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable indexing.` and no files are processed.
+Then the tool returns `Error: [CONFIG_MISSING_API_KEY] ...` and no files are processed.
 
 **Scenario 4 — Validation error: file too large**
 
 Given `PI_INDEX_MAX_FILE_KB` is `500`,
 When `codebase_index` encounters a TypeScript file of 600KB,
-Then that file is skipped, the summary includes it in the skipped count with the reason `FILE_TOO_LARGE`, and all other eligible files are indexed normally.
+Then that file is skipped, the summary includes `skippedTooLarge: 1`, and all other eligible files are indexed normally.
 
 **Scenario 5 — Edge case: deleted file**
 
-Given the index contains 5 chunks for `src/auth/login.ts` and the mtime cache has an entry for that file,
+Given the index contains 5 chunks for `src/auth/login.ts`,
 When `src/auth/login.ts` is deleted from disk and `codebase_index` is called,
-Then all 5 chunks for `src/auth/login.ts` are removed from the index, the mtime cache entry for that file is removed, and the summary lists 1 file removed.
+Then all 5 chunks for that file are removed, the mtime entry is removed, and the summary lists 1 removed.
 
 **Scenario 6 — Edge case: concurrency guard**
 
 Given `codebase_index` is currently running,
-When `codebase_index` is called again before the first completes,
-Then the second call immediately returns `Error: [INDEX_ALREADY_RUNNING] ...` and the first call continues uninterrupted.
+When `codebase_index` is called again,
+Then the second call immediately returns `Error: [INDEX_ALREADY_RUNNING] ...`.
 
 **Scenario 7 — Edge case: embedding retry**
 
-Given the embedding service returns a rate-limit error on the first attempt,
-When `codebase_index` is processing a file,
-Then the indexer retries after 1 second, then 2 seconds, then 4 seconds, then 8 seconds before marking that file as failed, and continues indexing the remaining files.
+Given the embedding service returns HTTP 429 on the first attempt,
+When the `Embeddings` class sends a batch,
+Then it retries with exponential backoff (delays of 1s, 2s, 4s between 4 total attempts) before marking the batch as failed.
+
+**Scenario 8 — Edge case: file becomes empty**
+
+Given `src/auth/login.ts` was indexed with 5 chunks,
+When the file content is cleared and `codebase_index` is called,
+Then the 5 old chunks are deleted from the DB, and the mtime cache records `chunkCount: 0` for the file.
 
 ---
 
@@ -151,20 +186,11 @@ Then the indexer retries after 1 second, then 2 seconds, then 4 seconds, then 8 
 | Scenario | Expected behavior |
 | --- | --- |
 | Empty directory | Zero files processed. Summary: 0 added, 0 updated, 0 removed, 0 skipped. No error. |
-| File with no supported extension (e.g., `.rb`) | File is silently skipped. Not counted in any summary category. |
+| File with unsupported extension (e.g., `.rb`) | Silently skipped. Not counted in any summary category. |
 | File that is exactly `maxFileKB` bytes | Accepted and indexed. The limit is exclusive: only files strictly greater than `maxFileKB` KB are skipped. |
-| File consisting entirely of blank lines | Produces one chunk containing those blank lines. `symbol` is empty string. |
-| File with a single line exceeding 80 lines worth of content (pathological case) | That single line forms a chunk on its own. The 80-line limit is a line-count limit, not a character limit. |
-| `PI_INDEX_DIRS` points to a directory that does not exist | The missing directory is reported in the summary as a warning. Other directories are processed normally. |
-| Mtime cache is missing or corrupt | The indexer treats all files as new and performs a full re-index. The corrupt cache is overwritten. |
+| File consisting entirely of whitespace | Produces zero chunks. Mtime entry written with `chunkCount: 0`. Not counted as a failure. |
+| `PI_INDEX_DIRS` points to a non-existent directory | Filtered out at config load time with a `console.warn`. Not included in `indexDirs`. If all dirs are removed, falls back to `indexRoot`. |
+| Mtime cache is missing or corrupt | The indexer treats all files as new and performs a full re-index. The corrupt/missing cache is replaced on completion. |
 | Two files with identical content in different paths | Both are indexed independently as separate `CodeChunk` records with different `filePath` values. |
-| Index database is missing but mtime cache exists | Index is rebuilt from scratch. Mtime cache is discarded and rebuilt. |
-| Embedding service is unreachable after all retries | Affected files are skipped and listed in the summary. The index retains their previous chunks (stale but present). Mtime entries are not updated. |
-
----
-
-## Notes
-
-The structural boundary detection patterns are intentionally conservative. A pattern that misses a boundary results in a larger chunk — at worst, an 80-line chunk that could have been two 40-line chunks. A pattern that incorrectly fires on a non-boundary line results in an extra small chunk that starts mid-function. Both outcomes are acceptable for v1 and do not cause incorrect search results — only slightly imprecise chunk boundaries.
-
-The 80-line limit was chosen to balance chunk size (larger chunks carry more context but produce noisier embeddings) against granularity (smaller chunks are more precise but fragment functions across chunks). 80 lines ≈ 512 tokens for typical TypeScript or Python source, which matches the chunk size used by OpenClaw's production embedding pipeline.
+| Embedding service is unreachable after all retries | Affected files are listed in `failedFiles`. Their previous DB chunks are preserved (stale but present). Mtime entries are not updated, so the files are retried next run. |
+| `force: true` with embedding failures | All old chunks are deleted first. Failed files are re-attempted next time `codebase_index` is called. |

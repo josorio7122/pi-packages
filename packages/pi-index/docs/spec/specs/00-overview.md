@@ -1,7 +1,7 @@
 # pi-index — Overview
 
-**Version:** 0.1.0
-**Status:** Draft
+**Version:** 0.2.0
+**Status:** Current
 
 ---
 
@@ -122,7 +122,7 @@ Developer / LLM
 
 **Project-local index.** The index is stored in `.pi/index/` inside the project. This means each project has an independent index, different projects never interfere, and the index is easy to inspect or delete. It is gitignored — it is a derived artifact.
 
-**No file exclusions at the spec level.** The spec defines no hard-excluded directories (no `node_modules/`, no `.git/` blacklist). Callers control what gets indexed by setting `PI_INDEX_DIRS` to specific subdirectories. This keeps the spec simple and gives users full control. The README documents recommended `PI_INDEX_DIRS` values for common project layouts.
+**Hard-excluded infrastructure directories.** The directories `node_modules` and `.git` are always excluded by the walker regardless of `.gitignore` settings or `PI_INDEX_DIRS` configuration. All other filtering is controlled by `.gitignore` files and the `PI_INDEX_DIRS` setting. The README documents common `PI_INDEX_DIRS` values for monorepo and multi-package layouts.
 
 **MMR for diversity.** Without MMR, a search about a heavily-used pattern returns eight chunks all from the same file. MMR ensures results span multiple files, giving the LLM a broader picture of the codebase in fewer tokens.
 

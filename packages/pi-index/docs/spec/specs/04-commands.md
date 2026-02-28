@@ -1,6 +1,6 @@
 # Subsystem Spec: Slash Commands
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **File:** `specs/04-commands.md`
 **Depends on:** CONSTITUTION.md, DATA-MODEL.md, specs/03-tool-api.md
 
@@ -28,11 +28,11 @@ Slash commands are not LLM tools. They bypass the LLM entirely and run directly 
 
 ### `/index-status`
 
-Displays the current state of the index. Equivalent to calling `codebase_status` directly, but formatted for human reading in the TUI.
+Displays the current state of the index. Formatted for human reading in the TUI.
 
 **Input:** None.
 
-**Output:**
+**Output (index built):**
 
 ```
 pi-index status
@@ -45,9 +45,10 @@ Model:         text-embedding-3-small
 Auto-index:    off
 Index dirs:    /Users/dev/project/src, /Users/dev/project/assets
 ───────────────────────────────────────
+(Index currently rebuilding…)   ← only shown if rebuild is in progress
 ```
 
-If the index has never been built:
+**Output (index not built):**
 
 ```
 pi-index status
@@ -61,7 +62,7 @@ Index dirs:    /Users/dev/project
 ───────────────────────────────────────
 ```
 
-If the API key is not configured:
+**Output (API key not configured, at startup):**
 
 ```
 pi-index status
@@ -72,7 +73,7 @@ Status:        Not built
 ───────────────────────────────────────
 ```
 
-**Errors:** None. `/index-status` never fails — if the index state cannot be read, it reports the unreadable state.
+**Errors:** None. `/index-status` never fails — if the index state cannot be read, it reports the unreadable state gracefully with the error message included.
 
 ---
 
@@ -82,52 +83,64 @@ Deletes all existing index data and performs a full re-index from scratch. Equiv
 
 **Input:** None.
 
-**Output (while running):**
+**Output (starting):**
 
 ```
 Rebuilding index… (this may take several minutes on first run)
 ```
 
-**Output (on completion):**
+Progress notifications are emitted during the run (scan, read, embed phases).
+
+**Output (completion):**
 
 ```
 Index rebuilt:
   Added:   318 files (4,231 chunks)
-  Skipped: 12 files (too large)
+  Updated: 0 files (0 chunks)
+  Removed: 0 files
+  Skipped: 0 files (unchanged)
+  Too large: 12 files (size limit)
+  Total:   4,231 chunks
   Time:    47s
 ```
 
-**Output (on error):**
+**Output (error):**
 
 ```
 Index rebuild failed: [CODE] message
 ```
 
-This command is synchronous from the developer's perspective — the TUI shows progress and waits for completion before returning the prompt.
-
-**Errors:** Passes through all error codes from `codebase_index`.
+**Errors:** Passes through `INDEX_ALREADY_RUNNING` and `CONFIG_MISSING_API_KEY` error codes.
 
 ---
 
 ### `/index-clear`
 
-Deletes all index data: all chunks from the database and the entire mtime cache. The index path directory is left in place but emptied.
+Deletes all index data: all chunks from the database and the entire mtime cache.
 
 **Input:** None.
 
-**Output:**
+**Concurrency guard:** If an index operation (`codebase_index` tool call or `/index-rebuild`) is currently in progress, the command rejects with an error notification instead of corrupting the active index. The developer must wait for the current index to complete before clearing.
+
+**Output (success):**
 
 ```
 Index cleared. Run /index-rebuild or codebase_index to rebuild.
 ```
 
-After `/index-clear`, `codebase_search` returns `Error: [INDEX_NOT_INITIALIZED] ...` until `codebase_index` is called again.
+**Output (indexer running — rejected):**
 
-**Errors:** If the database or mtime cache cannot be deleted (e.g., permission error), outputs:
+```
+Cannot clear index: an index operation is currently in progress. Wait for it to complete first.
+```
+
+**Output (error):**
 
 ```
 Failed to clear index: {reason}
 ```
+
+After `/index-clear`, `codebase_search` returns `Error: [INDEX_NOT_INITIALIZED] ...` until `codebase_index` is called again.
 
 ---
 
@@ -137,7 +150,7 @@ Failed to clear index: {reason}
 
 Given the index contains 500 chunks across 40 files, last built 1 hour ago,
 When the developer runs `/index-status`,
-Then the output shows `Total chunks: 500`, `Files indexed: 40`, and a last-indexed time of approximately 1 hour ago.
+Then the output shows `Total chunks: 500`, `Files indexed: 40`, and a last-indexed time approximately 1 hour ago.
 
 **Scenario 2 — /index-status with empty index**
 
@@ -147,9 +160,9 @@ Then the output shows `Status: Not built` and instructs the developer to run `/i
 
 **Scenario 3 — /index-rebuild completes successfully**
 
-Given `OPENAI_API_KEY` is set and the project has 50 eligible files,
+Given `OPENAI_API_KEY` is set and the project has eligible files,
 When the developer runs `/index-rebuild`,
-Then the output shows progress, waits for completion, and reports the number of files and chunks indexed.
+Then the output shows progress notifications, waits for completion, and reports the number of files and chunks indexed with the header "Index rebuilt:".
 
 **Scenario 4 — /index-rebuild with missing API key**
 
@@ -163,13 +176,20 @@ Given the index is populated,
 When the developer runs `/index-clear` and then the LLM calls `codebase_search`,
 Then `/index-clear` confirms the index was cleared, and `codebase_search` returns `Error: [INDEX_NOT_INITIALIZED] ...`.
 
+**Scenario 6 — /index-clear rejected while indexing**
+
+Given `codebase_index` is currently running,
+When the developer runs `/index-clear`,
+Then the output shows an error message indicating indexing is in progress and the clear was not performed.
+
 ---
 
 ## Edge Cases
 
 | Scenario | Expected behavior |
 | --- | --- |
-| `/index-rebuild` called while `codebase_index` is already running (via LLM tool) | Returns `Index rebuild failed: [INDEX_ALREADY_RUNNING] ...`. The running index operation continues. |
-| `/index-clear` called while `codebase_index` is running | The clear waits for the running index to finish, then deletes all data. Or: rejects with `Index is currently rebuilding. Wait for completion before clearing.` — implementation may choose either behavior; must be documented in README. |
-| `/index-status` called while `codebase_index` is running | Shows the status as of the last completed run, with a note: `(Index currently rebuilding…)`. |
-| `/index-rebuild` on a project with 0 eligible files | Completes successfully. Output: `Index rebuilt: Added: 0 files (0 chunks). Time: 0s`. |
+| `/index-rebuild` called while `codebase_index` is already running | Returns `Index rebuild failed: [INDEX_ALREADY_RUNNING] ...`. The running operation continues. |
+| `/index-clear` called while `codebase_index` is running | Rejects with error. `db.deleteAll()` is NOT called. The running index completes normally. |
+| `/index-status` called while `codebase_index` is running | Shows status as of the last completed run, with note `(Index currently rebuilding…)`. |
+| `/index-rebuild` on a project with 0 eligible files | Completes successfully. Output: `Index rebuilt: Added: 0 files (0 chunks). ...` |
+| `/index-status` when index state cannot be read (DB error) | Reports the error inline (never throws to the user). |
