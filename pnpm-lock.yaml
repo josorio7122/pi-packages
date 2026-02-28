@@ -40,6 +40,34 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@24.10.14)(yaml@2.8.2)
 
+  packages/pi-lsp:
+    dependencies:
+      vscode-jsonrpc:
+        specifier: ^8.2.1
+        version: 8.2.1
+      vscode-languageserver-types:
+        specifier: ^3.17.5
+        version: 3.17.5
+    devDependencies:
+      '@mariozechner/pi-ai':
+        specifier: ^0.55.3
+        version: 0.55.3(ws@8.19.0)(zod@3.25.76)
+      '@mariozechner/pi-coding-agent':
+        specifier: ^0.55.1
+        version: 0.55.1(ws@8.19.0)(zod@3.25.76)
+      '@sinclair/typebox':
+        specifier: '*'
+        version: 0.34.48
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.10.14
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@24.10.14)(yaml@2.8.2)
+
   packages/pi-memory:
     dependencies:
       '@lancedb/lancedb':
@@ -508,8 +536,8 @@ packages:
     resolution: {integrity: sha512-t9FAb4ouy8HJSIa8gSRC7j8oeUOb2XDdhvBiHj7FhfpYafj1vRPrvGIEXUV8fPJDCI07vhK9iztP27EPk+yEWw==}
     engines: {node: '>=20.0.0'}
 
-  '@mariozechner/pi-ai@0.55.1':
-    resolution: {integrity: sha512-JJX1LrVWPUPMExu0f89XR4nMNP37+FNLjEE4cIHq9Hi6xQtOiiEi7OjDFMx58hWsq81xH1CwmQXqGTWBjbXKTw==}
+  '@mariozechner/pi-ai@0.55.3':
+    resolution: {integrity: sha512-f9jWoDzJR9Wy/H8JPMbjoM4WvVUeFZ65QdYA9UHIfoOopDfwWE8F8JHQOj5mmmILMacXuzsqA3J7MYqNWZRvvQ==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -1772,6 +1800,13 @@ packages:
       jsdom:
         optional: true
 
+  vscode-jsonrpc@8.2.1:
+    resolution: {integrity: sha512-kdjOSJ2lLIn7r1rtrMbbNCHjyMPfRnowdKjBQ+mGq6NAW5QY2bEZC/khaC5OR8svbbjvLEaIXkOq45e2X9BIbQ==}
+    engines: {node: '>=14.0.0'}
+
+  vscode-languageserver-types@3.17.5:
+    resolution: {integrity: sha512-Ld1VelNuX9pdF39h2Hgaeb5hEZM2Z3jUrrMgWQAu82jMtZp7p3vJT3BzToKtZI7NgQssZje5o0zryOrhQvzQAg==}
+
   web-streams-polyfill@3.3.3:
     resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
     engines: {node: '>= 8'}
@@ -2416,7 +2451,7 @@ snapshots:
 
   '@mariozechner/pi-agent-core@0.55.1(ws@8.19.0)(zod@3.25.76)':
     dependencies:
-      '@mariozechner/pi-ai': 0.55.1(ws@8.19.0)(zod@3.25.76)
+      '@mariozechner/pi-ai': 0.55.3(ws@8.19.0)(zod@3.25.76)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt
@@ -2426,7 +2461,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.55.1(ws@8.19.0)(zod@3.25.76)':
+  '@mariozechner/pi-ai@0.55.3(ws@8.19.0)(zod@3.25.76)':
     dependencies:
       '@anthropic-ai/sdk': 0.73.0(zod@3.25.76)
       '@aws-sdk/client-bedrock-runtime': 3.998.0
@@ -2454,7 +2489,7 @@ snapshots:
     dependencies:
       '@mariozechner/jiti': 2.6.5
       '@mariozechner/pi-agent-core': 0.55.1(ws@8.19.0)(zod@3.25.76)
-      '@mariozechner/pi-ai': 0.55.1(ws@8.19.0)(zod@3.25.76)
+      '@mariozechner/pi-ai': 0.55.3(ws@8.19.0)(zod@3.25.76)
       '@mariozechner/pi-tui': 0.55.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
@@ -3787,6 +3822,10 @@ snapshots:
       - terser
       - tsx
       - yaml
+
+  vscode-jsonrpc@8.2.1: {}
+
+  vscode-languageserver-types@3.17.5: {}
 
   web-streams-polyfill@3.3.3: {}
 
