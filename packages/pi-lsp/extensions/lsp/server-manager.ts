@@ -96,6 +96,9 @@ export class ServerManager {
 
       const proc = spawn(binary, server.args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'] });
 
+      // Drain stderr to prevent deadlock when the server's pipe buffer fills
+      proc.stderr.resume();
+
       const initOptions = server.initializationOptions
         ? await server.initializationOptions(root)
         : undefined;

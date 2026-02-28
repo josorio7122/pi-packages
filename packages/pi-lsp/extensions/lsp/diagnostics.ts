@@ -31,5 +31,6 @@ export function formatDiagnosticsXml(
   const suffix = diagnostics.length > maxPerFile
     ? `\n... and ${diagnostics.length - maxPerFile} more`
     : '';
-  return `LSP errors detected in this file, please fix:\n<diagnostics file="${filePath}">\n${formatted}${suffix}\n</diagnostics>`;
+  const escapedPath = filePath.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `LSP errors detected in this file, please fix:\n<diagnostics file="${escapedPath}">\n${formatted}${suffix}\n</diagnostics>`;
 }

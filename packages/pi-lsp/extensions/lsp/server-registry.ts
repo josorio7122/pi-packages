@@ -1,4 +1,5 @@
-import { nearestRoot, type RootFunction } from './root-detector.js';
+import { nearestRoot, walkUp, type RootFunction } from './root-detector.js';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export interface ServerInfo {
@@ -9,7 +10,7 @@ export interface ServerInfo {
   args: string[];   // CLI args for the binary
   npmPackage?: string; // package name for npm install (if auto-downloadable)
   goPackage?: string; // go package path for go install (if Go-based)
-  initializationOptions?: (root: string) => Promise<Record<string, any>>;
+  initializationOptions?: (root: string) => Promise<Record<string, unknown>>;
 }
 
 export function getServersForExtension(ext: string): ServerInfo[] {
@@ -22,7 +23,6 @@ export function getServerById(id: string): ServerInfo | undefined {
 
 /** Detect Python venv path for pyright initialization */
 async function detectPythonPath(root: string): Promise<string | undefined> {
-  const fs = await import('node:fs/promises');
   const candidates = [
     process.env['VIRTUAL_ENV'] ? path.join(process.env['VIRTUAL_ENV'], 'bin', 'python') : undefined,
     path.join(root, '.venv', 'bin', 'python'),
@@ -71,9 +71,10 @@ export const SERVERS: ServerInfo[] = [
     id: 'gopls',
     extensions: ['.go'],
     root: async (file: string, projectRoot: string) => {
-      // Prefer go.work over go.mod
-      const workRoot = await nearestRoot(['go.work'])(file, projectRoot);
-      if (workRoot && workRoot !== projectRoot) return workRoot;
+      // Prefer go.work over go.mod — use walkUp directly to distinguish
+      // "go.work found at projectRoot" from "go.work not found (fallback to projectRoot)"
+      const goWork = await walkUp(path.dirname(file), projectRoot, ['go.work']);
+      if (goWork) return path.dirname(goWork);
       return nearestRoot(['go.mod', 'go.sum'])(file, projectRoot);
     },
     command: 'gopls',

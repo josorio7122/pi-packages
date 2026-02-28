@@ -1,4 +1,4 @@
-import * as path from 'path';
+import path from 'node:path';
 
 export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   '.abap': 'abap', '.bat': 'bat', '.bib': 'bibtex', '.clj': 'clojure',

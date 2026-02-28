@@ -198,14 +198,9 @@ export class LSPClient {
   }
 
   async references(file: string, line: number, character: number): Promise<any[]> {
-    return this.connection
-      .sendRequest('textDocument/references', {
-        textDocument: { uri: pathToFileURL(file).href },
-        position: { line, character },
-        context: { includeDeclaration: true },
-      })
-      .then((r: any) => (Array.isArray(r) ? r : r ? [r] : []))
-      .catch(() => []);
+    return this.sendPositionRequest('textDocument/references', file, line, character, {
+      context: { includeDeclaration: true },
+    });
   }
 
   async hover(file: string, line: number, character: number): Promise<any> {
@@ -261,6 +256,16 @@ export class LSPClient {
 
   async shutdown(): Promise<void> {
     try {
+      // LSP spec requires shutdown request then exit notification
+      await Promise.race([
+        this.connection.sendRequest('shutdown'),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
+      await this.connection.sendNotification('exit');
+    } catch {
+      // ignore errors during shutdown handshake
+    }
+    try {
       this.connection.end();
       this.connection.dispose();
     } catch {
@@ -274,11 +279,13 @@ export class LSPClient {
     file: string,
     line: number,
     character: number,
+    extra?: Record<string, unknown>,
   ): Promise<any[]> {
     return this.connection
       .sendRequest(method, {
         textDocument: { uri: pathToFileURL(file).href },
         position: { line, character },
+        ...extra,
       })
       .then((r: any) => (Array.isArray(r) ? r : r ? [r] : []))
       .catch(() => []);

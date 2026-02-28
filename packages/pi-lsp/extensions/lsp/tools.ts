@@ -31,12 +31,16 @@ Supported operations:
 - incomingCalls: Find callers of a function
 - outgoingCalls: Find callees of a function
 
-All operations require filePath, line (1-based), character (1-based).
+All operations require filePath and line/character (1-based), except:
+- workspaceSymbol: uses query instead of line/character
+- documentSymbol: line/character are ignored (lists all symbols in file)
+
 If no LSP server is available for the file type, an error is returned.`,
   parameters: Type.Object({
     operation: StringEnum(OPERATIONS),
     filePath: Type.String({ description: 'Absolute or relative path to the file' }),
-    line: Type.Number({ description: 'Line number (1-based)' }),
-    character: Type.Number({ description: 'Character offset (1-based)' }),
+    line: Type.Integer({ description: 'Line number (1-based)', minimum: 1, default: 1 }),
+    character: Type.Integer({ description: 'Character offset (1-based)', minimum: 1, default: 1 }),
+    query: Type.Optional(Type.String({ description: 'Search query for workspaceSymbol operation' })),
   }),
 };

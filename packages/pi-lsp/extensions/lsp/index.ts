@@ -50,7 +50,6 @@ export default function (pi: ExtensionAPI): void {
       // Convert 1-based to 0-based
       const line = params.line - 1;
       const character = params.character - 1;
-      const uri = pathToFileURL(file).href;
       const operation = params.operation as LSPOperation;
 
       const result: unknown[] = await (async () => {
@@ -58,8 +57,8 @@ export default function (pi: ExtensionAPI): void {
           case 'goToDefinition': return manager.definition(file, line, character);
           case 'findReferences': return manager.references(file, line, character);
           case 'hover': return manager.hover(file, line, character);
-          case 'documentSymbol': return manager.documentSymbol(uri);
-          case 'workspaceSymbol': return manager.workspaceSymbol('');
+          case 'documentSymbol': return manager.documentSymbol(pathToFileURL(file).href);
+          case 'workspaceSymbol': return manager.workspaceSymbol(params.query ?? '');
           case 'goToImplementation': return manager.implementation(file, line, character);
           case 'prepareCallHierarchy': return manager.prepareCallHierarchy(file, line, character);
           case 'incomingCalls': return manager.incomingCalls(file, line, character);

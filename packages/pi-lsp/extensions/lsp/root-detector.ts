@@ -36,7 +36,7 @@ export function nearestRoot(includes: string[], excludes?: string[]): RootFuncti
  * Walk up from startDir to stopDir looking for any of the target filenames.
  * Returns the full path of the first match found, or undefined.
  */
-async function walkUp(startDir: string, stopDir: string, targets: string[]): Promise<string | undefined> {
+export async function walkUp(startDir: string, stopDir: string, targets: string[]): Promise<string | undefined> {
   let dir = startDir;
   const resolvedStop = path.resolve(stopDir);
   while (true) {

@@ -87,7 +87,7 @@ async function installNpmServer(
 
   onProgress?.(`Installing ${server.npmPackage}...`);
   try {
-    const packages = server.npmPackage!.split(' ');
+    const packages = server.npmPackage!.trim().split(/\s+/);
     await execFileAsync('npm', ['install', ...packages], {
       cwd: installDir,
       timeout: 120_000,
