@@ -6,6 +6,20 @@
 
 ---
 
+## CLI-First Rules
+
+These rules apply to EVERY task in this plan:
+
+1. **Package scaffolding** — use `turbo gen workspace` (already done for this package)
+2. **Adding dependencies** — use `pnpm add <pkg>` (latest), `pnpm add -D <pkg>` (dev), `pnpm add --save-peer <pkg>` (peer). Never hand-write dependency entries in package.json.
+3. **TypeScript config** — use `pnpm exec tsc --init`, then edit the generated file
+4. **LSP server installation** — each server dir gets `npm init -y && npm install <pkg>` (creates its own mini-project). Go servers use `go install`.
+5. **No version pinning** — `pnpm add` resolves latest and writes to lockfile. Only pin if there's a known incompatibility.
+6. **Build/test/lint** — always via turbo: `pnpm turbo build`, `pnpm turbo test`, `pnpm turbo lint`
+7. **Single package commands** — use filter: `pnpm --filter @josorio/pi-lsp <cmd>`
+
+---
+
 ## Overview
 
 Build a Pi package that provides Language Server Protocol (LSP) integration — giving the LLM code intelligence tools (go-to-definition, find-references, hover, diagnostics) and automatically appending type errors to every `edit`/`write` result.
@@ -49,27 +63,25 @@ packages/pi-lsp/
 
 ## Dependencies
 
-```json
-{
-  "dependencies": {
-    "vscode-jsonrpc": "8.2.1",
-    "vscode-languageserver-types": "3.17.5"
-  },
-  "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*"
-  },
-  "devDependencies": {
-    "@mariozechner/pi-coding-agent": "*",
-    "@sinclair/typebox": "*",
-    "@mariozechner/pi-ai": "*",
-    "@types/node": "^24.0.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
-  }
-}
+All dependencies are installed via CLI — **never hand-edit package.json for deps**.
+
+**Runtime deps** (installed via `pnpm add`):
+```bash
+cd packages/pi-lsp
+pnpm add vscode-jsonrpc vscode-languageserver-types
 ```
 
-**Note:** `vscode-jsonrpc` and `vscode-languageserver-types` versions match OpenCode exactly.
+**Peer deps** (installed via `pnpm add --save-peer`):
+```bash
+pnpm add --save-peer @mariozechner/pi-coding-agent
+```
+
+**Dev deps** (installed via `pnpm add -D`):
+```bash
+pnpm add -D @mariozechner/pi-coding-agent @sinclair/typebox @mariozechner/pi-ai @types/node typescript vitest
+```
+
+`pnpm add` without version pins resolves to latest — pnpm writes the resolved version to `pnpm-lock.yaml` automatically. No manual pinning needed.
 
 ---
 
@@ -171,23 +183,76 @@ capabilities: {
 
 **Files:** `packages/pi-lsp/package.json`, `packages/pi-lsp/tsconfig.json`, `packages/pi-lsp/vitest.config.ts`
 
-**Steps:**
-1. `mkdir -p packages/pi-lsp/extensions/lsp`
-2. `cd packages/pi-lsp && pnpm init` — creates package.json
-3. Edit package.json to add: name `@josorio/pi-lsp`, pi manifest, scripts, dependencies, peerDependencies
-4. Create `tsconfig.json` extending `../../tsconfig.base.json` (copy pattern from pi-index)
-5. Create `vitest.config.ts` (copy pattern from pi-memory)
-6. `pnpm install` from monorepo root to link everything
-7. Verify `pnpm --filter @josorio/pi-lsp exec tsc --noEmit` runs clean
-
-**Package.json pi manifest:**
-```json
-{
-  "pi": {
-    "extensions": ["./extensions"]
-  }
-}
+**Pre-condition:** Turbo already scaffolded the package shell:
+```bash
+echo "n" | pnpm exec turbo gen workspace --name "@josorio/pi-lsp" --empty --destination packages/pi-lsp --type package
 ```
+This created `packages/pi-lsp/package.json` with name, version, and stub scripts.
+
+**Steps:**
+
+1. Create the extension directory structure:
+   ```bash
+   mkdir -p packages/pi-lsp/extensions/lsp
+   mkdir -p packages/pi-lsp/extensions/lsp/test-helpers
+   ```
+
+2. Install runtime dependencies (latest — no version pinning):
+   ```bash
+   cd packages/pi-lsp
+   pnpm add vscode-jsonrpc vscode-languageserver-types
+   ```
+
+3. Install peer dependencies:
+   ```bash
+   pnpm add --save-peer @mariozechner/pi-coding-agent
+   ```
+
+4. Install dev dependencies:
+   ```bash
+   pnpm add -D @mariozechner/pi-coding-agent @sinclair/typebox @mariozechner/pi-ai @types/node typescript vitest
+   ```
+
+5. Init TypeScript config:
+   ```bash
+   pnpm exec tsc --init
+   ```
+   Then edit the generated `tsconfig.json` to:
+   - Add `"extends": "../../tsconfig.base.json"`
+   - Set `"outDir": "./dist"`, `"rootDir": "."`
+   - Set `"include": ["extensions/**/*"]`
+   - Set `"exclude": ["node_modules", "dist", "**/*.test.ts"]`
+
+6. Edit `package.json` (surgical edits only — do NOT rewrite):
+   - Add `"type": "module"`
+   - Add `"main": "./dist/extensions/lsp/index.js"`
+   - Add `"pi": { "extensions": ["./extensions"] }`
+   - Update scripts: `"build": "tsc"`, `"test": "vitest run"`, `"lint": "tsc --noEmit"`
+   - Add `"keywords": ["pi-package"]`
+
+7. Create `vitest.config.ts`:
+   ```typescript
+   import { defineConfig } from "vitest/config";
+   export default defineConfig({
+     test: {
+       environment: "node",
+       include: ["**/*.test.ts"],
+       exclude: ["node_modules", "dist"],
+     },
+   });
+   ```
+
+8. Install all from monorepo root:
+   ```bash
+   cd /Users/josorio/Code/pi-packages
+   pnpm install
+   ```
+
+9. Verify:
+   ```bash
+   pnpm --filter @josorio/pi-lsp exec tsc --noEmit
+   pnpm --filter @josorio/pi-lsp test
+   ```
 
 **Commit:** `chore: scaffold pi-lsp package`
 
@@ -336,15 +401,15 @@ export interface ServerInfo {
    - Extensions: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`, `.cts`
    - Root: `NearestRoot(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"], ["deno.json", "deno.jsonc"])`
    - Binary: `typescript-language-server` (check `which` first, then `<serversDir>/node_modules/.bin/typescript-language-server`)
-   - Install: `npm install typescript-language-server typescript --prefix <serversDir>/typescript-language-server`
+   - Install: `cd <serversDir>/typescript-language-server && npm init -y && npm install typescript-language-server typescript`
    - Args: `["--stdio"]`
    - OpenCode ref: `LSPServer.Typescript` in server.ts — spawns `bun x typescript-language-server --stdio` with tsserver path
 
 2. **Pyright** (`pyright-langserver`):
    - Extensions: `.py`, `.pyi`
    - Root: `NearestRoot(["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"])`
-   - Binary: `pyright-langserver` (check `which` first, then `<serversDir>/node_modules/.bin/pyright-langserver`)
-   - Install: `npm install pyright --prefix <serversDir>/pyright`
+   - Binary: `pyright-langserver` (check `which` first, then `<serversDir>/pyright/node_modules/.bin/pyright-langserver`)
+   - Install: `cd <serversDir>/pyright && npm init -y && npm install pyright`
    - Args: `["--stdio"]`
    - Init options: `{ pythonPath: <detected venv python> }` — check `VIRTUAL_ENV`, `<root>/.venv/bin/python`, `<root>/venv/bin/python`
    - OpenCode ref: `LSPServer.Pyright` in server.ts
@@ -387,9 +452,9 @@ export async function installServer(
 ```
 
 - Uses `child_process.execFile` (via `pi.exec` pattern) to run install commands
-- TypeScript: `npm install typescript-language-server typescript --prefix <dir>`
-- Pyright: `npm install pyright --prefix <dir>`
-- Go: `go install golang.org/x/tools/gopls@latest` with `GOBIN=<dir>`
+- TypeScript: runs `npm install typescript-language-server typescript` inside `<serversDir>/typescript-language-server/` (the dir acts as its own project — `npm install` creates `node_modules/.bin/` there)
+- Pyright: runs `npm install pyright` inside `<serversDir>/pyright/`
+- Go: runs `go install golang.org/x/tools/gopls@latest` with env `GOBIN=<serversDir>`
 - Returns the binary path on success, `undefined` on failure
 - Creates `<serversDir>/<server-id>/` directory structure
 
