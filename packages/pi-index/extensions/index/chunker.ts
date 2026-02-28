@@ -1,4 +1,5 @@
 import { extname, basename } from "node:path";
+import { LANGUAGE_MAP, MAX_CHUNK_LINES } from "./constants.js";
 
 export type CodeChunk = {
   id: string;
@@ -13,20 +14,6 @@ export type CodeChunk = {
   symbol: string;
   mtime: number;
   createdAt: number;
-};
-
-const LANGUAGE_MAP: Record<string, string> = {
-  ".ts": "typescript",
-  ".tsx": "typescript",
-  ".d.ts": "typescript",
-  ".js": "javascript",
-  ".jsx": "javascript",
-  ".py": "python",
-  ".sql": "sql",
-  ".md": "markdown",
-  ".css": "css",
-  ".html": "html",
-  ".txt": "text",
 };
 
 // Handle .d.ts correctly — extname(".d.ts") gives ".ts", need basename check
@@ -70,8 +57,6 @@ const BOUNDARIES: Record<string, BoundaryDef[]> = {
     [/^\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[,{]|^[a-zA-Z][a-zA-Z0-9_-]*\s*\{/, (l) => l.replace(/[,{].*/, "").trim()],
   ],
 };
-
-const MAX_CHUNK_LINES = 80;
 
 function findSymbol(line: string, language: string): string {
   const defs = BOUNDARIES[language] ?? [];

@@ -1,7 +1,5 @@
 import OpenAI from "openai";
-
-const MAX_RETRIES = 4;
-const RETRY_BASE_DELAY_MS = 1000;
+import { MAX_RETRIES, RETRY_BASE_DELAY_MS } from "./constants.js";
 
 function isRateLimitError(err: unknown): boolean {
   if (err instanceof Error) {

@@ -2,10 +2,9 @@ import type { IndexDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import type { IndexConfig } from "./config.js";
 import { mmrRerank, type ScoredChunk } from "./mmr.js";
+import { KNOWN_SCOPES, SEARCH_OVERFETCH_FACTOR } from "./constants.js";
 
 export type ScopeFilter = { scope: string; value: string };
-
-const KNOWN_SCOPES = new Set(["file", "dir", "ext", "lang"]);
 
 /**
  * Parse @scope:value filters from a query string.
@@ -164,7 +163,7 @@ export class Searcher {
     }
 
     const dbFilter = buildFilter(filters);
-    const fetchLimit = safeLimit * 3; // over-fetch for filtering + MMR
+    const fetchLimit = safeLimit * SEARCH_OVERFETCH_FACTOR; // over-fetch for filtering + MMR
 
     // Hybrid search (falls back to vector-only if FTS unavailable)
     let rawResults: ScoredChunk[];

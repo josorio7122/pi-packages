@@ -3,6 +3,7 @@ import type { IndexConfig } from "./config.js";
 import type { IndexDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import { chunkFile } from "./chunker.js";
+import { SUPPORTED_EXTENSIONS, EMBED_BATCH_SIZE, EMBED_CONCURRENCY } from "./constants.js";
 import {
   walkDirs,
   readMtimeCache,
@@ -39,14 +40,6 @@ export type IndexSummary = {
   elapsedMs: number;
 };
 
-// Extensions the indexer will process (matches DATA-MODEL.md Supported Languages)
-const SUPPORTED_EXTENSIONS = [
-  ".ts", ".tsx", ".d.ts", ".js", ".jsx",
-  ".py", ".sql", ".md", ".css", ".html", ".txt",
-];
-
-const EMBED_BATCH_SIZE = 20;
-const EMBED_CONCURRENCY = 3;
 
 export class Indexer {
   private running = false;
