@@ -139,6 +139,16 @@ export class Indexer {
         await this.db.rebuildFtsIndex();
       }
 
+      // Compact table fragments after bulk operations (inserts + deletes)
+      if (toProcess.length > 0 || diff.toDelete.length > 0) {
+        await this.db.optimize();
+      }
+
+      // Create vector index for large codebases (skips if below threshold or already exists)
+      if (toProcess.length > 0 || diff.toDelete.length > 0) {
+        await this.db.createVectorIndexIfNeeded();
+      }
+
       const totalChunks = await this.db.count();
       if (toProcess.length > 0) {
         complete(`✅ Index updated — ${totalChunks} chunks across ${toProcess.length - failedFiles.length} file(s)`);

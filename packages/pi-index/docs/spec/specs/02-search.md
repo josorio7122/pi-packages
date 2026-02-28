@@ -54,7 +54,7 @@ The clean query is sent to the embedding service to produce a query vector. If t
 
 The index is queried using LanceDB's hybrid search — vector similarity and BM25 full-text search combined with RRF (Reciprocal Rank Fusion) via `RRFReranker`. The query fetches `limit * 3` candidates (over-fetch for subsequent filtering and MMR reranking).
 
-Scope filters are translated to SQL WHERE clauses and applied to the hybrid search, restricting both the vector and full-text components to matching rows.
+Scope filters are translated to SQL WHERE clauses and applied to the hybrid search, restricting both the vector and full-text components to matching rows. LanceDB v0.26.2 prefilters by default — when a WHERE clause references a column with a BTREE scalar index (`filePath`, `language`, `extension`), the filter is applied before vector comparison using the index, rather than scanning every row.
 
 If hybrid search fails (e.g., FTS index not yet built, tantivy error), the search automatically falls back to vector-only search with a `console.warn`. This fallback is transparent to the caller.
 

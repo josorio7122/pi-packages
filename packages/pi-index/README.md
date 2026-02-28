@@ -143,12 +143,13 @@ Structural chunking uses language-specific boundary detection (function/class si
 ```
 index.ts               — extension entry point (registers tools + commands)
 config.ts              — configuration loading + validation
+constants.ts           — shared constants (batch sizes, thresholds, language map)
 embeddings.ts          — OpenAI embeddings wrapper (encoding_format: float)
 chunker.ts             — structural boundary splitting, 80-line max
 walker.ts              — file discovery + mtime-based incremental cache
 mmr.ts                 — Maximal Marginal Relevance reranking
-db.ts                  — LanceDB wrapper (schema, FTS index, hybrid search)
-indexer.ts             — full indexing pipeline (batching, retries, progress)
+db.ts                  — LanceDB wrapper (schema, indexes, hybrid search, optimization)
+indexer.ts             — full indexing pipeline (batching, retries, progress, post-index optimization)
 searcher.ts            — query parsing, scope filters, result formatting
 tools.ts               — LLM tool definitions + handlers
 utils.ts               — shared helpers (relativeTime)
@@ -168,6 +169,19 @@ Because both paths normalize to `[0, 1]` relative to the best result, `minScore`
 Chunk IDs use the format `{filePath}:{chunkIndex}` (e.g., `src/auth/login.ts:3`). IDs are **not stable across re-indexing** — if a file is modified and re-indexed, chunk indices may shift. Do not use chunk IDs as persistent external references.
 
 The index is stored at `.pi/index/lancedb` (LanceDB) and `.pi/index/mtime-cache.json` (file cache). Both are project-local and should be added to `.gitignore`.
+
+---
+
+## Performance
+
+pi-index automatically manages LanceDB indexes and optimization for best query performance:
+
+- **Scalar indexes** — BTREE indexes on `filePath`, `language`, and `extension` columns are created during database initialization. Scope filter queries (`@file:`, `@dir:`, `@lang:`, `@ext:`) use indexed lookups instead of full column scans. Idempotent — safe to recreate on every session.
+- **Table compaction** — after each indexing run that modifies data, `optimize()` compacts fragmented data files created by per-file delete+insert cycles. This keeps query I/O efficient.
+- **Auto vector index** — when the chunk count exceeds 10,000, an IVF-PQ (Inverted File with Product Quantization) vector index is created automatically. This speeds up vector search from brute-force O(n) to approximate O(√n). Skipped if the index already exists or the codebase is below threshold.
+- **FTS index** — LanceDB's tantivy-based full-text search index on the `text` column is rebuilt after every indexing run for current BM25 search.
+
+All index operations are best-effort — if any fails, the system degrades gracefully (slower queries, not incorrect results).
 
 ---
 

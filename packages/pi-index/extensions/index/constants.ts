@@ -38,3 +38,6 @@ export const SEARCH_OVERFETCH_FACTOR = 3;
 
 /** Set of valid @scope tokens accepted by the query parser (file, dir, ext, lang). */
 export const KNOWN_SCOPES = new Set(["file", "dir", "ext", "lang"]);
+
+/** Minimum chunk count before creating an IVF-PQ vector index. Below this, brute-force scan is fast enough. */
+export const VECTOR_INDEX_THRESHOLD = 10_000;
