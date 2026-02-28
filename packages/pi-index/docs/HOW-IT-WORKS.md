@@ -44,6 +44,7 @@ Indexer.run()
      ├── walkDirs()               → file list (respecting .gitignore)
      ├── diffFileSet()            → new / changed / deleted / unchanged
      ├── chunkFile()              → CodeChunk[] per file
+     ├── enrichForEmbedding()     → contextual header + raw text
      ├── emb.embed([...texts])    → vectors in batches of 20, 3 concurrent
      ├── db.deleteByFilePath()    → remove old chunks (changed files)
      ├── db.insertChunks()        → write new chunks with vectors
@@ -209,22 +210,27 @@ Single chunks are not embedded one at a time — that would require one API call
 
 This means 3000 chunks = 150 batches = ~50 rounds of 3 concurrent calls = about 50 sequential API call rounds (each round is 3 concurrent calls). In practice, with fast network, this is much faster than 3000 sequential calls.
 
-### Enriched embedding text
+### Contextual enrichment
 
-Each chunk is embedded as:
+Before embedding, each chunk is enriched with file-level context by `enrichForEmbedding()` in `context-enricher.ts`. The enriched text looks like:
+
 ```
-File: src/auth/login.ts (typescript)
-Symbol: handleLogin
+File: src/auth/jwt.ts (typescript)
+Module symbols: signToken, verifyToken, refreshToken
+Imports: jsonwebtoken, ../config
+Current: verifyToken (chunk 2 of 4)
 ---
-export async function handleLogin(user: string, password: string) {
-  const hashed = await bcrypt.hash(password, 10);
-  ...
+export function verifyToken(token: string): TokenPayload {
+  return jwt.verify(token, SECRET);
 }
 ```
 
-The enrichment header improves retrieval quality. The embedding model learns to associate "login", "authentication", and "TypeScript" with this chunk. Without it, the chunk would just embed as a generic code pattern.
+The header lines are conditional — omitted when there's nothing to show:
+- **Module symbols** lists all function/class names detected across the file's chunks. This tells the embedding model that `verifyToken` lives alongside `signToken` and `refreshToken` — a JWT module.
+- **Imports** lists module names extracted from the file's first chunk (where imports typically live). Handles JS/TS `import`/`require`, Python `import`/`from`, and Ruby `require`/`require_relative`.
+- **Current** shows the chunk's symbol and position within the file.
 
-The stored `text` field is always the raw source lines — never the enriched form. The enrichment only appears in the API call.
+This is a deterministic, zero-LLM-cost implementation of Anthropic's Contextual Retrieval technique. The stored `text` field is always the raw source lines — never the enriched form. The enrichment only appears in the embedding API call.
 
 ### Retry logic
 
@@ -405,21 +411,22 @@ The `isRunning` flag (local to the closure, not `indexer.isRunning`) prevents th
 
 ## The Dependency Graph
 
-The 12 source files have a clean dependency order:
+The 13 source files have a clean dependency order:
 
 ```
-utils.ts          ← no dependencies
-constants.ts      ← no dependencies (language map, batch sizes, thresholds)
-config.ts         ← node:path, node:fs
-mmr.ts            ← chunker.ts (ScoredChunk type)
-chunker.ts        ← node:path, constants.ts
-walker.ts         ← node:fs/promises, node:path
-embeddings.ts     ← openai, constants.ts
-db.ts             ← @lancedb/lancedb, chunker.ts, constants.ts
-indexer.ts        ← config, db, embeddings, chunker, walker, constants.ts
-searcher.ts       ← db, embeddings, config, mmr, constants.ts
-tools.ts          ← indexer, searcher, db, config, walker, utils
-index.ts          ← all of the above + pi ExtensionAPI
+utils.ts              ← no dependencies
+constants.ts          ← no dependencies (language map, batch sizes, thresholds)
+config.ts             ← node:path, node:fs
+mmr.ts                ← chunker.ts (ScoredChunk type)
+chunker.ts            ← node:path, constants.ts
+context-enricher.ts   ← chunker.ts (CodeChunk type)
+walker.ts             ← node:fs/promises, node:path
+embeddings.ts         ← openai, constants.ts
+db.ts                 ← @lancedb/lancedb, chunker.ts, constants.ts
+indexer.ts            ← config, db, embeddings, chunker, context-enricher, walker, constants.ts
+searcher.ts           ← db, embeddings, config, mmr, constants.ts
+tools.ts              ← indexer, searcher, db, config, walker, utils
+index.ts              ← all of the above + pi ExtensionAPI
 ```
 
 There are no circular dependencies. Every module except `index.ts` is independently testable without the pi extension API.

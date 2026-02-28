@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import type { IndexConfig } from "./config.js";
 import type { IndexDB } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
-import { chunkFile } from "./chunker.js";
+import { chunkFile, type CodeChunk } from "./chunker.js";
+import { enrichForEmbedding } from "./context-enricher.js";
 import { SUPPORTED_EXTENSIONS, EMBED_BATCH_SIZE, EMBED_CONCURRENCY } from "./constants.js";
 import {
   walkDirs,
@@ -232,6 +233,12 @@ export class Indexer {
     notify(`📚 Reading files... (${fileChunks.length}/${files.length})`);
 
     // Step 2: flatten all chunks, embed in batches of EMBED_BATCH_SIZE with EMBED_CONCURRENCY
+    // Build a file → chunks lookup so the enricher can access sibling symbols/imports
+    const chunksByFile = new Map<string, CodeChunk[]>();
+    for (const { file, chunks } of fileChunks) {
+      chunksByFile.set(file.relativePath, chunks);
+    }
+
     const allRaw = fileChunks.flatMap(({ file, chunks }) =>
       chunks.map((chunk) => ({ file, chunk }))
     );
@@ -253,10 +260,11 @@ export class Indexer {
         batchGroup.map(async (batch) => {
           const batchResults: typeof embedded = [];
           try {
-            // Build enriched texts for all chunks in the batch
-            const enrichedTexts = batch.map(({ chunk }) =>
-              `File: ${chunk.filePath} (${chunk.language})\nSymbol: ${chunk.symbol}\n---\n${chunk.text}`
-            );
+            // Build enriched texts with file-level context (symbols, imports)
+            const enrichedTexts = batch.map(({ chunk }) => {
+              const siblings = chunksByFile.get(chunk.filePath) ?? [chunk];
+              return enrichForEmbedding(chunk, siblings);
+            });
             // ONE API call for the whole batch
             const vectors = await this.emb.embed(enrichedTexts);
             // Zip vectors back to their chunks

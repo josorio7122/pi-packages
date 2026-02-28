@@ -45,16 +45,25 @@ A single searchable excerpt of a source file. The smallest unit stored in and re
 
 ### Embedding Input
 
-The text sent to the embedding service is an enriched version of the chunk — not the raw `text` field. The enriched form prepends a context header:
+The text sent to the embedding service is an enriched version of the chunk — not the raw `text` field. The enriched form prepends a context header built by the contextual enricher (`context-enricher.ts`):
 
 ```
 File: {filePath} ({language})
-Symbol: {symbol}
+Module symbols: {comma-separated list of all symbols in the same file}
+Imports: {comma-separated list of module names from the file's first chunk}
+Current: {symbol} (chunk {N} of {M})
 ---
 {text}
 ```
 
-This improves retrieval quality because the embedding encodes both the file context and the code content. The stored `text` field is always the raw source lines — never the enriched form.
+Lines are omitted when there is nothing to show:
+- `Module symbols:` is omitted when no chunks in the file have a detected symbol.
+- `Imports:` is omitted when no import/require statements are found in the first chunk.
+- `Current:` is omitted when the chunk has no symbol (e.g. preamble chunks).
+
+This improves retrieval quality because the embedding encodes the file's module context (sibling symbols, dependencies) alongside the code content. A search for "token validation" is more likely to surface a `verifyToken` chunk when the embedding also knows the file contains `signToken` and `refreshToken` and depends on `jsonwebtoken`.
+
+The stored `text` field is always the raw source lines — never the enriched form. The enrichment is deterministic and has zero LLM cost.
 
 ### Constraints
 

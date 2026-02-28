@@ -24,7 +24,7 @@ This workflow runs once per project, the first time a developer sets up pi-index
 3. The developer calls `codebase_index` (or the LLM calls it on their behalf). This is the trigger for the first build. (`PI_INDEX_AUTO` is `false` by default — see `specs/01-indexing.md`.)
 4. The indexer walks the configured directories, applies the file inclusion rules from DATA-MODEL.md, and collects all eligible files.
 5. For each eligible file, the indexer splits it into chunks (see `specs/01-indexing.md`). Each chunk gets a start line, end line, language label, and best-effort symbol name.
-6. The indexer sends chunks to the embedding service in batches. Each chunk produces a vector.
+6. The indexer enriches each chunk with file-level context (sibling symbols, imports, position) and sends the enriched text to the embedding service in batches. Each chunk produces a vector.
 7. The indexer writes each chunk — text, vector, metadata — to the index database.
 8. After all chunks are written, the indexer updates the mtime cache atomically.
 9. The tool returns a summary: files indexed, chunks created, time elapsed.
@@ -66,9 +66,9 @@ Developer / LLM
       ├─► codebase_index ──────────────────────────────────────────────┐
       │                                                                  │
       │   Indexing Pipeline                                              │
-      │   ┌─────────────┐    ┌──────────┐    ┌──────────────────────┐  │
-      │   │  File Walker │───►│  Chunker │───►│  Embedding Service   │  │
-      │   └─────────────┘    └──────────┘    └──────────────────────┘  │
+      │   ┌─────────────┐  ┌──────────┐  ┌───────────┐  ┌────────────┐  │
+      │   │  File Walker │─►│  Chunker │─►│  Enricher │─►│  Embed API │  │
+      │   └─────────────┘  └──────────┘  └───────────┘  └────────────┘  │
       │         │                                         │              │
       │   (mtime diff)                              (vectors)            │
       │         │                                         │              │

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Contextual enrichment** for embeddings — each chunk is enriched with file-level context (sibling symbols, import names, chunk position) before embedding. Deterministic, zero LLM cost. Improves retrieval quality by encoding module-level relationships into the embedding vector. New file: `context-enricher.ts`.
 - **BTREE scalar indexes** on `filePath`, `language`, and `extension` columns — accelerates scope filter queries (`@file:`, `@dir:`, `@lang:`, `@ext:`) from full column scans to indexed lookups. Created automatically during database initialization; idempotent on reopen.
 - **Table optimization** after indexing — compacts fragmented data files created by per-file delete+insert cycles. Runs automatically after every indexing operation that modifies data.
 - **Auto IVF-PQ vector index** for large codebases (>10,000 chunks) — creates an approximate nearest-neighbor index that speeds up vector search from brute-force O(n) to O(√n). Skips if already present or below threshold.
