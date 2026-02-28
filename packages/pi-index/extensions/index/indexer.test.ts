@@ -6,18 +6,19 @@ import { Indexer } from "./indexer.js";
 import { readMtimeCache } from "./walker.js";
 import { IndexDB } from "./db.js";
 import type { IndexDB as IndexDBType } from "./db.js";
-import type { Embeddings } from "./embeddings.js";
+import type { EmbeddingProvider } from "./embedding-provider.js";
 import type { IndexConfig } from "./config.js";
 
 let tmpDir: string;
+let configDir: string;
 
 function makeConfig(override: Partial<IndexConfig> = {}): IndexConfig {
   return {
     apiKey: "sk-test",
     model: "text-embedding-3-small",
     dimensions: 4,
-    dbPath: join(tmpDir, "lancedb"),
-    mtimeCachePath: join(tmpDir, "mtime-cache.json"),
+    dbPath: join(configDir, "lancedb"),
+    mtimeCachePath: join(configDir, "mtime-cache.json"),
     indexDirs: [tmpDir],
     indexRoot: tmpDir,
     autoIndex: false,
@@ -44,21 +45,25 @@ function makeDb(): IndexDBType {
   } as unknown as IndexDBType;
 }
 
-function makeEmb(): Embeddings {
+function makeEmb(): EmbeddingProvider {
   return {
-    embed: vi.fn().mockImplementation(async (texts: string | string[]) => {
-      if (Array.isArray(texts)) return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
-      return [0.1, 0.2, 0.3, 0.4];
+    embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3, 0.4]),
+    embedBatch: vi.fn().mockImplementation(async (texts: string[]) => {
+      return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
     }),
-  } as unknown as Embeddings;
+    getDimension: vi.fn().mockResolvedValue(4),
+    getProvider: vi.fn().mockReturnValue("test"),
+  } as unknown as EmbeddingProvider;
 }
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "pi-index-indexer-test-"));
+  configDir = mkdtempSync(join(tmpdir(), "pi-index-config-test-"));
 });
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
+  rmSync(configDir, { recursive: true, force: true });
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -215,7 +220,7 @@ describe("Indexer", () => {
 
   it("only indexes files with supported extensions", async () => {
     writeFileSync(join(tmpDir, "code.ts"), "const x = 1;");
-    writeFileSync(join(tmpDir, "ignored.rb"), "# ruby");
+    writeFileSync(join(tmpDir, "ignored.xyz"), "unsupported extension");
     const db = makeDb();
     const indexer = new Indexer(makeConfig(), db, makeEmb());
     const summary = await indexer.run();
@@ -244,11 +249,11 @@ describe("Indexer", () => {
     const db = makeDb();
     const emb = makeEmb();
     const authError = Object.assign(new Error("Unauthorized"), { status: 401 });
-    vi.mocked(emb.embed).mockRejectedValue(authError);
+    vi.mocked(emb.embedBatch).mockRejectedValue(authError);
     const indexer = new Indexer(makeConfig(), db, emb);
     const summary = await indexer.run();
-    // embed should only be called once — no retries for non-429
-    expect(emb.embed).toHaveBeenCalledTimes(1);
+    // embedBatch should only be called once — no retries for non-429
+    expect(emb.embedBatch).toHaveBeenCalledTimes(1);
     expect(summary.failedFiles).toContain("fail.ts");
   });
 
@@ -260,11 +265,11 @@ describe("Indexer", () => {
     const db = makeDb();
     const emb = makeEmb();
     const rateLimitError = Object.assign(new Error("Rate limit exceeded"), { status: 429 });
-    vi.mocked(emb.embed).mockRejectedValue(rateLimitError);
+    vi.mocked(emb.embedBatch).mockRejectedValue(rateLimitError);
     const indexer = new Indexer(makeConfig(), db, emb);
     const summary = await indexer.run();
-    // embed called once — indexer no longer retries (retry moved to embeddings.ts)
-    expect(emb.embed).toHaveBeenCalledTimes(1);
+    // embedBatch called once — indexer no longer retries (retry moved to embeddings.ts)
+    expect(emb.embedBatch).toHaveBeenCalledTimes(1);
     expect(summary.failedFiles).toContain("rate.ts");
   });
 
@@ -278,7 +283,7 @@ describe("Indexer", () => {
     const db = makeDb();
     const emb = makeEmb();
     const authError = Object.assign(new Error("Forbidden"), { status: 403 });
-    vi.mocked(emb.embed).mockRejectedValue(authError);
+    vi.mocked(emb.embedBatch).mockRejectedValue(authError);
     const indexer = new Indexer(makeConfig(), db, emb);
     const summary = await indexer.run();
     // insertChunks must NOT be called — the failed batch must not produce partial writes
@@ -299,7 +304,7 @@ describe("Indexer", () => {
 
     // Make embedding fail on second run
     const failingError = Object.assign(new Error("API error"), { status: 500 });
-    vi.mocked(emb.embed).mockRejectedValue(failingError);
+    vi.mocked(emb.embedBatch).mockRejectedValue(failingError);
 
     vi.mocked(db.deleteByFilePath).mockClear();
     await indexer.run();
@@ -327,10 +332,9 @@ describe("Indexer", () => {
     // Fail the embed batch that contains bad.ts chunks.
     // Both good.ts and bad.ts are small (1 chunk each) so they land in the same batch;
     // rejecting that batch marks both files as failed.
-    vi.mocked(emb.embed).mockImplementation(async (texts: string | string[]) => {
-      const arr = Array.isArray(texts) ? texts : [texts];
-      if (arr.some((t) => t.includes("bad.ts"))) throw new Error("Embed error for bad.ts");
-      return arr.map(() => [0.1, 0.2, 0.3, 0.4]);
+    vi.mocked(emb.embedBatch).mockImplementation(async (texts: string[]) => {
+      if (texts.some((t) => t.includes("bad.ts"))) throw new Error("Embed error for bad.ts");
+      return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
     });
 
     const summary = await indexer.run();
@@ -360,8 +364,8 @@ describe("Indexer", () => {
     // Modify the file so it's treated as changed on the next run
     writeFileSync(filePath, "export function a() { return 99; }");
 
-    // Make embed fail on second run
-    vi.mocked(emb.embed).mockRejectedValue(new Error("API error"));
+    // Make embedBatch fail on second run
+    vi.mocked(emb.embedBatch).mockRejectedValue(new Error("API error"));
 
     const summary = await indexer.run();
     // updated (file count) must exclude the failed file
@@ -377,18 +381,20 @@ describe("Indexer", () => {
       writeFileSync(join(tmpDir, `batch${i}.ts`), `export const v${i} = ${i};`);
     }
     const db = makeDb();
-    const batchEmb: Embeddings = {
-      embed: vi.fn().mockImplementation(async (texts: string | string[]) => {
-        if (Array.isArray(texts)) return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
-        return [0.1, 0.2, 0.3, 0.4];
+    const batchEmb: EmbeddingProvider = {
+      embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3, 0.4]),
+      embedBatch: vi.fn().mockImplementation(async (texts: string[]) => {
+        return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
       }),
-    } as unknown as Embeddings;
+      getDimension: vi.fn().mockResolvedValue(4),
+      getProvider: vi.fn().mockReturnValue("test"),
+    } as unknown as EmbeddingProvider;
     const indexer = new Indexer(makeConfig(), db, batchEmb);
     await indexer.run();
-    // embed must be called once (one batch for all chunks), not once per chunk
-    expect(batchEmb.embed).toHaveBeenCalledTimes(1);
-    // The single argument must be an array of strings (batch embed), not a bare string
-    const [arg] = vi.mocked(batchEmb.embed).mock.calls[0];
+    // embedBatch must be called once (one batch for all chunks), not once per chunk
+    expect(batchEmb.embedBatch).toHaveBeenCalledTimes(1);
+    // The single argument must be an array of strings
+    const [arg] = vi.mocked(batchEmb.embedBatch).mock.calls[0];
     expect(Array.isArray(arg)).toBe(true);
     expect((arg as string[]).length).toBeGreaterThan(0);
   });
@@ -404,17 +410,19 @@ describe("Indexer", () => {
     ].join("\n");
     writeFileSync(join(tmpDir, "jwt.ts"), content);
     const db = makeDb();
-    const spyEmb: Embeddings = {
-      embed: vi.fn().mockImplementation(async (texts: string | string[]) => {
-        if (Array.isArray(texts)) return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
-        return [0.1, 0.2, 0.3, 0.4];
+    const spyEmb: EmbeddingProvider = {
+      embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3, 0.4]),
+      embedBatch: vi.fn().mockImplementation(async (texts: string[]) => {
+        return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
       }),
-    } as unknown as Embeddings;
+      getDimension: vi.fn().mockResolvedValue(4),
+      getProvider: vi.fn().mockReturnValue("test"),
+    } as unknown as EmbeddingProvider;
     const indexer = new Indexer(makeConfig(), db, spyEmb);
     await indexer.run();
 
-    // Get the enriched texts passed to embed
-    const [embedArg] = vi.mocked(spyEmb.embed).mock.calls[0];
+    // Get the enriched texts passed to embedBatch
+    const [embedArg] = vi.mocked(spyEmb.embedBatch).mock.calls[0];
     const texts = embedArg as string[];
 
     // Every chunk should have file context
@@ -485,13 +493,12 @@ describe("Indexer", () => {
     const emb = makeEmb();
     let concurrent = 0;
     let maxConcurrent = 0;
-    vi.mocked(emb.embed).mockImplementation(async (texts: string | string[]) => {
+    vi.mocked(emb.embedBatch).mockImplementation(async (texts: string[]) => {
       concurrent++;
       maxConcurrent = Math.max(maxConcurrent, concurrent);
       await new Promise((r) => setTimeout(r, 5));
       concurrent--;
-      const arr = Array.isArray(texts) ? texts : [texts];
-      return arr.map(() => [0.1, 0.2, 0.3, 0.4]);
+      return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
     });
     const indexer = new Indexer(makeConfig(), db, emb);
     await indexer.run();
@@ -592,27 +599,114 @@ describe("Indexer", () => {
 
 });
 
+describe("runAsync", () => {
+  it("returns 'started' status and sets isRunning immediately", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    const result = indexer.runAsync();
+    expect(result).toEqual({ status: "started" });
+    expect(indexer.isRunning).toBe(true);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(indexer.isRunning).toBe(false);
+    expect(indexer.lastResult).not.toBeNull();
+  });
+
+  it("returns 'already_running' with progress when called during active indexing", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const db = makeDb();
+    vi.mocked(db.insertChunks).mockImplementation(
+      () => new Promise((resolve) => setTimeout(resolve, 300)),
+    );
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    indexer.runAsync();
+    expect(indexer.isRunning).toBe(true);
+    const result = indexer.runAsync();
+    expect(result.status).toBe("already_running");
+    await new Promise((r) => setTimeout(r, 500));
+    expect(indexer.isRunning).toBe(false);
+  });
+
+  it("sets lastResult after successful completion", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    indexer.runAsync();
+    await new Promise((r) => setTimeout(r, 200));
+    expect(indexer.lastResult).not.toBeNull();
+    expect(indexer.lastError).toBeNull();
+  });
+
+  it("sets lastError when run() throws, clears lastResult", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const db = makeDb();
+    vi.mocked(db.count).mockRejectedValue(new Error("DB failure"));
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    const result = indexer.runAsync();
+    expect(result.status).toBe("started");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(indexer.lastError).not.toBeNull();
+    expect(indexer.lastResult).toBeNull();
+  });
+
+  it("tracks progress messages via onProgress callback", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    const messages: string[] = [];
+    indexer.runAsync({ onProgress: (msg) => messages.push(msg) });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(messages.length).toBeGreaterThan(0);
+  });
+
+  it("clears progress field after run completes", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const indexer = new Indexer(makeConfig(), makeDb(), makeEmb());
+    indexer.runAsync();
+    await new Promise((r) => setTimeout(r, 200));
+    expect(indexer.progress).toBeNull();
+    expect(indexer.isRunning).toBe(false);
+  });
+
+  it("passes force option to the underlying run()", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "const x = 1;");
+    const db = makeDb();
+    const indexer = new Indexer(makeConfig(), db, makeEmb());
+    await indexer.run(); // first run to populate cache
+    vi.mocked(db.deleteAll).mockClear();
+    indexer.runAsync({ force: true });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(db.deleteAll).toHaveBeenCalledOnce();
+    expect(indexer.lastResult).not.toBeNull();
+  });
+});
+
 // --- Integration tests: real IndexDB + fake embeddings + spies ---
 
 /** Deterministic fake embeddings for integration tests. No network calls. */
-function makeFakeEmb(dim = 4): Embeddings {
+function makeFakeEmb(dim = 4): EmbeddingProvider {
+  const toVec = (t: string): number[] => {
+    let hash = 0;
+    for (let i = 0; i < t.length; i++) hash = ((hash << 5) - hash + t.charCodeAt(i)) | 0;
+    return Array.from({ length: dim }, (_, i) => Math.abs(Math.sin(hash + i)));
+  };
   return {
-    async embed(texts: string | string[]): Promise<number[] | number[][]> {
-      const toVec = (t: string): number[] => {
-        let hash = 0;
-        for (let i = 0; i < t.length; i++) hash = ((hash << 5) - hash + t.charCodeAt(i)) | 0;
-        return Array.from({ length: dim }, (_, i) => Math.abs(Math.sin(hash + i)));
-      };
-      if (Array.isArray(texts)) return texts.map(toVec);
-      return toVec(texts);
+    async embed(text: string): Promise<number[]> {
+      return toVec(text);
     },
-  } as unknown as Embeddings;
+    async embedBatch(texts: string[]): Promise<number[][]> {
+      return texts.map(toVec);
+    },
+    async getDimension(): Promise<number> {
+      return dim;
+    },
+    getProvider(): string {
+      return "test";
+    },
+  } as unknown as EmbeddingProvider;
 }
 
 describe("Indexer integration (real LanceDB)", () => {
   it("calls optimize() after rebuildFtsIndex when files are processed", async () => {
     writeFileSync(join(tmpDir, "hello.ts"), "export function hello() {}");
-    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const db = new IndexDB(join(configDir, "lancedb"), 4);
     const optimizeSpy = vi.spyOn(db, "optimize");
     const ftsSpy = vi.spyOn(db, "rebuildFtsIndex");
 
@@ -630,7 +724,7 @@ describe("Indexer integration (real LanceDB)", () => {
 
   it("does NOT call optimize() when no files changed", async () => {
     writeFileSync(join(tmpDir, "stable.ts"), "export const x = 1;");
-    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const db = new IndexDB(join(configDir, "lancedb"), 4);
     const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
     await indexer.run(); // first run indexes the file
 
@@ -642,7 +736,7 @@ describe("Indexer integration (real LanceDB)", () => {
   it("calls optimize() on delete-only run", async () => {
     const filePath = join(tmpDir, "del.ts");
     writeFileSync(filePath, "export const x = 1;");
-    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const db = new IndexDB(join(configDir, "lancedb"), 4);
     const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
     await indexer.run();
 
@@ -654,7 +748,7 @@ describe("Indexer integration (real LanceDB)", () => {
 
   it("calls createVectorIndexIfNeeded after optimize", async () => {
     writeFileSync(join(tmpDir, "new.ts"), "export const x = 1;");
-    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const db = new IndexDB(join(configDir, "lancedb"), 4);
     const optimizeSpy = vi.spyOn(db, "optimize");
     const vectorIdxSpy = vi.spyOn(db, "createVectorIndexIfNeeded");
 
@@ -669,7 +763,7 @@ describe("Indexer integration (real LanceDB)", () => {
 
   it("does NOT call createVectorIndexIfNeeded when no files changed", async () => {
     writeFileSync(join(tmpDir, "stable.ts"), "export const x = 1;");
-    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const db = new IndexDB(join(configDir, "lancedb"), 4);
     const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
     await indexer.run(); // first run
 

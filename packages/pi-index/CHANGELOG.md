@@ -9,20 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Contextual enrichment** for embeddings — each chunk is enriched with file-level context (sibling symbols, import names, chunk position) before embedding. Deterministic, zero LLM cost. Improves retrieval quality by encoding module-level relationships into the embedding vector. New file: `context-enricher.ts`.
-- **BTREE scalar indexes** on `filePath`, `language`, and `extension` columns — accelerates scope filter queries (`@file:`, `@dir:`, `@lang:`, `@ext:`) from full column scans to indexed lookups. Created automatically during database initialization; idempotent on reopen.
-- **Table optimization** after indexing — compacts fragmented data files created by per-file delete+insert cycles. Runs automatically after every indexing operation that modifies data.
-- **Auto IVF-PQ vector index** for large codebases (>10,000 chunks) — creates an approximate nearest-neighbor index that speeds up vector search from brute-force O(n) to O(√n). Skips if already present or below threshold.
-- `IndexDB.optimize()` method — exposes LanceDB table compaction
-- `IndexDB.createVectorIndexIfNeeded()` method — threshold-based vector index creation with dynamic `numSubVectors` calculation
-- `IndexDB.listIndexes()` method — returns names of all indexes on the chunks table
-- `VECTOR_INDEX_THRESHOLD` constant (10,000 chunks)
-- Progress notifications in `codebase_index` tool handler (previously only `/index-rebuild` and auto-index had them)
-- Shared constants file (`constants.ts`) — single source of truth for all configuration constants
+- **Multi-provider embeddings** — abstract `EmbeddingProvider` interface with three implementations:
+  - **OpenAI** (default) — wraps existing `Embeddings` class
+  - **Ollama** — local/offline, no API key needed, uses native HTTP fetch
+  - **Voyage AI** — code-optimized embeddings (`voyage-code-3`), uses native HTTP fetch
+- **Tree-sitter AST chunking** — replaces regex-based boundary detection with proper syntax tree parsing for 6 languages (TypeScript, JavaScript, Python, Ruby, CSS, SCSS). Extracts accurate symbol names from AST nodes.
+- **LangChain text splitter fallback** — `@langchain/textsplitters` `RecursiveCharacterTextSplitter` for languages without tree-sitter grammars. Language-aware splitting for Markdown, HTML, Python, Ruby, JS; generic splitting for JSON, YAML, TOML, etc.
+- **13 new file extensions** — Ruby ecosystem (`.rb`, `.erb`, `.rake`, `.gemspec`, `.ru`), Python type stubs (`.pyi`), CSS preprocessors (`.scss`, `.sass`, `.less`), config files (`.json`, `.yaml`, `.yml`, `.toml`)
+- **SCSS/LESS import extraction** — `@import`, `@use`, `@forward` patterns in context enricher
+- **Provider factory** — `createProvider(cfg)` returns the correct `EmbeddingProvider` based on `PI_INDEX_PROVIDER` env var
+- Provider-specific env vars: `PI_INDEX_PROVIDER`, `PI_INDEX_OLLAMA_HOST`, `PI_INDEX_OLLAMA_MODEL`, `PI_INDEX_VOYAGE_API_KEY`, `PI_INDEX_VOYAGE_MODEL`
+- **Contextual enrichment** for embeddings — each chunk is enriched with file-level context (sibling symbols, import names, chunk position) before embedding. Deterministic, zero LLM cost.
+- **BTREE scalar indexes** on `filePath`, `language`, and `extension` columns
+- **Table optimization** after indexing — compacts fragmented data files
+- **Auto IVF-PQ vector index** for large codebases (>10,000 chunks)
+- Shared constants file (`constants.ts`) — single source of truth
 - CHANGELOG.md
 
 ### Changed
 
+- `chunkFile()` is now async (LangChain fallback is async)
+- `Indexer` and `Searcher` now accept `EmbeddingProvider` interface instead of concrete `Embeddings` class
+- Extension init function is now async (probes dimension for non-OpenAI providers)
+- `withRetry()` and `isRateLimitError()` exported from `embeddings.ts` for reuse by other providers
 - Removed unused `@sinclair/typebox` peer dependency
 
 ### Fixed

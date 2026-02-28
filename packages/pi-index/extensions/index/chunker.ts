@@ -1,5 +1,6 @@
 import { extname, basename } from "node:path";
 import { LANGUAGE_MAP, MAX_CHUNK_LINES } from "./constants.js";
+import { astSplit, langchainSplit, type ASTRange } from "./ast-chunker.js";
 
 /**
  * A single indexed unit of source code produced by `chunkFile`.
@@ -39,67 +40,86 @@ export function detectLanguage(ext: string): string {
   return LANGUAGE_MAP[ext] ?? "text";
 }
 
-// Structural boundary patterns per language
-// Each entry: [regex that matches the START of a boundary line, function to extract symbol name]
-type BoundaryDef = [RegExp, (line: string) => string];
-
-const TS_JS_BOUNDARIES: BoundaryDef[] = [
-  [/^export\s+(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
-  [/^export\s+(?:abstract\s+)?class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-  [/^export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/, (l) => l.match(/const\s+(\w+)/)?.[1] ?? ""],
-  [/^(?:async\s+)?function\s+(\w+)/, (l) => l.match(/function\s+(\w+)/)?.[1] ?? ""],
-  [/^abstract\s+class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-  [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-];
-
-const BOUNDARIES: Record<string, BoundaryDef[]> = {
-  typescript: TS_JS_BOUNDARIES,
-  javascript: TS_JS_BOUNDARIES,
-  python: [
-    [/^(?:async\s+)?def\s+(\w+)/, (l) => l.match(/def\s+(\w+)/)?.[1] ?? ""],
-    [/^class\s+(\w+)/, (l) => l.match(/class\s+(\w+)/)?.[1] ?? ""],
-  ],
-  sql: [
-    [/^(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE)\b/i, (l) => l.trim().split(/\s+/).slice(0, 3).join(" ")],
-  ],
-  markdown: [
-    [/^#{2,3}\s+(.+)/, (l) => l.replace(/^#+\s+/, "").trim()],
-  ],
-  css: [
-    [/^\.([a-zA-Z][a-zA-Z0-9_-]*)\s*[,{]|^[a-zA-Z][a-zA-Z0-9_-]*\s*\{/, (l) => l.replace(/[,{].*/, "").trim()],
-  ],
-};
-
-function findSymbol(line: string, language: string): string {
-  const defs = BOUNDARIES[language] ?? [];
-  for (const [regex, extractor] of defs) {
-    if (regex.test(line)) return extractor(line);
+/**
+ * Convert a flat list of AST ranges into full file coverage by filling in gaps
+ * between nodes and clamping to the total line count.
+ *
+ * Gap ranges (preamble, inter-node gaps, trailing lines) get an empty symbol.
+ */
+function buildChunkRanges(ranges: ASTRange[], totalLines: number): ASTRange[] {
+  if (ranges.length === 0) {
+    return [{ startLine: 0, endLine: totalLines - 1, symbol: "" }];
   }
-  return "";
+
+  const result: ASTRange[] = [];
+
+  // Preamble (lines before the first node)
+  if (ranges[0].startLine > 0) {
+    result.push({ startLine: 0, endLine: ranges[0].startLine - 1, symbol: "" });
+  }
+
+  // Each AST node + gap between consecutive nodes
+  for (let i = 0; i < ranges.length; i++) {
+    result.push(ranges[i]);
+
+    const nextStart = i + 1 < ranges.length ? ranges[i + 1].startLine : totalLines;
+    if (ranges[i].endLine + 1 < nextStart) {
+      result.push({
+        startLine: ranges[i].endLine + 1,
+        endLine: nextStart - 1,
+        symbol: "",
+      });
+    }
+  }
+
+  // Trailing lines after the last node
+  const lastEnd = ranges[ranges.length - 1].endLine;
+  if (lastEnd < totalLines - 1) {
+    result.push({ startLine: lastEnd + 1, endLine: totalLines - 1, symbol: "" });
+  }
+
+  return result;
 }
 
-function isBoundary(line: string, language: string): boolean {
-  const defs = BOUNDARIES[language] ?? [];
-  return defs.some(([regex]) => regex.test(line));
+/**
+ * Sub-split any range that exceeds MAX_CHUNK_LINES into equal-sized pieces.
+ */
+function subSplit(ranges: ASTRange[]): ASTRange[] {
+  const result: ASTRange[] = [];
+  for (const range of ranges) {
+    const size = range.endLine - range.startLine + 1;
+    if (size <= MAX_CHUNK_LINES) {
+      result.push(range);
+    } else {
+      for (let i = range.startLine; i <= range.endLine; i += MAX_CHUNK_LINES) {
+        result.push({
+          startLine: i,
+          endLine: Math.min(i + MAX_CHUNK_LINES - 1, range.endLine),
+          symbol: i === range.startLine ? range.symbol : "",
+        });
+      }
+    }
+  }
+  return result;
 }
 
 /**
  * Split a source file into indexable chunks aligned to structural boundaries.
  *
- * Chunks are split at language-specific boundaries (function/class declarations).
- * Any boundary-aligned block exceeding `MAX_CHUNK_LINES` is further sub-split.
- * Files with no recognized boundaries are split purely by line count.
+ * Uses tree-sitter AST parsing when a grammar is available for the language,
+ * falling back to LangChain's RecursiveCharacterTextSplitter otherwise.
+ * Any block exceeding `MAX_CHUNK_LINES` is further sub-split.
  *
  * @param filePath - Relative path of the file (used as the chunk ID prefix and stored in DB)
  * @param content - Full UTF-8 text content of the file
  * @param mtime - File modification time in milliseconds (Unix epoch)
  * @returns Array of `CodeChunk` objects with empty `vector` fields (filled by the embedder)
  */
-export function chunkFile(
+export async function chunkFile(
   filePath: string,
   content: string,
   mtime: number,
-): CodeChunk[] {
+): Promise<CodeChunk[]> {
   if (!content.trim()) return [];
 
   const ext = getExtension(filePath);
@@ -107,63 +127,31 @@ export function chunkFile(
   const lines = content.split("\n");
   const now = Date.now();
 
-  // Collect 0-based boundary indices
-  const boundaries: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (isBoundary(lines[i], language)) {
-      boundaries.push(i);
-    }
+  // Try AST splitting first; fall back to LangChain if no grammar or parse failure
+  let ranges = astSplit(content, language);
+
+  if (!ranges || ranges.length === 0) {
+    ranges = await langchainSplit(content, language);
   }
 
-  // Build chunk ranges from boundaries
-  const ranges: Array<{ start: number; end: number }> = [];
-  if (boundaries.length === 0) {
-    // No boundaries: split by MAX_CHUNK_LINES
-    for (let i = 0; i < lines.length; i += MAX_CHUNK_LINES) {
-      ranges.push({ start: i, end: Math.min(i + MAX_CHUNK_LINES - 1, lines.length - 1) });
-    }
-  } else {
-    // Lines before the first boundary = preamble chunk
-    if (boundaries[0] > 0) {
-      ranges.push({ start: 0, end: boundaries[0] - 1 });
-    }
-    for (let b = 0; b < boundaries.length; b++) {
-      const start = boundaries[b];
-      const end = b + 1 < boundaries.length ? boundaries[b + 1] - 1 : lines.length - 1;
-      ranges.push({ start, end });
-    }
-  }
+  // Fill gaps so every line belongs to exactly one chunk
+  const chunkRanges = buildChunkRanges(ranges, lines.length);
 
   // Sub-split any range exceeding MAX_CHUNK_LINES
-  const finalRanges: Array<{ start: number; end: number }> = [];
-  for (const range of ranges) {
-    if (range.end - range.start + 1 <= MAX_CHUNK_LINES) {
-      finalRanges.push(range);
-    } else {
-      for (let i = range.start; i <= range.end; i += MAX_CHUNK_LINES) {
-        finalRanges.push({ start: i, end: Math.min(i + MAX_CHUNK_LINES - 1, range.end) });
-      }
-    }
-  }
+  const finalRanges = subSplit(chunkRanges);
 
-  return finalRanges.map((range, chunkIndex) => {
-    const chunkLines = lines.slice(range.start, range.end + 1);
-    const text = chunkLines.join("\n");
-    const symbol = findSymbol(lines[range.start], language);
-
-    return {
-      id: `${filePath}:${chunkIndex}`,
-      text,
-      vector: [],
-      filePath,
-      chunkIndex,
-      startLine: range.start + 1, // convert to 1-based
-      endLine: range.end + 1,     // convert to 1-based
-      language,
-      extension: ext,
-      symbol,
-      mtime,
-      createdAt: now,
-    };
-  });
+  return finalRanges.map((range, chunkIndex) => ({
+    id: `${filePath}:${chunkIndex}`,
+    text: lines.slice(range.startLine, range.endLine + 1).join("\n"),
+    vector: [],
+    filePath,
+    chunkIndex,
+    startLine: range.startLine + 1,  // convert to 1-based
+    endLine: range.endLine + 1,       // convert to 1-based
+    language,
+    extension: ext,
+    symbol: range.symbol,
+    mtime,
+    createdAt: now,
+  }));
 }

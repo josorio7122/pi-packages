@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { parseScopeFilters, buildFilter, formatResults, Searcher } from "./searcher.js";
 import type { ScoredChunk } from "./mmr.js";
 import type { IndexDB } from "./db.js";
-import type { Embeddings } from "./embeddings.js";
+import type { EmbeddingProvider } from "./embedding-provider.js";
 import type { IndexConfig } from "./config.js";
 
 // --- parseScopeFilters ---
@@ -245,8 +245,13 @@ describe("Searcher", () => {
     } as unknown as IndexDB;
   }
 
-  function makeEmb(vec = [0.1, 0.2, 0.3]): Embeddings {
-    return { embed: vi.fn().mockResolvedValue(vec) } as unknown as Embeddings;
+  function makeEmb(vec = [0.1, 0.2, 0.3]): EmbeddingProvider {
+    return {
+      embed: vi.fn().mockResolvedValue(vec),
+      embedBatch: vi.fn().mockResolvedValue([vec]),
+      getDimension: vi.fn().mockResolvedValue(vec.length),
+      getProvider: vi.fn().mockReturnValue("test"),
+    } as unknown as EmbeddingProvider;
   }
 
   it("returns formatted results from hybridSearch", async () => {

@@ -1,7 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { loadConfig } from "./config.js";
+import { loadConfig, createProvider } from "./config.js";
 import { IndexDB } from "./db.js";
-import { Embeddings } from "./embeddings.js";
 import { Indexer } from "./indexer.js";
 import { Searcher } from "./searcher.js";
 import { createIndexTools, formatSummary } from "./tools.js";
@@ -10,7 +9,7 @@ import { relativeTime } from "./utils.js";
 
 const RULE = "─".repeat(39);
 
-export default function (pi: ExtensionAPI): void {
+export default async function (pi: ExtensionAPI): Promise<void> {
   // The index root is the directory where pi is running (the project root)
   const indexRoot = process.cwd();
 
@@ -70,8 +69,24 @@ export default function (pi: ExtensionAPI): void {
   }
 
   // Build the dependency graph
-  const db = new IndexDB(cfg.dbPath, cfg.dimensions);
-  const emb = new Embeddings(cfg.apiKey, cfg.model);
+  const emb = createProvider(cfg);
+
+  // Resolve vector dimensions (OpenAI: known from model name, others: probe the provider)
+  let dimensions = cfg.dimensions;
+  if (dimensions === 0) {
+    try {
+      dimensions = await emb.getDimension();
+    } catch (err) {
+      // Provider unreachable at startup — register stub tools with error
+      const errorMsg = `Error: [PROVIDER_UNREACHABLE] Could not determine embedding dimensions from ${cfg.provider} provider: ${err}`;
+      for (const name of ["codebase_search", "codebase_index", "codebase_status"]) {
+        pi.registerTool({ name, description: `pi-index: ${name} (disabled)`, parameters: { type: "object", properties: {} }, handler: async () => errorMsg } as never);
+      }
+      return;
+    }
+  }
+
+  const db = new IndexDB(cfg.dbPath, dimensions);
   const indexer = new Indexer(cfg, db, emb);
   const searcher = new Searcher(db, emb, cfg);
 
@@ -133,6 +148,17 @@ export default function (pi: ExtensionAPI): void {
 
       return undefined;
     });
+
+    // Periodic timer — re-index at fixed intervals even without user messages
+    if (cfg.autoIndexInterval > 0) {
+      const periodicMs = cfg.autoIndexInterval * 60 * 1000;
+      const timer = setInterval(() => {
+        if (indexer.isRunning) return;
+        indexer.runAsync();
+      }, periodicMs);
+      // Don't keep the process alive just for periodic sync
+      timer.unref?.();
+    }
   }
 
   // ─── Slash commands ──────────────────────────────────────────────────────

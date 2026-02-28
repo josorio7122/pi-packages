@@ -91,6 +91,9 @@ export function createIndexTools(
         if (result.startsWith("[INDEX_EMPTY]")) {
           return "Error: [INDEX_NOT_INITIALIZED] Run codebase_index to build the index before searching.";
         }
+        if (indexer.isRunning) {
+          return result + "\n\n⚠️ Note: Indexing is currently in progress — results may be incomplete.";
+        }
         return result;
       } catch (err) {
         const msg = String(err);
@@ -121,22 +124,16 @@ export function createIndexTools(
     handler: async (args, notify) => {
       const force = typeof args.force === "boolean" ? args.force : false;
       const effectiveNotify = notify ?? opts.notify;
-      try {
-        const summary = await indexer.run({
-          force,
-          onProgress: effectiveNotify ? (msg) => effectiveNotify(msg, "info") : undefined,
-        });
-        return formatSummary(summary, force);
-      } catch (err) {
-        const msg = String(err);
-        if (msg.includes("INDEX_ALREADY_RUNNING")) {
-          return "Error: [INDEX_ALREADY_RUNNING] An index operation is already in progress. Wait for it to complete.";
-        }
-        if (msg.includes("CONFIG_MISSING_API_KEY")) {
-          return "Error: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable pi-index.";
-        }
-        return `Error: [INDEX_FAILED] ${msg}`;
+      const result = indexer.runAsync({
+        force,
+        onProgress: effectiveNotify ? (msg) => effectiveNotify(msg, "info") : undefined,
+      });
+
+      if (result.status === "already_running") {
+        return "⏳ Indexing is already in progress. Use codebase_status to check progress.";
       }
+
+      return "⚡ Started indexing — search is available with partial results while indexing completes. Use codebase_status to check progress.";
     },
   };
 
@@ -184,7 +181,11 @@ export function createIndexTools(
         ].join("\n");
 
         if (indexer.isRunning) {
-          statusStr += "\n  (Index currently rebuilding in background)";
+          statusStr += `\n  Indexing:      In progress${indexer.progress ? ` — ${indexer.progress}` : ""}`;
+        }
+
+        if (indexer.lastError) {
+          statusStr += `\n  Last error:    ${indexer.lastError}`;
         }
 
         return statusStr;

@@ -1,5 +1,5 @@
 import type { IndexDB } from "./db.js";
-import type { Embeddings } from "./embeddings.js";
+import type { EmbeddingProvider } from "./embedding-provider.js";
 import type { IndexConfig } from "./config.js";
 import { mmrRerank, type ScoredChunk } from "./mmr.js";
 import { KNOWN_SCOPES, SEARCH_OVERFETCH_FACTOR } from "./constants.js";
@@ -132,7 +132,7 @@ export function formatResults(results: ScoredChunk[], originalQuery: string): st
 export class Searcher {
   constructor(
     private readonly db: IndexDB,
-    private readonly emb: Embeddings,
+    private readonly emb: EmbeddingProvider,
     private readonly cfg: IndexConfig,
   ) {}
 

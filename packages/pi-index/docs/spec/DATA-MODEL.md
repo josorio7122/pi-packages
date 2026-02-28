@@ -1,6 +1,6 @@
 # pi-index — Data Model
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Status:** Current
 
 ---
@@ -58,7 +58,7 @@ Current: {symbol} (chunk {N} of {M})
 
 Lines are omitted when there is nothing to show:
 - `Module symbols:` is omitted when no chunks in the file have a detected symbol.
-- `Imports:` is omitted when no import/require statements are found in the first chunk.
+- `Imports:` is omitted when no import/require statements are found in the first chunk. For SCSS and LESS files, `@import`, `@use`, and `@forward` directives are also recognised as import statements and included in this line.
 - `Current:` is omitted when the chunk has no symbol (e.g. preamble chunks).
 
 This improves retrieval quality because the embedding encodes the file's module context (sibling symbols, dependencies) alongside the code content. A search for "token validation" is more likely to surface a `verifyToken` chunk when the embedding also knows the file contains `signToken` and `refreshToken` and depends on `jsonwebtoken`.
@@ -113,7 +113,7 @@ The runtime configuration derived from environment variables at extension startu
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `apiKey` | string | Yes | OpenAI API key for embeddings. Sourced from `PI_INDEX_API_KEY` or `OPENAI_API_KEY`. |
+| `apiKey` | string | Yes | OpenAI API key for embeddings (used when `provider` is `openai`). Sourced from `PI_INDEX_API_KEY` or `OPENAI_API_KEY`. |
 | `model` | string | Yes | Embedding model name. Default: `text-embedding-3-small`. |
 | `dimensions` | number | Yes | Vector dimension count for the configured model. Derived — not set by the user. |
 | `dbPath` | string | Yes | Absolute path to the index database directory. |
@@ -121,15 +121,22 @@ The runtime configuration derived from environment variables at extension startu
 | `indexRoot` | string | Yes | Absolute path to the project root directory (where `process.cwd()` points when pi starts). |
 | `indexDirs` | string[] | Yes | Paths of directories to walk during indexing. At least one entry. Defaults to `[indexRoot]`. May be absolute or relative to `process.cwd()`. |
 | `autoIndex` | boolean | Yes | Whether to trigger incremental indexing on session start. Default: `false`. |
-| `autoIndexInterval` | number | Yes | Minutes between automatic re-indexes when `autoIndex` is true. `0` = once per session only. Default: `0`. |
+| `autoIndexInterval` | number | Yes | Minutes between automatic re-indexes when `autoIndex` is true. `0` = once per session only. Default: `0`. A `setInterval` timer is registered when this value is greater than 0; if the indexer is already running the tick is skipped. |
 | `maxFileKB` | number | Yes | Maximum file size in kilobytes. Files larger than this are skipped. Default: `500`. |
 | `minScore` | number | Yes | Minimum relevance score for search results. Default: `0.2`. |
 | `mmrLambda` | number | Yes | MMR diversity weight. `1.0` = pure relevance, `0.0` = maximum diversity. Default: `0.5`. |
+| `provider` | string | Yes | Embedding provider to use. One of: `openai` (default), `ollama`, `voyage`. Sourced from `PI_INDEX_PROVIDER`. |
+| `ollamaHost` | string | No | Base URL for the Ollama HTTP API. Default: `http://localhost:11434`. Sourced from `PI_INDEX_OLLAMA_HOST`. Only used when `provider` is `ollama`. |
+| `ollamaModel` | string | No | Ollama model name to use for embeddings. Default: `nomic-embed-text`. Sourced from `PI_INDEX_OLLAMA_MODEL`. Only used when `provider` is `ollama`. |
+| `voyageApiKey` | string | No | Voyage AI API key. Sourced from `PI_INDEX_VOYAGE_API_KEY`. Required when `provider` is `voyage`. |
+| `voyageModel` | string | No | Voyage AI model name. Default: `voyage-code-2`. Sourced from `PI_INDEX_VOYAGE_MODEL`. Only used when `provider` is `voyage`. |
 
 ### Constraints
 
-- `apiKey` must be non-empty or `CONFIG_MISSING_API_KEY` is raised and all tools are disabled.
-- `dimensions` must match the model: 1536 for `text-embedding-3-small`, 3072 for `text-embedding-3-large`.
+- `apiKey` must be non-empty when `provider` is `openai`, or `CONFIG_MISSING_API_KEY` is raised and all tools are disabled.
+- `voyageApiKey` must be non-empty when `provider` is `voyage`, or `CONFIG_MISSING_API_KEY` is raised and all tools are disabled.
+- `dimensions` must match the model: 1536 for `text-embedding-3-small`, 3072 for `text-embedding-3-large`. For Ollama and Voyage AI models, dimensions are determined by `getDimension()` on the provider.
+- `provider` must be one of `openai`, `ollama`, or `voyage`.
 - `minScore` must be in `[0.0, 1.0]`.
 - `maxFileKB` must be greater than 0.
 - `mmrLambda` must be in `[0.0, 1.0]`.
@@ -166,21 +173,36 @@ The `chunks` table has several indexes that are created and maintained automatic
 
 ## Supported Languages
 
-| Extension | Language Label |
-| --- | --- |
-| `.ts` | `typescript` |
-| `.tsx` | `typescript` |
-| `.d.ts` | `typescript` |
-| `.js` | `javascript` |
-| `.jsx` | `javascript` |
-| `.py` | `python` |
-| `.sql` | `sql` |
-| `.md` | `markdown` |
-| `.css` | `css` |
-| `.html` | `html` |
-| `.txt` | `text` |
+| Extension | Language Label | AST chunking |
+| --- | --- | --- |
+| `.ts` | `typescript` | ✅ tree-sitter |
+| `.tsx` | `typescript` | ✅ tree-sitter |
+| `.d.ts` | `typescript` | ✅ tree-sitter |
+| `.js` | `javascript` | ✅ tree-sitter |
+| `.jsx` | `javascript` | ✅ tree-sitter |
+| `.py` | `python` | ✅ tree-sitter |
+| `.pyi` | `python` | ✅ tree-sitter |
+| `.rb` | `ruby` | ✅ tree-sitter |
+| `.erb` | `erb` | fallback |
+| `.rake` | `ruby` | ✅ tree-sitter |
+| `.gemspec` | `ruby` | ✅ tree-sitter |
+| `.ru` | `ruby` | ✅ tree-sitter |
+| `.css` | `css` | ✅ tree-sitter |
+| `.scss` | `scss` | ✅ tree-sitter |
+| `.sass` | `scss` | ✅ tree-sitter |
+| `.less` | `less` | fallback |
+| `.sql` | `sql` | fallback |
+| `.md` | `markdown` | fallback |
+| `.html` | `html` | fallback |
+| `.json` | `json` | fallback |
+| `.yaml` | `yaml` | fallback |
+| `.yml` | `yaml` | fallback |
+| `.toml` | `toml` | fallback |
+| `.txt` | `text` | fallback |
 
 Files with extensions not in this table are silently skipped during indexing. The `@lang:` scope filter matches against the language label column.
+
+**AST chunking column:** "✅ tree-sitter" means the chunker uses a tree-sitter grammar to identify structural boundaries (functions, classes, methods) for that language. "fallback" means the chunker uses LangChain `RecursiveCharacterTextSplitter` as the splitting strategy for that language.
 
 **Note on `.d.ts`:** TypeScript declaration files use the extension `.d.ts`. Since `path.extname("foo.d.ts")` returns `.ts`, the walker and chunker use `basename.endsWith(".d.ts")` to detect this extension correctly before falling back to `extname`.
 
@@ -188,12 +210,26 @@ Files with extensions not in this table are silently skipped during indexing. Th
 
 ## Supported Embedding Models
 
+The extension supports multiple embedding providers via the `EmbeddingProvider` interface. The provider is selected by the `provider` config field (env var `PI_INDEX_PROVIDER`).
+
+### OpenAI (default — `provider: "openai"`)
+
 | Model Name | Dimensions |
 | --- | --- |
 | `text-embedding-3-small` | 1536 |
 | `text-embedding-3-large` | 3072 |
 
-Changing the model after an index has been built produces a mixed-dimension index that will return incorrect results. The index must be cleared (`/index-clear`) and rebuilt after changing the model.
+### Ollama (local/offline — `provider: "ollama"`)
+
+Ollama runs locally; no API key is required. The model is configured via `PI_INDEX_OLLAMA_MODEL` (default: `nomic-embed-text`). Dimensions are queried from the running Ollama instance at startup via `getDimension()`.
+
+### Voyage AI (code-optimized — `provider: "voyage"`)
+
+Voyage AI is optimized for code retrieval. Requires `PI_INDEX_VOYAGE_API_KEY`. The model is configured via `PI_INDEX_VOYAGE_MODEL` (default: `voyage-code-2`). Dimensions are determined by `getDimension()` on the provider.
+
+---
+
+Changing the provider or model after an index has been built produces a mixed-dimension index that will return incorrect results. The index must be cleared (`/index-clear`) and rebuilt after changing the provider or model.
 
 ---
 

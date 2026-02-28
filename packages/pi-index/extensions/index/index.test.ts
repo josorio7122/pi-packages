@@ -14,6 +14,12 @@ vi.mock("./config.js", () => ({
     maxFileKB: 500,
     minScore: 0.2,
   }),
+  createProvider: vi.fn().mockReturnValue({
+    embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+    embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+    getDimension: vi.fn().mockResolvedValue(1536),
+    getProvider: vi.fn().mockReturnValue("openai"),
+  }),
 }));
 
 vi.mock("./db.js", () => ({
@@ -390,6 +396,12 @@ describe("pi-index extension entry point", () => {
         dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
         indexDirs: ["/project"], indexRoot: "/project", autoIndex: true, maxFileKB: 500, minScore: 0.2,
       }),
+      createProvider: vi.fn().mockReturnValue({
+        embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+        embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+        getDimension: vi.fn().mockResolvedValue(1536),
+        getProvider: vi.fn().mockReturnValue("openai"),
+      }),
     }));
     const mod2 = await import("./index.js");
     const ext2 = mod2.default as (pi: typeof pi) => void;
@@ -635,6 +647,12 @@ describe("auto-index interval behavior", () => {
         indexDirs: ["/project"], indexRoot: "/project", autoIndex: true,
         maxFileKB: 500, minScore: 0.2, autoIndexInterval: 0,
       }),
+      createProvider: vi.fn().mockReturnValue({
+        embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+        embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+        getDimension: vi.fn().mockResolvedValue(1536),
+        getProvider: vi.fn().mockReturnValue("openai"),
+      }),
     }));
 
     const mod = await import("./index.js");
@@ -674,6 +692,12 @@ describe("auto-index interval behavior", () => {
         dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
         indexDirs: ["/project"], indexRoot: "/project", autoIndex: true,
         maxFileKB: 500, minScore: 0.2, autoIndexInterval: 30,
+      }),
+      createProvider: vi.fn().mockReturnValue({
+        embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+        embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+        getDimension: vi.fn().mockResolvedValue(1536),
+        getProvider: vi.fn().mockReturnValue("openai"),
       }),
     }));
 
@@ -716,6 +740,12 @@ describe("auto-index interval behavior", () => {
         dbPath: "/tmp/lancedb", mtimeCachePath: "/tmp/mtime-cache.json",
         indexDirs: ["/project"], indexRoot: "/project", autoIndex: true,
         maxFileKB: 500, minScore: 0.2, autoIndexInterval: 30,
+      }),
+      createProvider: vi.fn().mockReturnValue({
+        embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+        embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+        getDimension: vi.fn().mockResolvedValue(1536),
+        getProvider: vi.fn().mockReturnValue("openai"),
       }),
     }));
 

@@ -13,6 +13,27 @@ export const LANGUAGE_MAP: Record<string, string> = {
   ".css": "css",
   ".html": "html",
   ".txt": "text",
+
+  // Ruby ecosystem
+  ".rb": "ruby",
+  ".erb": "erb",
+  ".rake": "ruby",
+  ".gemspec": "ruby",
+  ".ru": "ruby",
+
+  // Python addition
+  ".pyi": "python",
+
+  // CSS preprocessors
+  ".scss": "scss",
+  ".sass": "scss",
+  ".less": "less",
+
+  // Config / ecosystem files
+  ".json": "json",
+  ".yaml": "yaml",
+  ".yml": "yaml",
+  ".toml": "toml",
 };
 
 /** Derived from LANGUAGE_MAP keys — single source of truth for supported file types. */

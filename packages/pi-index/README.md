@@ -9,11 +9,12 @@ Semantic codebase search for [pi](https://github.com/mariozechner/pi) — the AI
 ## Features
 
 - **Hybrid search** — vector similarity + BM25 full-text via LanceDB's built-in tantivy FTS
-- **Structural chunking** — splits at function/class/section boundaries (not arbitrary line counts)
+- **Tree-sitter AST chunking** — proper syntax-tree parsing for JS, TS, Python, Ruby, CSS, SCSS. LangChain text splitter fallback for other languages.
+- **Multi-provider embeddings** — OpenAI (default), Ollama (local/offline), Voyage AI (code-optimized)
 - **MMR reranking** — Maximal Marginal Relevance prevents result clustering
 - **Scope filters** — `@file:`, `@dir:`, `@ext:`, `@lang:` narrow searches precisely
+- **Contextual enrichment** — file-level context (symbols, imports, position) injected into embeddings at zero LLM cost
 - **Incremental indexing** — mtime-based cache skips unchanged files
-- **Zero extra dependencies** — reuses `@lancedb/lancedb` and `openai` from `@josorio/pi-memory`
 
 ---
 
@@ -54,10 +55,22 @@ Then add to your pi config:
 
 pi-index is configured entirely via environment variables:
 
-| Variable / Key | Default | Description |
+### Embedding Provider
+
+| Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` or `PI_INDEX_API_KEY` | — | **Required.** OpenAI API key |
-| `PI_INDEX_MODEL` | `text-embedding-3-small` | Embedding model. Dimensions are derived automatically from the model (`text-embedding-3-small` = 1536, `text-embedding-3-large` = 3072). |
+| `PI_INDEX_PROVIDER` | `openai` | Embedding provider: `openai`, `ollama`, or `voyage` |
+| `OPENAI_API_KEY` or `PI_INDEX_API_KEY` | — | **Required for OpenAI.** OpenAI API key |
+| `PI_INDEX_MODEL` | `text-embedding-3-small` | OpenAI embedding model (`text-embedding-3-small` = 1536d, `text-embedding-3-large` = 3072d) |
+| `PI_INDEX_OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama server URL |
+| `PI_INDEX_OLLAMA_MODEL` | `nomic-embed-text` | Ollama embedding model |
+| `PI_INDEX_VOYAGE_API_KEY` or `VOYAGEAI_API_KEY` | — | **Required for Voyage.** Voyage AI API key |
+| `PI_INDEX_VOYAGE_MODEL` | `voyage-code-3` | Voyage AI model (code-optimized) |
+
+### Indexing & Search
+
+| Variable | Default | Description |
+|---|---|---|
 | `PI_INDEX_DB_PATH` | `.pi/index/lancedb` | LanceDB path (relative to project root) |
 | `PI_INDEX_DIRS` | current directory | Comma-separated list of directories to index |
 | `PI_INDEX_AUTO` | `false` | Auto-index on every session start when set to `true`. |
@@ -65,6 +78,21 @@ pi-index is configured entirely via environment variables:
 | `PI_INDEX_MAX_FILE_KB` | `500` | Skip files larger than this (KB) |
 | `PI_INDEX_MIN_SCORE` | `0.2` | Minimum relevance score 0–1. Scores are normalized per-query (top result = 1.0). Values below 0.3 rarely filter anything; `0.4`–`0.6` is a useful range. |
 | `PI_INDEX_MMR_LAMBDA` | `0.5` | MMR diversity weight 0–1. `1.0` = pure relevance ranking; `0.0` = maximum diversity; `0.5` = balanced (default). |
+
+### Provider Examples
+
+```bash
+# OpenAI (default — just set the key)
+export OPENAI_API_KEY=sk-...
+
+# Ollama (local, no API key needed)
+export PI_INDEX_PROVIDER=ollama
+# Optional: export PI_INDEX_OLLAMA_MODEL=mxbai-embed-large
+
+# Voyage AI (code-optimized embeddings)
+export PI_INDEX_PROVIDER=voyage
+export PI_INDEX_VOYAGE_API_KEY=voy-...
+```
 
 ---
 
@@ -108,11 +136,13 @@ Supports scope filters in the query:
 
 ### `codebase_index`
 
-Index or re-index the codebase.
+Start indexing in the background. Returns immediately — search works with partial results during indexing.
 
 ```
 force?: boolean     — force full rebuild (default: false = incremental)
 ```
+
+Returns `"⚡ Started indexing..."` or `"⏳ Already in progress..."`. Use `codebase_status` to check progress.
 
 ### `codebase_status`
 
@@ -132,9 +162,32 @@ Show indexing status — chunk count, files indexed, last indexed time, and conf
 
 ## Supported Languages
 
-`.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.sql`, `.d.ts`, `.md`, `.txt`, `.css`, `.html`
+### Tree-sitter AST splitting (structural boundaries)
 
-Structural chunking uses language-specific boundary detection (function/class signatures for code, section headers for Markdown, rule blocks for CSS).
+| Language | Extensions | Boundaries |
+|---|---|---|
+| TypeScript | `.ts` `.tsx` `.d.ts` | `function`, `class`, `interface`, `type`, `export const` |
+| JavaScript | `.js` `.jsx` | `function`, `class`, `export`, `const` |
+| Python | `.py` `.pyi` | `def`, `class`, `@decorator` |
+| Ruby | `.rb` `.rake` `.gemspec` `.ru` | `class`, `module`, `def`, `def self.` |
+| CSS | `.css` | selectors, `@media`, `@keyframes` |
+| SCSS | `.scss` `.sass` | selectors, `@mixin`, `@media` |
+
+### LangChain text splitter fallback
+
+| Language | Extensions | Splitting |
+|---|---|---|
+| Markdown | `.md` | Language-aware (heading/paragraph separators) |
+| HTML | `.html` | Language-aware (tag-based separators) |
+| ERB | `.erb` | HTML-style splitting |
+| SQL | `.sql` | Generic line-based |
+| LESS | `.less` | Generic line-based |
+| JSON | `.json` | Generic line-based |
+| YAML | `.yaml` `.yml` | Generic line-based |
+| TOML | `.toml` | Generic line-based |
+| Text | `.txt` | Generic line-based |
+
+All chunks are capped at 80 lines. Longer structural blocks are sub-split.
 
 ---
 
@@ -142,10 +195,14 @@ Structural chunking uses language-specific boundary detection (function/class si
 
 ```
 index.ts               — extension entry point (registers tools + commands)
-config.ts              — configuration loading + validation
+config.ts              — configuration loading + validation + provider factory
 constants.ts           — shared constants (batch sizes, thresholds, language map)
-embeddings.ts          — OpenAI embeddings wrapper (encoding_format: float)
-chunker.ts             — structural boundary splitting, 80-line max
+embedding-provider.ts  — abstract EmbeddingProvider interface
+embeddings.ts          — OpenAI embedding provider (default)
+ollama-provider.ts     — Ollama embedding provider (local/offline)
+voyage-provider.ts     — Voyage AI embedding provider (code-optimized)
+ast-chunker.ts         — tree-sitter AST splitting + LangChain text splitter fallback
+chunker.ts             — file chunking orchestrator (AST → LangChain → line-count)
 context-enricher.ts    — contextual enrichment for embeddings (symbols, imports, position)
 walker.ts              — file discovery + mtime-based incremental cache
 mmr.ts                 — Maximal Marginal Relevance reranking

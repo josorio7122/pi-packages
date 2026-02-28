@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { IndexConfig } from "./config.js";
 import type { IndexDB } from "./db.js";
-import type { Embeddings } from "./embeddings.js";
+import type { EmbeddingProvider } from "./embedding-provider.js";
 import { chunkFile, type CodeChunk } from "./chunker.js";
 import { enrichForEmbedding } from "./context-enricher.js";
 import { SUPPORTED_EXTENSIONS, EMBED_BATCH_SIZE, EMBED_CONCURRENCY } from "./constants.js";
@@ -28,6 +28,11 @@ function throttle(cb: ProgressCallback, minIntervalMs = 1000): ProgressCallback 
     }
   };
 }
+
+/** Result of starting an async indexing operation. */
+export type AsyncIndexResult =
+  | { status: "started" }
+  | { status: "already_running"; progress: string | null };
 
 /** Statistics returned by `Indexer.run` describing the outcome of a single index operation. */
 export type IndexSummary = {
@@ -59,10 +64,19 @@ export class Indexer {
     return this.running;
   }
 
+  /** Result of the last completed async run, or null if never completed. */
+  lastResult: IndexSummary | null = null;
+
+  /** Error from the last failed async run, or null. */
+  lastError: string | null = null;
+
+  /** Current progress message during an async run, or null when idle. */
+  progress: string | null = null;
+
   constructor(
     private readonly cfg: IndexConfig,
     private readonly db: IndexDB,
-    private readonly emb: Embeddings,
+    private readonly emb: EmbeddingProvider,
   ) {}
 
   /**
@@ -194,6 +208,44 @@ export class Indexer {
     }
   }
 
+  /**
+   * Start an incremental (or full) index operation in the background.
+   *
+   * Returns immediately — indexing runs in the background. Use `isRunning`,
+   * `progress`, `lastResult`, and `lastError` to observe the outcome.
+   *
+   * @param opts.force - If `true`, wipes and rebuilds the index from scratch
+   * @param opts.onProgress - Optional callback for progress messages
+   * @returns `{ status: 'started' }` if indexing began, or
+   *          `{ status: 'already_running', progress }` if already in progress
+   */
+  runAsync(opts?: { force?: boolean; onProgress?: ProgressCallback }): AsyncIndexResult {
+    if (this.running) {
+      return { status: "already_running", progress: this.progress };
+    }
+
+    // Fire and forget — errors go to lastError
+    this.run({
+      force: opts?.force,
+      onProgress: (msg) => {
+        this.progress = msg;
+        opts?.onProgress?.(msg);
+      },
+    })
+      .then((result) => {
+        this.lastResult = result;
+        this.lastError = null;
+        this.progress = null;
+      })
+      .catch((err) => {
+        this.lastError = String(err);
+        this.lastResult = null;
+        this.progress = null;
+      });
+
+    return { status: "started" };
+  }
+
   private async processBatch(
     files: FileRecord[],
     cache: Map<string, MtimeEntry>,
@@ -208,7 +260,7 @@ export class Indexer {
     for (const file of files) {
       try {
         const content = await readFile(file.absolutePath, "utf-8");
-        const chunks = chunkFile(file.relativePath, content, file.mtime);
+        const chunks = await chunkFile(file.relativePath, content, file.mtime);
         if (chunks.length > 0) {
           fileChunks.push({ file, chunks });
         } else {
@@ -266,7 +318,7 @@ export class Indexer {
               return enrichForEmbedding(chunk, siblings);
             });
             // ONE API call for the whole batch
-            const vectors = await this.emb.embed(enrichedTexts);
+            const vectors = await this.emb.embedBatch(enrichedTexts);
             // Zip vectors back to their chunks
             for (let j = 0; j < batch.length; j++) {
               const { file, chunk } = batch[j];

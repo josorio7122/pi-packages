@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { parseConfig, loadConfig, vectorDimsForModel, resolveDbPath } from "./config.js";
+// Note: createProvider is imported dynamically in its describe block to allow TDD
+// (avoid TS compile error when the export doesn't exist yet)
 
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
@@ -276,5 +278,171 @@ describe("loadConfig", () => {
     process.env.OPENAI_API_KEY = "sk-test";
     process.env.PI_INDEX_AUTO_INTERVAL = "abc";
     expect(() => loadConfig("/project")).toThrow("CONFIG_INVALID_VALUE");
+  });
+});
+
+describe("provider configuration", () => {
+  beforeEach(() => {
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  it("defaults provider to 'openai' when PI_INDEX_PROVIDER is not set", () => {
+    const cfg = parseConfig({ apiKey: "sk-test" });
+    expect(cfg.provider).toBe("openai");
+  });
+
+  it("accepts provider 'ollama' without requiring apiKey", () => {
+    const cfg = parseConfig({ provider: "ollama" });
+    expect(cfg.provider).toBe("ollama");
+    expect(cfg.apiKey).toBe(""); // no key needed
+    expect(cfg.ollamaHost).toBe("http://127.0.0.1:11434");
+    expect(cfg.ollamaModel).toBe("nomic-embed-text");
+  });
+
+  it("accepts provider 'voyage' with voyage-specific API key", () => {
+    const cfg = parseConfig({ provider: "voyage", voyageApiKey: "voy-key-123" });
+    expect(cfg.provider).toBe("voyage");
+    expect(cfg.voyageApiKey).toBe("voy-key-123");
+    expect(cfg.voyageModel).toBe("voyage-code-3");
+  });
+
+  it("throws for provider 'voyage' without API key", () => {
+    expect(() => parseConfig({ provider: "voyage" }))
+      .toThrow(/Voyage.*API key/i);
+  });
+
+  it("throws for unknown provider value", () => {
+    expect(() => parseConfig({ apiKey: "sk-test", provider: "gemini" }))
+      .toThrow(/unsupported.*provider/i);
+  });
+
+  it("sets dimensions to 0 for non-OpenAI providers", () => {
+    const cfg = parseConfig({ provider: "ollama" });
+    expect(cfg.dimensions).toBe(0);
+  });
+
+  it("custom Ollama host and model from config", () => {
+    const cfg = parseConfig({
+      provider: "ollama",
+      ollamaHost: "http://my-server:11434",
+      ollamaModel: "mxbai-embed-large",
+    });
+    expect(cfg.ollamaHost).toBe("http://my-server:11434");
+    expect(cfg.ollamaModel).toBe("mxbai-embed-large");
+  });
+
+  it("custom Voyage model from config", () => {
+    const cfg = parseConfig({
+      provider: "voyage",
+      voyageApiKey: "voy-key",
+      voyageModel: "voyage-3-lite",
+    });
+    expect(cfg.voyageModel).toBe("voyage-3-lite");
+  });
+});
+
+describe("createProvider", () => {
+  beforeEach(() => {
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  it("creates Embeddings for openai provider", async () => {
+    const { createProvider } = await import("./config.js");
+    const cfg = parseConfig({ apiKey: "sk-test" });
+    const provider = createProvider(cfg);
+    expect(provider.getProvider()).toBe("openai");
+  });
+
+  it("creates OllamaProvider for ollama provider", async () => {
+    const { createProvider } = await import("./config.js");
+    const cfg = parseConfig({ provider: "ollama" });
+    const provider = createProvider(cfg);
+    expect(provider.getProvider()).toBe("ollama");
+  });
+
+  it("creates VoyageProvider for voyage provider", async () => {
+    const { createProvider } = await import("./config.js");
+    const cfg = parseConfig({ provider: "voyage", voyageApiKey: "voy-key" });
+    const provider = createProvider(cfg);
+    expect(provider.getProvider()).toBe("voyage");
+  });
+});
+
+describe("loadConfig with provider env vars", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    // Clear all env vars that loadConfig reads (including those from prior describe blocks)
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.PI_INDEX_API_KEY;
+    delete process.env.PI_INDEX_MODEL;
+    delete process.env.PI_INDEX_DB_PATH;
+    delete process.env.PI_INDEX_DIRS;
+    delete process.env.PI_INDEX_AUTO;
+    delete process.env.PI_INDEX_MAX_FILE_KB;
+    delete process.env.PI_INDEX_MIN_SCORE;
+    delete process.env.PI_INDEX_MMR_LAMBDA;
+    delete process.env.PI_INDEX_AUTO_INTERVAL;
+    delete process.env.PI_INDEX_PROVIDER;
+    delete process.env.PI_INDEX_OLLAMA_HOST;
+    delete process.env.PI_INDEX_OLLAMA_MODEL;
+    delete process.env.PI_INDEX_VOYAGE_API_KEY;
+    delete process.env.VOYAGEAI_API_KEY;
+  });
+
+  afterEach(() => {
+    Object.assign(process.env, originalEnv);
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  it("reads PI_INDEX_PROVIDER from env", () => {
+    process.env.PI_INDEX_PROVIDER = "ollama";
+    try {
+      const cfg = loadConfig("/tmp");
+      expect(cfg.provider).toBe("ollama");
+    } finally {
+      delete process.env.PI_INDEX_PROVIDER;
+    }
+  });
+
+  it("reads PI_INDEX_OLLAMA_HOST and PI_INDEX_OLLAMA_MODEL from env", () => {
+    process.env.PI_INDEX_PROVIDER = "ollama";
+    process.env.PI_INDEX_OLLAMA_HOST = "http://gpu:11434";
+    process.env.PI_INDEX_OLLAMA_MODEL = "mxbai-embed-large";
+    try {
+      const cfg = loadConfig("/tmp");
+      expect(cfg.ollamaHost).toBe("http://gpu:11434");
+      expect(cfg.ollamaModel).toBe("mxbai-embed-large");
+    } finally {
+      delete process.env.PI_INDEX_PROVIDER;
+      delete process.env.PI_INDEX_OLLAMA_HOST;
+      delete process.env.PI_INDEX_OLLAMA_MODEL;
+    }
+  });
+
+  it("reads PI_INDEX_VOYAGE_API_KEY from env", () => {
+    process.env.PI_INDEX_PROVIDER = "voyage";
+    process.env.PI_INDEX_VOYAGE_API_KEY = "voy-test-123";
+    try {
+      const cfg = loadConfig("/tmp");
+      expect(cfg.provider).toBe("voyage");
+      expect(cfg.voyageApiKey).toBe("voy-test-123");
+    } finally {
+      delete process.env.PI_INDEX_PROVIDER;
+      delete process.env.PI_INDEX_VOYAGE_API_KEY;
+    }
+  });
+
+  it("reads VOYAGEAI_API_KEY as fallback for voyage key", () => {
+    process.env.PI_INDEX_PROVIDER = "voyage";
+    process.env.VOYAGEAI_API_KEY = "voy-fallback";
+    try {
+      const cfg = loadConfig("/tmp");
+      expect(cfg.voyageApiKey).toBe("voy-fallback");
+    } finally {
+      delete process.env.PI_INDEX_PROVIDER;
+      delete process.env.VOYAGEAI_API_KEY;
+    }
   });
 });

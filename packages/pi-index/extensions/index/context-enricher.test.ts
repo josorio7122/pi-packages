@@ -103,6 +103,37 @@ describe("extractImportNames", () => {
     const result = extractImportNames(text);
     expect(result).toEqual(["actual"]);
   });
+
+  it("extracts SCSS @import 'file'", () => {
+    const result = extractImportNames("@import 'variables';");
+    expect(result).toEqual(["variables"]);
+  });
+
+  it("extracts SCSS @use 'file'", () => {
+    const result = extractImportNames("@use 'mixins';");
+    expect(result).toEqual(["mixins"]);
+  });
+
+  it("extracts SCSS @forward 'file'", () => {
+    const result = extractImportNames("@forward 'colors';");
+    expect(result).toEqual(["colors"]);
+  });
+
+  it("extracts SCSS @import with double quotes", () => {
+    const result = extractImportNames('@import "reset";');
+    expect(result).toEqual(["reset"]);
+  });
+
+  it("extracts multiple SCSS imports", () => {
+    const text = "@import 'variables';\n@use 'mixins';\n@forward 'base';";
+    const result = extractImportNames(text);
+    expect(result).toEqual(["variables", "mixins", "base"]);
+  });
+
+  it("extracts LESS @import", () => {
+    const result = extractImportNames("@import 'theme.less';");
+    expect(result).toEqual(["theme.less"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

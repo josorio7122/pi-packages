@@ -28,7 +28,7 @@ LLM calls codebase_search("query")
      ▼
 Searcher.search()
      ├── parseScopeFilters()      → clean query + SQL WHERE clause
-     ├── emb.embed(cleanQuery)    → query vector (1 OpenAI API call)
+     ├── emb.embed(cleanQuery)    → query vector (1 embedding API call)
      ├── db.hybridSearch()        → LanceDB vector + BM25 → RRF ranked rows
      ├── score normalization      → [0, 1] relative scale
      ├── minScore threshold       → drop low-confidence results
@@ -45,7 +45,7 @@ Indexer.run()
      ├── diffFileSet()            → new / changed / deleted / unchanged
      ├── chunkFile()              → CodeChunk[] per file
      ├── enrichForEmbedding()     → contextual header + raw text
-     ├── emb.embed([...texts])    → vectors in batches of 20, 3 concurrent
+     ├── emb.embedBatch([...])    → vectors in batches of 20, 3 concurrent
      ├── db.deleteByFilePath()    → remove old chunks (changed files)
      ├── db.insertChunks()        → write new chunks with vectors
      ├── db.rebuildFtsIndex()     → keep BM25 search current
@@ -71,14 +71,18 @@ The separation means the LLM can call `codebase_search` as many times as it want
 When pi loads the extension, `loadConfig()` reads environment variables and builds an `IndexConfig` object. This happens once and the config is immutable for the session.
 
 Key decisions made at config time:
-- Which OpenAI API key to use (`PI_INDEX_API_KEY` > `OPENAI_API_KEY`)
-- Which embedding model — and therefore which vector dimension to use (1536 for `text-embedding-3-small`, 3072 for `text-embedding-3-large`)
+- Which embedding provider to use (`PI_INDEX_PROVIDER` — `openai`, `ollama`, or `voyage`)
+- For OpenAI: which API key (`PI_INDEX_API_KEY` > `OPENAI_API_KEY`) and model (determines vector dimension: 1536 for `text-embedding-3-small`, 3072 for `text-embedding-3-large`)
+- For Ollama: server host and model (dimension is probed at startup via a test embedding call)
+- For Voyage: API key and model (dimension is probed at startup)
 - Where the LanceDB database lives (`.pi/index/lancedb` relative to project root by default)
 - Where the mtime cache lives (`.pi/index/mtime-cache.json`, always in `.pi/index/`)
 - Which directories to index (`PI_INDEX_DIRS`, defaults to project root)
 - Whether to auto-index on session start (`PI_INDEX_AUTO`)
 
-If the API key is missing, the extension still loads — but it registers stub tools and stub slash commands that return a helpful error message. The extension never crashes on startup.
+If the API key is missing (for providers that require one), the extension still loads — but it registers stub tools and stub slash commands that return a helpful error message. The extension never crashes on startup.
+
+After config loading, `createProvider(cfg)` returns the appropriate `EmbeddingProvider` implementation. All three providers implement the same interface: `embed(text)`, `embedBatch(texts)`, `getDimension()`, `getProvider()`. The indexer and searcher depend only on this interface, not on concrete provider classes.
 
 The `existsSync` check at config time filters non-existent directories out of `indexDirs` with a warning. If all dirs are removed, it falls back to the project root.
 
@@ -128,7 +132,7 @@ Negation patterns (`!`) are not supported and generate a console warning.
 
 After `.gitignore` filtering, files are included only if:
 - The directory is not `node_modules` or `.git` (hard-coded exclusion)
-- The file extension is in the supported list (`.ts`, `.tsx`, `.d.ts`, `.js`, `.jsx`, `.py`, `.sql`, `.md`, `.css`, `.html`, `.txt`)
+- The file extension is in the supported list (24 extensions: `.ts`, `.tsx`, `.d.ts`, `.js`, `.jsx`, `.py`, `.pyi`, `.rb`, `.erb`, `.rake`, `.gemspec`, `.ru`, `.sql`, `.md`, `.css`, `.scss`, `.sass`, `.less`, `.html`, `.json`, `.yaml`, `.yml`, `.toml`, `.txt`)
 - The file size does not exceed `maxFileKB` (default 500 KB)
 
 The result is a list of `FileRecord` objects with `relativePath`, `absolutePath`, `mtime`, `sizeKB`, and `extension`.
@@ -168,37 +172,59 @@ On `force: true`, the database is wiped (`deleteAll`), the cache is cleared, and
 
 `chunkFile()` splits a file into `CodeChunk` records. The goal is to produce chunks that are semantically coherent — ideally one function, one class, one section of documentation — while guaranteeing no chunk exceeds 80 lines.
 
-### Algorithm
+`chunkFile` is async because the LangChain text splitter fallback is async.
 
-1. **Scan for boundaries.** For each line, check if it matches a structural boundary pattern for the file's language. These patterns detect function declarations, class declarations, SQL statements, Markdown section headers, and CSS selectors. Only column-0 matches count (no indented methods in Python, no nested classes in TS that would fragment context).
+### Splitting Chain
 
-2. **Build ranges.** If there are boundaries:
-   - Lines before the first boundary form a "preamble" range (imports, module-level declarations)
-   - Each boundary starts a range ending just before the next boundary
-   
-   If there are no boundaries (text files, HTML, unsupported languages):
-   - Split in 80-line blocks
+The chunker uses a two-tier splitting strategy — the same pattern as claude-context (zilliztech):
 
-3. **Sub-split oversized ranges.** Any range over 80 lines is split at 80-line intervals. There's no attempt to find a nice split point — just a hard cap.
+```
+1. tree-sitter AST  → proper syntax tree parsing for 6 languages
+2. LangChain        → language-aware text splitting for everything else
+```
 
-4. **Assign IDs and metadata.** Each final range becomes a `CodeChunk` with:
-   - `id`: `"{filePath}:{chunkIndex}"` (0-based index within file)
-   - `startLine`/`endLine`: 1-based, inclusive
-   - `symbol`: extracted name from the boundary pattern on the range's first line, or `""` if no pattern matched
-   - `language`: from the extension map
-   - `vector`: empty array `[]` — filled by the embedder
+#### Tier 1: Tree-sitter AST Splitting (`astSplit`)
+
+For TypeScript, JavaScript, Python, Ruby, CSS, and SCSS, the code is parsed into a proper abstract syntax tree using the `tree-sitter` library and language-specific grammar packages.
+
+The parser traverses the AST and identifies "splittable" top-level nodes:
+
+| Language | Splittable node types |
+|---|---|
+| TypeScript | `function_declaration`, `class_declaration`, `abstract_class_declaration`, `interface_declaration`, `type_alias_declaration`, `export_statement`, `lexical_declaration` |
+| JavaScript | `function_declaration`, `class_declaration`, `export_statement`, `lexical_declaration` |
+| Python | `function_definition`, `class_definition`, `decorated_definition` |
+| Ruby | `class`, `module`, `method`, `singleton_method` |
+| CSS | `rule_set`, `media_statement`, `keyframes_statement` |
+| SCSS | `rule_set`, `mixin_statement`, `media_statement` |
+
+Each splittable node produces a range with `startLine`, `endLine`, and a `symbol` name extracted from the AST (e.g., the identifier child of a `function_declaration`). This is more accurate than regex patterns because it handles multi-line declarations, decorators, export wrappers, and complex syntax correctly.
+
+If AST parsing fails or returns no nodes, the code falls through to the LangChain fallback.
+
+#### Tier 2: LangChain Text Splitter (`langchainSplit`)
+
+For languages without tree-sitter grammars (JSON, YAML, TOML, ERB, LESS, SQL, Markdown, HTML, plain text), `RecursiveCharacterTextSplitter` from `@langchain/textsplitters` is used.
+
+For known languages (js, python, ruby, markdown, html), `fromLanguage()` provides language-specific separator patterns (function definitions, class boundaries, heading levels, etc.). For unknown languages, a generic splitter is used (newlines, paragraphs).
+
+The chunk size is set to `MAX_CHUNK_LINES * 80` characters (~6400 chars for 80 lines). No chunk overlap — consistent with pi-index's clean-boundary design.
+
+#### Post-splitting
+
+After either tier produces ranges:
+1. **Gap filling** — Lines between AST nodes (imports, blank lines, comments) become their own "gap" chunks with no symbol
+2. **Preamble** — Lines before the first node form a preamble chunk
+3. **Sub-splitting** — Any range exceeding 80 lines is split at 80-line intervals
+4. **Metadata** — Each range becomes a `CodeChunk` with `id`, `startLine`/`endLine` (1-based), `symbol`, `language`, `extension`, etc.
 
 Empty files (content is empty or whitespace-only) return `[]`. This is not an error.
-
-### Why not use an AST parser?
-
-AST parsing would require language-specific parsers (TypeScript compiler API, Python's `ast` module, etc.), each adding complexity and dependencies. The pattern-based approach is language-agnostic, requires no dependencies, and handles the most important case (top-level function/class declarations) correctly. Missed boundaries produce slightly larger chunks — not incorrect results.
 
 ---
 
 ## Phase 6: Embedding
 
-`Embeddings.embed()` sends text to the OpenAI embeddings API and returns vectors.
+The embedding provider (OpenAI, Ollama, or Voyage) converts text to vectors.
 
 ### Batch processing
 
@@ -227,14 +253,14 @@ export function verifyToken(token: string): TokenPayload {
 
 The header lines are conditional — omitted when there's nothing to show:
 - **Module symbols** lists all function/class names detected across the file's chunks. This tells the embedding model that `verifyToken` lives alongside `signToken` and `refreshToken` — a JWT module.
-- **Imports** lists module names extracted from the file's first chunk (where imports typically live). Handles JS/TS `import`/`require`, Python `import`/`from`, and Ruby `require`/`require_relative`.
+- **Imports** lists module names extracted from the file's first chunk (where imports typically live). Handles JS/TS `import`/`require`, Python `import`/`from`, Ruby `require`/`require_relative`, and SCSS/LESS `@import`/`@use`/`@forward`.
 - **Current** shows the chunk's symbol and position within the file.
 
 This is a deterministic, zero-LLM-cost implementation of Anthropic's Contextual Retrieval technique. The stored `text` field is always the raw source lines — never the enriched form. The enrichment only appears in the embedding API call.
 
 ### Retry logic
 
-The `withRetry()` wrapper inside `Embeddings` retries only on HTTP 429 (rate limit). Other errors (401 auth, 403 forbidden, 500 server error) fail immediately. There are 4 total attempts with delays of 1s, 2s, 4s between them (up to 7s wait before the final attempt). The delay before the 4th attempt would be 8s, but the loop detects it is the last attempt and throws immediately instead — so only three delays fire.
+The `withRetry()` wrapper (shared across all providers) retries only on HTTP 429 (rate limit). Other errors (401 auth, 403 forbidden, 500 server error) fail immediately. There are 4 total attempts with delays of 1s, 2s, 4s between them (up to 7s wait before the final attempt). The delay before the 4th attempt would be 8s, but the loop detects it is the last attempt and throws immediately instead — so only three delays fire.
 
 If a batch fails after all retries, all files in that batch are marked as failed. The indexer continues processing other batches — one bad batch doesn't stop the whole run.
 
@@ -394,7 +420,9 @@ The LLM reads this directly — no additional tool calls needed to see the code.
 
 ---
 
-## Phase 10: Auto-Index
+## Phase 10: Auto-Index and Periodic Sync
+
+### On-message auto-index
 
 When `PI_INDEX_AUTO=true`, a `before_agent_start` event handler is registered. This hook fires before the LLM processes each user message.
 
@@ -405,26 +433,43 @@ The handler checks:
 
 If indexing should run, it starts fire-and-forget (not awaited). The agent starts immediately without waiting for the index. Progress notifications appear in the UI during background indexing.
 
-The `isRunning` flag (local to the closure, not `indexer.isRunning`) prevents the same before_agent_start handler from triggering again before the current run finishes. If a separate `codebase_index` tool call is running when auto-index fires, `indexer.run()` throws `INDEX_ALREADY_RUNNING`, caught by `.catch()`, which resets the timestamp so the next session start retries sooner.
+### Periodic timer
+
+When `PI_INDEX_AUTO=true` AND `PI_INDEX_AUTO_INTERVAL > 0`, a `setInterval` timer is set up after the first auto-index. The timer fires every N minutes and calls `indexer.runAsync()` — which is a no-op if the indexer is already running.
+
+The timer is `unref()`'d so it doesn't keep the Node.js process alive. This means periodic sync only runs while the pi session is active — it stops automatically when the process exits.
+
+### Async indexing
+
+The `codebase_index` LLM tool uses `indexer.runAsync()`, which starts the indexing pipeline in the background and returns immediately. The LLM gets a "Started indexing" response and can continue working. During active indexing:
+
+- `codebase_search` appends a "results may be incomplete" warning
+- `codebase_status` shows current progress and phase
+
+The `Indexer` tracks three state fields: `lastResult` (most recent successful summary), `lastError` (most recent failure message), and `progress` (current phase message during active indexing).
 
 ---
 
 ## The Dependency Graph
 
-The 13 source files have a clean dependency order:
+The 17 source files have a clean dependency order:
 
 ```
 utils.ts              ← no dependencies
 constants.ts          ← no dependencies (language map, batch sizes, thresholds)
-config.ts             ← node:path, node:fs
+embedding-provider.ts ← no dependencies (interface only)
+config.ts             ← node:path, node:fs, embeddings, ollama-provider, voyage-provider, embedding-provider
 mmr.ts                ← chunker.ts (ScoredChunk type)
-chunker.ts            ← node:path, constants.ts
+ast-chunker.ts        ← tree-sitter, tree-sitter-*, @langchain/textsplitters, constants.ts
+chunker.ts            ← node:path, constants.ts, ast-chunker.ts
 context-enricher.ts   ← chunker.ts (CodeChunk type)
 walker.ts             ← node:fs/promises, node:path
-embeddings.ts         ← openai, constants.ts
+embeddings.ts         ← openai, constants.ts, embedding-provider.ts
+ollama-provider.ts    ← embedding-provider.ts, embeddings.ts (withRetry)
+voyage-provider.ts    ← embedding-provider.ts, embeddings.ts (withRetry)
 db.ts                 ← @lancedb/lancedb, chunker.ts, constants.ts
-indexer.ts            ← config, db, embeddings, chunker, context-enricher, walker, constants.ts
-searcher.ts           ← db, embeddings, config, mmr, constants.ts
+indexer.ts            ← config, db, embedding-provider, chunker, context-enricher, walker, constants.ts
+searcher.ts           ← db, embedding-provider, config, mmr, constants.ts
 tools.ts              ← indexer, searcher, db, config, walker, utils
 index.ts              ← all of the above + pi ExtensionAPI
 ```
@@ -517,9 +562,11 @@ The fundamental architecture is similar — LanceDB + OpenAI embeddings — but 
 
 ## Limitations (Documented, Acceptable)
 
-- **No custom extensions via env var.** Supported extensions are hardcoded in `indexer.ts` as `SUPPORTED_EXTENSIONS`. Adding a new extension requires a code change.
-- **`codebase_index` progress UI now works via ctx bridge.** The `registerTool` handler in `index.ts` bridges `ctx.ui.notify` to the tool's `notify` parameter, so progress notifications fire for LLM-invoked `codebase_index` calls, `/index-rebuild`, and auto-index alike.
+- **No custom extensions via env var.** Supported extensions are hardcoded in `constants.ts` as `LANGUAGE_MAP`. Adding a new extension requires a code change.
+- **Tree-sitter requires native compilation.** The tree-sitter packages compile native Node.js addons from C/C++. Build tools are required (Xcode CLT on macOS, build-essential on Linux).
+- **`.env` files are not indexed.** Even if not gitignored, `.env` files may contain secrets. This is a deliberate security decision.
 - **Chunk IDs are not stable across re-index.** If a file is modified and re-indexed, chunk indices may shift. Do not use chunk IDs as persistent external references.
 - **`@file:login` (no extension) doesn't match `login.ts`.** The basename match requires the full filename including extension. Use `@file:login.ts`.
 - **Negation patterns in `.gitignore` are skipped.** Lines starting with `!` are ignored with a warning.
-- **H1 Markdown headings are always in the preamble.** Only H2 and H3 (`##`, `###`) trigger chunk boundaries.
+- **LangChain fallback does not extract symbol names.** Only tree-sitter AST splitting produces symbol names. LangChain-split chunks have `symbol: ""`.
+- **Ollama dimension probe requires a running server.** If Ollama is configured but not running at startup, the extension registers error stubs.

@@ -1,6 +1,6 @@
 # Subsystem Spec: Indexing
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **File:** `specs/01-indexing.md`
 **Depends on:** CONSTITUTION.md, DATA-MODEL.md
 
@@ -10,7 +10,7 @@
 
 The indexing subsystem is responsible for reading source files from disk, splitting them into chunks, producing an embedding for each chunk, and writing the results to the index. It also maintains the mtime cache — the record of what was last indexed — which enables incremental updates on subsequent runs.
 
-The indexing subsystem runs when the developer or LLM calls `codebase_index`, or automatically on session start when `PI_INDEX_AUTO=true`. It never runs in the background unprompted. The subsystem is designed so that re-running it on an unchanged codebase is nearly instantaneous: only modified files generate any work.
+The indexing subsystem runs when the developer or LLM calls `codebase_index`, or automatically on session start when `PI_INDEX_AUTO=true`. When `autoIndexInterval > 0` a periodic timer re-triggers incremental indexing at that interval. All indexing runs execute asynchronously — `codebase_index` returns immediately and the work proceeds in the background. The subsystem is designed so that re-running it on an unchanged codebase is nearly instantaneous: only modified files generate any work.
 
 ---
 
@@ -55,37 +55,66 @@ After collecting the current file set, the indexer computes a three-way diff aga
 
 For each new or changed file, the indexer reads the file content and splits it into chunks. Chunks must satisfy all invariants in CONSTITUTION.md § 5 (Chunking Contract).
 
+**`chunkFile()` is async.** Because tree-sitter parsing is performed asynchronously, `chunkFile()` returns a `Promise<Chunk[]>`. All callers must `await` the result.
+
 **Empty files:** If a file's content is empty or consists only of whitespace, `chunkFile` returns zero chunks. The indexer still updates the mtime cache entry for this file (with `chunkCount: 0`) and deletes any old DB chunks for it. The file is not counted as a failure.
 
-The chunking algorithm uses structural boundary detection to align chunk boundaries with function and class definitions where possible. Detection uses pattern matching on line content — it does not parse the file's syntax tree. Detection is best-effort: missed boundaries produce larger chunks, not incorrect behavior.
+The chunker uses one of two strategies depending on language support:
 
-**Boundary detection patterns by language:**
+#### Strategy 1 — AST chunking (tree-sitter)
 
-| Language | Patterns that start a new chunk (must appear at column 0) |
+For languages with a tree-sitter grammar, the chunker parses the file into a full AST and queries it for top-level and class-member structural nodes (function declarations, class declarations, method definitions, etc.). Each structural node becomes the start of a new chunk. This is more accurate than regex matching because it understands the full syntactic structure of the file.
+
+**Languages using AST chunking:**
+
+| Language | tree-sitter grammar |
 | --- | --- |
-| `typescript` / `javascript` | `export function`, `export async function`, `export class`, `export abstract class`, `export const name = (`, `export const name = async (`, `function name`, `async function name`, `abstract class name`, `class name` |
-| `python` | `def name`, `async def name`, `class name` (top-level only — indented defs do not trigger a boundary) |
-| `sql` | `CREATE`, `ALTER`, `DROP`, `INSERT`, `UPDATE`, `DELETE` (case-insensitive) |
-| `markdown` | `## heading` or `### heading` (H2 and H3 only; H1 becomes preamble content) |
-| `css` | CSS selector lines matching `.classname {` or `element {` patterns |
-| All others | No structural detection — file is split by line count only |
+| `typescript` / `javascript` | `tree-sitter-typescript`, `tree-sitter-javascript` |
+| `python` | `tree-sitter-python` |
+| `ruby` | `tree-sitter-ruby` |
+| `css` | `tree-sitter-css` |
+| `scss` | `tree-sitter-scss` |
 
-**Split algorithm:**
+AST split algorithm:
+1. Parse the file with the appropriate tree-sitter grammar.
+2. Walk the AST and collect node start-line indices for target node types (function/class/method declarations at any nesting level).
+3. Lines before the first structural node become a preamble range `[0, first_node_start - 1]`.
+4. Each structural node starts a range ending just before the next node's start line (or at end of file).
+5. Any range exceeding 80 lines is sub-split at 80-line increments.
+6. Assign `chunkIndex` values sequentially starting at 0.
+7. `symbol` is set to the identifier name extracted from the structural node. If no node on that line (preamble, continuation), `symbol` is an empty string.
 
-1. Collect all 0-based line indices where a boundary pattern matches.
-2. Lines before the first boundary become a preamble range `[0, first_boundary - 1]`.
-3. Each boundary starts a range ending just before the next boundary (or at end of file).
-4. Any range exceeding 80 lines is sub-split at 80-line increments (hard cap, no attempt to split at blank lines or inner boundaries).
-5. Assign `chunkIndex` values sequentially starting at 0 across all final ranges.
-6. `symbol` is set to the extracted identifier name from the boundary pattern on the range's first line. If no boundary was detected on that line (preamble, continuation), `symbol` is an empty string.
+#### Strategy 2 — Fallback (LangChain RecursiveCharacterTextSplitter)
+
+For languages without tree-sitter support, the chunker delegates to LangChain's `RecursiveCharacterTextSplitter`. This splits text by a hierarchy of separators (double newline → single newline → space → character) while respecting the 80-line maximum chunk size.
+
+**Languages using fallback chunking:**
+
+| Language | Notes |
+| --- | --- |
+| `sql` | Split on SQL statement boundaries |
+| `markdown` | Split on heading boundaries |
+| `html` | Split on tag boundaries |
+| `json` | Split on structural separators |
+| `yaml` / `toml` | Split on blank lines |
+| `text` | Split on blank lines |
+| `less` | Split on blank lines |
+| `erb` | Split on blank lines |
+
+When using the fallback strategy, `symbol` is always an empty string.
 
 ### Embedding
 
-For each chunk produced, the indexer constructs an enriched input string using the contextual enricher (DATA-MODEL.md § Embedding Input) and sends it to the embedding service. The enricher adds file-level context — sibling symbols, import names, and chunk position — to improve retrieval quality without any LLM cost.
+For each chunk produced, the indexer constructs an enriched input string using the contextual enricher (DATA-MODEL.md § Embedding Input) and sends it to the active `EmbeddingProvider`. The enricher adds file-level context — sibling symbols, import names, and chunk position — to improve retrieval quality without any LLM cost.
 
-Embedding calls are batched: up to **20 chunks per API call** (`EMBED_BATCH_SIZE`). Up to **3 API calls are made concurrently** (`EMBED_CONCURRENCY`). Each batch is a single OpenAI `embeddings.create` call with an array of 20 enriched text strings.
+The `EmbeddingProvider` is created at startup by `createProvider(cfg)` based on the `provider` config field:
+- `openai` (default) — calls the OpenAI `embeddings.create` API.
+- `ollama` — calls the local Ollama HTTP API at `ollamaHost`.
+- `voyage` — calls the Voyage AI embedding API using `voyageApiKey`.
 
-If the embedding service returns a rate-limit error (HTTP 429), the `Embeddings` class retries with exponential backoff: delays of 1s, 2s, 4s between attempts (4 total attempts; up to 7s wait before the final attempt). After all 4 attempts fail, the error propagates to the indexer. Other HTTP errors (401, 403, 500, etc.) fail immediately without retrying.
+Embedding calls are batched: up to **20 chunks per API call** (`EMBED_BATCH_SIZE`). Up to **3 API calls are made concurrently** (`EMBED_CONCURRENCY`). Each batch invokes `provider.embedBatch(texts)` with up to 20 enriched text strings.
+
+If the embedding service returns a rate-limit error (HTTP 429), the provider retries with exponential backoff: delays of 1s, 2s, 4s between attempts (4 total attempts; up to 7s wait before the final attempt). After all 4 attempts fail, the error propagates to the indexer. Other HTTP errors (401, 403, 500, etc.) fail immediately without retrying.
 
 If a batch fails, **all files in that batch** are marked as failed — partial writes are never made. The mtime entry for a failed file is not updated, so the file will be retried on the next run.
 
@@ -125,6 +154,14 @@ When a caller provides an `onProgress` callback, the indexer emits progress mess
 
 Only one index operation may run at a time. If `codebase_index` is called while a previous call is still running, it throws `INDEX_ALREADY_RUNNING` immediately.
 
+### Async Mode
+
+All indexing runs execute via `runAsync()`, which starts the indexer in the background and returns immediately. The `codebase_index` tool always returns a "Started indexing…" message to the caller without waiting for the run to complete. Callers can poll progress via `codebase_status`.
+
+- `indexer.isRunning` is `true` while a background run is in progress.
+- `codebase_status` displays a progress percentage when `isRunning` is `true`.
+- `codebase_search` results include a warning line ("⚠️ Index is currently being updated…") when `isRunning` is `true`.
+
 ### Auto-Index
 
 When `PI_INDEX_AUTO=true`, the extension registers a `before_agent_start` event handler that runs incremental indexing before every agent turn. The `PI_INDEX_AUTO_INTERVAL` env var (default `0`) controls the minimum minutes between runs:
@@ -132,6 +169,14 @@ When `PI_INDEX_AUTO=true`, the extension registers a `before_agent_start` event 
 - `30` = re-index if at least 30 minutes have elapsed since the last completed index.
 
 Auto-index runs fire-and-forget (non-blocking). If the indexer is already running (e.g., from a `codebase_index` tool call), auto-index is skipped for that turn and retried on the next.
+
+### Periodic Sync
+
+When `autoIndexInterval > 0`, a `setInterval` timer is registered at extension startup. On each tick:
+1. If `indexer.isRunning` is `true`, the tick is skipped entirely.
+2. Otherwise, incremental indexing is triggered via `runAsync()`.
+
+The interval is specified in minutes (`autoIndexInterval`). This keeps the index fresh during long-running sessions without requiring the developer to manually call `codebase_index` after every code change.
 
 ---
 
@@ -173,6 +218,18 @@ Given `codebase_index` is currently running,
 When `codebase_index` is called again,
 Then the second call immediately returns `Error: [INDEX_ALREADY_RUNNING] ...`.
 
+**Scenario 9 — Async mode: immediate return**
+
+Given `codebase_index` is called,
+When the tool executes,
+Then it returns immediately with a "Started indexing…" message before any files are processed, and `indexer.isRunning` becomes `true`.
+
+**Scenario 10 — Periodic sync: skips when already running**
+
+Given `autoIndexInterval` is `30` and `indexer.isRunning` is `true`,
+When the `setInterval` timer fires,
+Then no new index run is started (tick is skipped).
+
 **Scenario 7 — Edge case: embedding retry**
 
 Given the embedding service returns HTTP 429 on the first attempt,
@@ -192,7 +249,7 @@ Then the 5 old chunks are deleted from the DB, and the mtime cache records `chun
 | Scenario | Expected behavior |
 | --- | --- |
 | Empty directory | Zero files processed. Summary: 0 added, 0 updated, 0 removed, 0 skipped. No error. |
-| File with unsupported extension (e.g., `.rb`) | Silently skipped. Not counted in any summary category. |
+| File with unsupported extension (e.g., `.swift`) | Silently skipped. Not counted in any summary category. |
 | File that is exactly `maxFileKB` bytes | Accepted and indexed. The limit is exclusive: only files strictly greater than `maxFileKB` KB are skipped. |
 | File consisting entirely of whitespace | Produces zero chunks. Mtime entry written with `chunkCount: 0`. Not counted as a failure. |
 | `PI_INDEX_DIRS` points to a non-existent directory | Filtered out at config load time with a `console.warn`. Not included in `indexDirs`. If all dirs are removed, falls back to `indexRoot`. |
