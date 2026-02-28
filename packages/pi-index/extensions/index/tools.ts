@@ -5,6 +5,7 @@ import type { IndexConfig } from "./config.js";
 import { readMtimeCache } from "./walker.js";
 import { relativeTime } from "./utils.js";
 
+/** A pi tool descriptor — name, description, JSON Schema parameters, and async handler. */
 export type IndexTool = {
   name: string;
   description: string;
@@ -12,6 +13,13 @@ export type IndexTool = {
   handler: (args: Record<string, unknown>, notify?: (msg: string, level: string) => void) => Promise<string>;
 };
 
+/**
+ * Format an `IndexSummary` as a human-readable multi-line string.
+ *
+ * @param summary - The summary returned by `Indexer.run`
+ * @param rebuilt - If `true`, the header reads "Index rebuilt:" instead of "Index updated:"
+ * @returns Multi-line string suitable for display in a tool response
+ */
 export function formatSummary(summary: IndexSummary, rebuilt = false): string {
   const header = rebuilt ? "Index rebuilt:" : "Index updated:";
   const lines = [
@@ -27,6 +35,19 @@ export function formatSummary(summary: IndexSummary, rebuilt = false): string {
   return lines.join("\n");
 }
 
+/**
+ * Create the three pi tools for the index extension: `codebase_search`, `codebase_index`, and `codebase_status`.
+ *
+ * All handlers return strings — errors are surfaced as `"Error: [CODE] message"` strings
+ * rather than thrown exceptions so the LLM can read and relay them gracefully.
+ *
+ * @param searcher - Configured `Searcher` instance for handling search queries
+ * @param indexer - Configured `Indexer` instance for running index operations
+ * @param db - `IndexDB` instance used by the status tool to read chunk counts
+ * @param cfg - Active `IndexConfig` used to display paths and settings in the status tool
+ * @param opts.notify - Optional default progress notifier passed to `codebase_index` when the caller provides none
+ * @returns Object containing the `tools` array of three `IndexTool` descriptors
+ */
 export function createIndexTools(
   searcher: Searcher,
   indexer: Indexer,

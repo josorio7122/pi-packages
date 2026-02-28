@@ -1,5 +1,6 @@
 import type { CodeChunk } from "./chunker.js";
 
+/** A `CodeChunk` augmented with a normalized relevance `score` in `[0, 1]`. */
 export type ScoredChunk = CodeChunk & { score: number };
 
 /**

@@ -1,6 +1,12 @@
 import { extname, basename } from "node:path";
 import { LANGUAGE_MAP, MAX_CHUNK_LINES } from "./constants.js";
 
+/**
+ * A single indexed unit of source code produced by `chunkFile`.
+ *
+ * Each chunk covers a contiguous range of lines in one file. The `vector` field
+ * is empty at chunk time and filled by the embedder before DB insertion.
+ */
 export type CodeChunk = {
   id: string;
   text: string;
@@ -23,6 +29,12 @@ function getExtension(filePath: string): string {
   return extname(base);
 }
 
+/**
+ * Resolve a file extension to its canonical language name.
+ *
+ * @param ext - File extension including the leading dot (e.g. `".ts"`, `".py"`)
+ * @returns Language name string (e.g. `"typescript"`, `"python"`), or `"text"` for unknown extensions
+ */
 export function detectLanguage(ext: string): string {
   return LANGUAGE_MAP[ext] ?? "text";
 }
@@ -71,6 +83,18 @@ function isBoundary(line: string, language: string): boolean {
   return defs.some(([regex]) => regex.test(line));
 }
 
+/**
+ * Split a source file into indexable chunks aligned to structural boundaries.
+ *
+ * Chunks are split at language-specific boundaries (function/class declarations).
+ * Any boundary-aligned block exceeding `MAX_CHUNK_LINES` is further sub-split.
+ * Files with no recognized boundaries are split purely by line count.
+ *
+ * @param filePath - Relative path of the file (used as the chunk ID prefix and stored in DB)
+ * @param content - Full UTF-8 text content of the file
+ * @param mtime - File modification time in milliseconds (Unix epoch)
+ * @returns Array of `CodeChunk` objects with empty `vector` fields (filled by the embedder)
+ */
 export function chunkFile(
   filePath: string,
   content: string,
