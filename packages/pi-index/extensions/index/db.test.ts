@@ -9,7 +9,19 @@ import type { CodeChunk } from "./chunker.js";
 
 let tmpDir: string;
 
-function makeChunk(filePath: string, chunkIndex: number, text: string, dim = 4): CodeChunk {
+function makeChunk(
+  filePath: string,
+  chunkIndex: number,
+  text: string,
+  dim = 4,
+  overrides: Partial<CodeChunk> = {},
+): CodeChunk {
+  const ext = filePath.match(/\.[^.]+$/)?.[0] ?? ".ts";
+  const langMap: Record<string, string> = {
+    ".ts": "typescript", ".tsx": "typescript",
+    ".py": "python", ".js": "javascript", ".jsx": "javascript",
+    ".sql": "sql", ".md": "markdown", ".css": "css", ".html": "html",
+  };
   return {
     id: `${filePath}:${chunkIndex}`,
     text,
@@ -18,11 +30,12 @@ function makeChunk(filePath: string, chunkIndex: number, text: string, dim = 4):
     chunkIndex,
     startLine: chunkIndex * 10 + 1,
     endLine: chunkIndex * 10 + 10,
-    language: "typescript",
-    extension: ".ts",
+    language: langMap[ext] ?? "text",
+    extension: ext,
     symbol: `fn${chunkIndex}`,
     mtime: Date.now(),
     createdAt: Date.now(),
+    ...overrides,
   };
 }
 
@@ -261,4 +274,139 @@ describe("IndexDB integration", () => {
     expect(status.chunkCount).toBe(1);
     expect(status).toEqual({ chunkCount: 1 });
   }, 30_000);
+});
+
+describe("IndexDB scalar indexes", () => {
+  it("creates scalar indexes on new table initialization", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.count(); // trigger initialization
+    const indexes = await db.listIndexes();
+    expect(indexes).toContain("filePath_idx");
+    expect(indexes).toContain("language_idx");
+    expect(indexes).toContain("extension_idx");
+  }, 30_000);
+
+  it("scalar indexes survive table reopen", async () => {
+    const dbPath = join(tmpDir, "lancedb");
+    const db1 = new IndexDB(dbPath, 4);
+    await db1.insertChunks([makeChunk("src/a.ts", 0, "hello")]);
+
+    // Reopen same DB path — triggers openTable path in doInitialize
+    const db2 = new IndexDB(dbPath, 4);
+    await db2.count();
+    const indexes = await db2.listIndexes();
+    expect(indexes).toContain("filePath_idx");
+    expect(indexes).toContain("language_idx");
+    expect(indexes).toContain("extension_idx");
+  }, 30_000);
+
+  it("vectorSearch with filter returns only matching rows after scalar indexing", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([
+      makeChunk("src/auth.py", 0, "def login(): pass"),
+      makeChunk("src/app.ts", 1, "export function app() {}"),
+    ]);
+    const results = await db.vectorSearch([1, 0, 0, 0], 10, "language = 'python'");
+    expect(results.length).toBe(1);
+    expect(results[0].filePath).toBe("src/auth.py");
+  }, 30_000);
+
+  it("hybridSearch with filter works correctly after scalar indexing", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([
+      makeChunk("src/auth.py", 0, "authentication login handler"),
+      makeChunk("src/auth.ts", 1, "authentication middleware"),
+      makeChunk("src/pay.ts", 2, "payment processing"),
+    ]);
+    const results = await db.hybridSearch(
+      [1, 0, 0, 0], "authentication", 10, "extension = '.py'"
+    );
+    expect(results.length).toBe(1);
+    expect(results[0].filePath).toBe("src/auth.py");
+  }, 30_000);
+});
+
+describe("IndexDB optimize", () => {
+  it("optimize() compacts fragments after multiple inserts", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([makeChunk("src/a.ts", 0, "content a")]);
+    await db.insertChunks([makeChunk("src/b.ts", 0, "content b")]);
+    await db.insertChunks([makeChunk("src/c.ts", 0, "content c")]);
+    const stats = await db.optimize();
+    expect(stats).toBeDefined();
+    expect(stats.compaction).toBeDefined();
+    // Data must survive compaction
+    expect(await db.count()).toBe(3);
+  }, 30_000);
+
+  it("optimize() is safe on empty table", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.count(); // trigger init
+    const stats = await db.optimize();
+    expect(stats).toBeDefined();
+  }, 30_000);
+
+  it("optimize() preserves scalar indexes", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([makeChunk("src/a.ts", 0, "content")]);
+    await db.optimize();
+    const indexes = await db.listIndexes();
+    expect(indexes).toContain("filePath_idx");
+    expect(indexes).toContain("language_idx");
+    expect(indexes).toContain("extension_idx");
+  }, 30_000);
+});
+
+describe("IndexDB IVF-PQ vector index", () => {
+  it("createVectorIndexIfNeeded creates IVF-PQ index when count exceeds threshold", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 8);
+    const chunks = Array.from({ length: 300 }, (_, i) =>
+      makeChunk(`src/f${i}.ts`, 0, `content ${i}`, 8),
+    );
+    await db.insertChunks(chunks);
+    await db.createVectorIndexIfNeeded(256); // low threshold for testing
+    const indexes = await db.listIndexes();
+    expect(indexes).toContain("vector_idx");
+  }, 60_000);
+
+  it("createVectorIndexIfNeeded skips when count is below threshold", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    await db.insertChunks([makeChunk("src/a.ts", 0, "hello")]);
+    await db.createVectorIndexIfNeeded(10_000);
+    const indexes = await db.listIndexes();
+    expect(indexes).not.toContain("vector_idx");
+  }, 30_000);
+
+  it("createVectorIndexIfNeeded skips when vector_idx already exists", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 8);
+    const chunks = Array.from({ length: 300 }, (_, i) =>
+      makeChunk(`src/f${i}.ts`, 0, `content ${i}`, 8),
+    );
+    await db.insertChunks(chunks);
+    await db.createVectorIndexIfNeeded(256); // first call: creates index
+    const indexes = await db.listIndexes();
+    expect(indexes).toContain("vector_idx");
+    // Second call: should skip (nearly instant — no re-training)
+    const start = Date.now();
+    await db.createVectorIndexIfNeeded(256);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(100);
+  }, 60_000);
+
+  it("vectorSearch returns correct results after IVF-PQ index", async () => {
+    const db = new IndexDB(join(tmpDir, "lancedb"), 8);
+    // Generate truly unique vectors using a deterministic hash per index
+    const chunks = Array.from({ length: 300 }, (_, i) => {
+      const vec = Array.from({ length: 8 }, (_, d) => Math.abs(Math.sin(i * 7 + d)));
+      return { ...makeChunk(`src/f${i}.ts`, 0, `content ${i}`, 8), vector: vec };
+    });
+    await db.insertChunks(chunks);
+    await db.createVectorIndexIfNeeded(256);
+    // Search for exact match to chunk 0 — IVF-PQ should find it as top result
+    const queryVec = [...chunks[0].vector];
+    const results = await db.vectorSearch(queryVec, 5);
+    expect(results.length).toBeGreaterThan(0);
+    // With unique vectors and the exact query, chunk 0 should be the top result
+    expect(results[0].filePath).toBe("src/f0.ts");
+  }, 60_000);
 });

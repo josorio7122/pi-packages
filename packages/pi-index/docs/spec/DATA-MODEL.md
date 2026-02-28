@@ -129,6 +129,32 @@ The runtime configuration derived from environment variables at extension startu
 
 ---
 
+## Database Indexes
+
+The `chunks` table has several indexes that are created and maintained automatically:
+
+| Index Name | Type | Column(s) | Created When | Purpose |
+| --- | --- | --- | --- | --- |
+| `text_idx` | FTS (tantivy) | `text` | Table creation; rebuilt after every indexing run | BM25 full-text search for hybrid queries |
+| `filePath_idx` | BTREE | `filePath` | DB initialization (both new and existing tables) | Accelerates `@file:` and `@dir:` scope filter queries |
+| `language_idx` | BTREE | `language` | DB initialization (both new and existing tables) | Accelerates `@lang:` scope filter queries |
+| `extension_idx` | BTREE | `extension` | DB initialization (both new and existing tables) | Accelerates `@ext:` scope filter queries |
+| `vector_idx` | IVF-PQ | `vector` | After indexing, when chunk count ≥ 10,000 | Approximate nearest-neighbor search for large codebases |
+
+**Scalar indexes (BTREE):**
+- Created idempotently during `doInitialize()` on both the `createTable` (new DB) and `openTable` (existing DB) paths.
+- LanceDB's default `replace: true` silently rebuilds an existing index (~4ms).
+- Best-effort: if creation fails, queries degrade to full column scans — slower but correct.
+- LanceDB v0.26.2 uses scalar indexes for prefiltering automatically when a `WHERE` clause references an indexed column.
+
+**Vector index (IVF-PQ):**
+- Created only when chunk count ≥ `VECTOR_INDEX_THRESHOLD` (10,000) and no `vector_idx` exists yet.
+- Parameters: `numPartitions = min(ceil(sqrt(count)), 256)`, `numSubVectors = floor(vectorDim / 16)`, `distanceType = "cosine"`.
+- Updated incrementally by `table.optimize()` — no need to rebuild on every indexing run.
+- Best-effort: if creation fails, vector search falls back to brute-force — slower but correct.
+
+---
+
 ## Supported Languages
 
 | Extension | Language Label |

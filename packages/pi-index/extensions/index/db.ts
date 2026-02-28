@@ -1,5 +1,6 @@
-import type { Connection, Table } from "@lancedb/lancedb";
+import type { Connection, Table, OptimizeStats } from "@lancedb/lancedb";
 import type { CodeChunk } from "./chunker.js";
+import { VECTOR_INDEX_THRESHOLD } from "./constants.js";
 
 /** Summary of the current database state returned by `IndexDB.getStatus`. */
 export type DBStatus = {
@@ -84,6 +85,17 @@ export class IndexDB {
         // FTS index creation may fail on newly empty tables in some LanceDB versions — not fatal
         // Hybrid search will fall back to vector-only if FTS is unavailable
       }
+    }
+
+    // Create BTREE scalar indexes for scope-filter acceleration.
+    // Idempotent: LanceDB's default replace:true silently rebuilds if index exists (~4ms).
+    // Best-effort: queries degrade to full scan if index creation fails.
+    try {
+      await this.table!.createIndex("filePath", { config: lancedb.Index.btree() });
+      await this.table!.createIndex("language", { config: lancedb.Index.btree() });
+      await this.table!.createIndex("extension", { config: lancedb.Index.btree() });
+    } catch (err) {
+      console.warn("[pi-index] scalar index creation skipped:", String(err));
     }
   }
 
@@ -259,5 +271,72 @@ export class IndexDB {
     await this.ensureInitialized();
     const chunkCount = await this.table!.countRows();
     return { chunkCount };
+  }
+
+  /**
+   * Compact table fragments and update indexes for optimal query performance.
+   *
+   * LanceDB fragments data on repeated inserts and deletes. This method merges small
+   * fragments into larger files and prunes old versions. Safe to call frequently —
+   * returns immediately when nothing needs compacting.
+   *
+   * @returns Optimization statistics (compaction and prune details)
+   */
+  async optimize(): Promise<OptimizeStats> {
+    await this.ensureInitialized();
+    try {
+      return await this.table!.optimize();
+    } catch (err) {
+      console.warn("[pi-index] table optimization skipped:", String(err));
+      return {
+        compaction: { fragmentsRemoved: 0, fragmentsAdded: 0, filesRemoved: 0, filesAdded: 0 },
+        prune: { bytesRemoved: 0, oldVersionsRemoved: 0 },
+      };
+    }
+  }
+
+  /**
+   * Create an IVF-PQ vector index if the table has enough rows and no vector index exists yet.
+   *
+   * Below the threshold, brute-force scan is faster than maintaining an index.
+   * Skips if `vector_idx` already exists to avoid expensive re-training.
+   *
+   * @param threshold - Minimum row count to trigger index creation (default: `VECTOR_INDEX_THRESHOLD`)
+   */
+  async createVectorIndexIfNeeded(threshold?: number): Promise<void> {
+    await this.ensureInitialized();
+    const lancedb = await loadLanceDB();
+    const count = await this.count();
+    const effectiveThreshold = threshold ?? VECTOR_INDEX_THRESHOLD;
+    if (count < effectiveThreshold) return;
+
+    // Skip if vector index already exists — avoid expensive re-training
+    const indices = await this.table!.listIndices();
+    if (indices.some((i) => i.name === "vector_idx")) return;
+
+    try {
+      const numPartitions = Math.min(Math.ceil(Math.sqrt(count)), 256);
+      const numSubVectors = Math.floor(this.vectorDim / 16) || Math.floor(this.vectorDim / 8) || 1;
+      await this.table!.createIndex("vector", {
+        config: lancedb.Index.ivfPq({
+          numPartitions,
+          numSubVectors,
+          distanceType: "cosine",
+        }),
+      });
+    } catch (err) {
+      console.warn("[pi-index] vector index creation skipped:", String(err));
+    }
+  }
+
+  /**
+   * List the names of all indexes on the chunks table.
+   *
+   * @returns Array of index names (e.g. `["text_idx", "filePath_idx", "language_idx", "extension_idx"]`)
+   */
+  async listIndexes(): Promise<string[]> {
+    await this.ensureInitialized();
+    const indices = await this.table!.listIndices();
+    return indices.map((i) => i.name);
   }
 }

@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Indexer } from "./indexer.js";
 import { readMtimeCache } from "./walker.js";
-import type { IndexDB } from "./db.js";
+import { IndexDB } from "./db.js";
+import type { IndexDB as IndexDBType } from "./db.js";
 import type { Embeddings } from "./embeddings.js";
 import type { IndexConfig } from "./config.js";
 
@@ -27,7 +28,7 @@ function makeConfig(override: Partial<IndexConfig> = {}): IndexConfig {
   };
 }
 
-function makeDb(): IndexDB {
+function makeDb(): IndexDBType {
   return {
     insertChunks: vi.fn().mockResolvedValue(undefined),
     deleteByFilePath: vi.fn().mockResolvedValue(undefined),
@@ -37,7 +38,10 @@ function makeDb(): IndexDB {
     hybridSearch: vi.fn().mockResolvedValue([]),
     getStatus: vi.fn().mockResolvedValue({ chunkCount: 0, fileCount: 0, lastIndexedAt: null }),
     rebuildFtsIndex: vi.fn().mockResolvedValue(undefined),
-  } as unknown as IndexDB;
+    optimize: vi.fn().mockResolvedValue({ compaction: {}, prune: {} }),
+    createVectorIndexIfNeeded: vi.fn().mockResolvedValue(undefined),
+    listIndexes: vi.fn().mockResolvedValue([]),
+  } as unknown as IndexDBType;
 }
 
 function makeEmb(): Embeddings {
@@ -544,4 +548,91 @@ describe("Indexer", () => {
     expect(callTimes.length).toBeGreaterThan(0);
   });
 
+});
+
+// --- Integration tests: real IndexDB + fake embeddings + spies ---
+
+/** Deterministic fake embeddings for integration tests. No network calls. */
+function makeFakeEmb(dim = 4): Embeddings {
+  return {
+    async embed(texts: string | string[]): Promise<number[] | number[][]> {
+      const toVec = (t: string): number[] => {
+        let hash = 0;
+        for (let i = 0; i < t.length; i++) hash = ((hash << 5) - hash + t.charCodeAt(i)) | 0;
+        return Array.from({ length: dim }, (_, i) => Math.abs(Math.sin(hash + i)));
+      };
+      if (Array.isArray(texts)) return texts.map(toVec);
+      return toVec(texts);
+    },
+  } as unknown as Embeddings;
+}
+
+describe("Indexer integration (real LanceDB)", () => {
+  it("calls optimize() after rebuildFtsIndex when files are processed", async () => {
+    writeFileSync(join(tmpDir, "hello.ts"), "export function hello() {}");
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const optimizeSpy = vi.spyOn(db, "optimize");
+    const ftsSpy = vi.spyOn(db, "rebuildFtsIndex");
+
+    const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
+    await indexer.run();
+
+    expect(optimizeSpy).toHaveBeenCalledOnce();
+    expect(ftsSpy).toHaveBeenCalledOnce();
+    // optimize must come AFTER rebuildFtsIndex
+    expect(optimizeSpy.mock.invocationCallOrder[0])
+      .toBeGreaterThan(ftsSpy.mock.invocationCallOrder[0]);
+    // Data must be intact
+    expect(await db.count()).toBeGreaterThan(0);
+  }, 30_000);
+
+  it("does NOT call optimize() when no files changed", async () => {
+    writeFileSync(join(tmpDir, "stable.ts"), "export const x = 1;");
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
+    await indexer.run(); // first run indexes the file
+
+    const optimizeSpy = vi.spyOn(db, "optimize");
+    await indexer.run(); // second run: no changes
+    expect(optimizeSpy).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it("calls optimize() on delete-only run", async () => {
+    const filePath = join(tmpDir, "del.ts");
+    writeFileSync(filePath, "export const x = 1;");
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
+    await indexer.run();
+
+    rmSync(filePath);
+    const optimizeSpy = vi.spyOn(db, "optimize");
+    await indexer.run();
+    expect(optimizeSpy).toHaveBeenCalledOnce();
+  }, 30_000);
+
+  it("calls createVectorIndexIfNeeded after optimize", async () => {
+    writeFileSync(join(tmpDir, "new.ts"), "export const x = 1;");
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const optimizeSpy = vi.spyOn(db, "optimize");
+    const vectorIdxSpy = vi.spyOn(db, "createVectorIndexIfNeeded");
+
+    const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
+    await indexer.run();
+
+    expect(vectorIdxSpy).toHaveBeenCalledOnce();
+    // Must be called AFTER optimize
+    expect(vectorIdxSpy.mock.invocationCallOrder[0])
+      .toBeGreaterThan(optimizeSpy.mock.invocationCallOrder[0]);
+  }, 30_000);
+
+  it("does NOT call createVectorIndexIfNeeded when no files changed", async () => {
+    writeFileSync(join(tmpDir, "stable.ts"), "export const x = 1;");
+    const db = new IndexDB(join(tmpDir, "lancedb"), 4);
+    const indexer = new Indexer(makeConfig(), db, makeFakeEmb());
+    await indexer.run(); // first run
+
+    const vectorIdxSpy = vi.spyOn(db, "createVectorIndexIfNeeded");
+    await indexer.run(); // second run: no changes
+    expect(vectorIdxSpy).not.toHaveBeenCalled();
+  }, 30_000);
 });

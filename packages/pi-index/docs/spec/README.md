@@ -1,7 +1,7 @@
 # pi-index — Spec
 
-**Version:** 0.1.0
-**Status:** Draft
+**Version:** 0.2.0
+**Status:** Current
 
 `pi-index` is a pi coding agent extension that indexes a project's codebase into a hybrid vector + full-text search database so the LLM can call `codebase_search` instead of using grep, bash, or find to navigate large codebases.
 
@@ -41,7 +41,7 @@ packages/pi-index/
 │           ├── 03-tool-api.md     ← LLM tool contracts
 │           └── 04-commands.md     ← slash command contracts
 ├── extensions/
-│   └── index/                     ← extension source files (not yet written)
+│   └── index/                     ← extension source files (12 modules + tests)
 └── package.json
 ```
 

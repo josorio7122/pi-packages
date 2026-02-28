@@ -92,6 +92,7 @@ On first initialization:
 2. Check if the `chunks` table already exists
 3. If yes: open it
 4. If no: create it with a bootstrap schema row (a fake `CodeChunk` with all fields set), then immediately delete that row. This establishes the schema without leaving garbage data. Then create an FTS (full-text search) index on the `text` column.
+5. **Create BTREE scalar indexes** on `filePath`, `language`, and `extension` columns. These accelerate scope filter queries (`@file:`, `@dir:`, `@lang:`, `@ext:`) from full column scans to indexed lookups. The scalar index creation runs on **both** the new-table and existing-table paths — LanceDB's default `replace: true` makes repeated calls idempotent (~4ms on re-create). If scalar index creation fails, queries still work — just slower (full scan fallback).
 
 The bootstrap approach is required because LanceDB infers the schema from the first row inserted. We need the FTS index to be created on an empty table, which some LanceDB versions can't do — so the FTS creation is wrapped in try-catch and treated as best-effort.
 
@@ -257,6 +258,23 @@ After processing all files, `rebuildFtsIndex()` is called. This rebuilds LanceDB
 
 The FTS rebuild is only triggered when at least one file was processed (added or updated). Delete-only runs don't need an FTS rebuild because LanceDB's deletion mechanism removes the rows from the underlying storage.
 
+### Table optimization
+
+After FTS rebuild, `optimize()` compacts fragmented data files. Each per-file delete+insert cycle during indexing creates a new data fragment in LanceDB's underlying Apache Lance storage. A 100-file index update creates ~100-200 small fragments. Without compaction, subsequent queries must read from many small files — slower I/O. The optimize call merges fragments into fewer, larger files and prunes old table versions.
+
+Optimization runs whenever files were added, updated, or deleted (skipped on no-change runs). It's best-effort — if it fails, data is correct but fragmented.
+
+### Auto vector index
+
+After optimization, `createVectorIndexIfNeeded()` checks whether the chunk count exceeds the IVF-PQ threshold (10,000 chunks). If yes, and no vector index already exists, it creates an IVF-PQ (Inverted File with Product Quantization) index on the `vector` column. This speeds up vector search from brute-force O(n) to approximate O(√n).
+
+The index parameters are computed dynamically:
+- `numPartitions` = `min(ceil(sqrt(count)), 256)` — standard heuristic, capped
+- `numSubVectors` = `floor(vectorDim / 16)` — for 1536-dim (OpenAI text-embedding-3-small): 96 subvectors
+- `distanceType` = `"cosine"` — matches the search distance metric
+
+Once created, the vector index persists and is updated incrementally by `optimize()`. The method checks `listIndices()` first to avoid expensive re-training on every run. Most codebases (200-10K chunks) stay below the threshold — brute-force is fast enough at that scale (~15ms on M1 for 10K vectors).
+
 ---
 
 ## Phase 8: Mtime Cache
@@ -387,18 +405,19 @@ The `isRunning` flag (local to the closure, not `indexer.isRunning`) prevents th
 
 ## The Dependency Graph
 
-The 11 source files have a clean dependency order:
+The 12 source files have a clean dependency order:
 
 ```
 utils.ts          ← no dependencies
+constants.ts      ← no dependencies (language map, batch sizes, thresholds)
 config.ts         ← node:path, node:fs
 mmr.ts            ← chunker.ts (ScoredChunk type)
-chunker.ts        ← node:path
+chunker.ts        ← node:path, constants.ts
 walker.ts         ← node:fs/promises, node:path
-embeddings.ts     ← openai
-db.ts             ← @lancedb/lancedb, chunker.ts
-indexer.ts        ← config, db, embeddings, chunker, walker
-searcher.ts       ← db, embeddings, config, mmr
+embeddings.ts     ← openai, constants.ts
+db.ts             ← @lancedb/lancedb, chunker.ts, constants.ts
+indexer.ts        ← config, db, embeddings, chunker, walker, constants.ts
+searcher.ts       ← db, embeddings, config, mmr, constants.ts
 tools.ts          ← indexer, searcher, db, config, walker, utils
 index.ts          ← all of the above + pi ExtensionAPI
 ```
@@ -412,15 +431,24 @@ There are no circular dependencies. Every module except `index.ts` is independen
 ```
 .pi/
 └── index/
-    ├── lancedb/              ← LanceDB database (vector + BM25 storage)
+    ├── lancedb/              ← LanceDB database (vector + BM25 + scalar storage)
     │   ├── _latest_manifest.manifest
     │   ├── chunks.lance/
     │   │   └── ...           ← columnar data files (Apache Lance format)
-    │   └── chunks.ivf_pq/    ← vector index (if created)
+    │   ├── text_idx/         ← FTS index (tantivy, always created)
+    │   ├── filePath_idx/     ← BTREE scalar index (always created)
+    │   ├── language_idx/     ← BTREE scalar index (always created)
+    │   ├── extension_idx/    ← BTREE scalar index (always created)
+    │   └── vector_idx/       ← IVF-PQ vector index (auto-created when >10K chunks)
     └── mtime-cache.json      ← plain JSON array of MtimeEntry
 ```
 
-Both files should be added to `.gitignore` — they are derived build artifacts, not source.
+**Indexes:**
+- `text_idx` — tantivy FTS index on the `text` column. Rebuilt after every indexing run.
+- `filePath_idx`, `language_idx`, `extension_idx` — BTREE scalar indexes. Created on DB initialization, idempotent on reopen. Accelerate scope filter WHERE clauses.
+- `vector_idx` — IVF-PQ approximate nearest-neighbor index. Only created when chunk count exceeds 10,000. Persists and is updated incrementally by `optimize()`.
+
+Both `lancedb/` and `mtime-cache.json` should be added to `.gitignore` — they are derived build artifacts, not source.
 
 ---
 
@@ -451,6 +479,9 @@ Both files should be added to `.gitignore` — they are derived build artifacts,
 | Min score default | 0.2 | Filters noise; top result scores 1.0, so 0.2 = bottom 20% |
 | Max file size | 500 KB | Large files are usually generated (build output, data files) |
 | Auto-interval default | 0 | Once per session; users opt in to more frequent re-indexing |
+| Vector index threshold | 10,000 chunks | Below this, brute-force scan is fast enough (~15ms on M1 for 10K vectors) |
+| IVF-PQ numSubVectors | dim/16 | 96 for 1536-dim (text-embedding-3-small); balances compression vs. accuracy |
+| IVF-PQ numPartitions | min(√n, 256) | Standard k-means heuristic, capped to avoid empty clusters |
 
 ---
 

@@ -104,7 +104,13 @@ For empty files (re-indexed, now 0 chunks): delete all chunks where `filePath` m
 
 After all chunks for a file have been successfully written to the index, the indexer updates the in-memory mtime cache for that file (`filePath`, `mtime`, `chunkCount`, `indexedAt`). The full cache is written to disk atomically after all files have been processed (CONSTITUTION.md § 6 rule 5).
 
-After processing, the FTS index is rebuilt (`rebuildFtsIndex`) if any files were added or updated, so that hybrid search immediately reflects the new chunks.
+After processing, the following post-indexing steps run in order:
+
+1. **FTS index rebuild** (`rebuildFtsIndex`) — if any files were added or updated, so that hybrid search immediately reflects the new chunks.
+2. **Table optimization** (`optimize`) — if any files were added, updated, or deleted. Compacts fragmented data files created by per-file delete+insert cycles and prunes old table versions.
+3. **Vector index creation** (`createVectorIndexIfNeeded`) — if any files were added, updated, or deleted. Creates an IVF-PQ vector index when the chunk count exceeds 10,000 and no vector index already exists. Skipped for small codebases where brute-force is fast enough.
+
+All three steps are best-effort — failures are logged as warnings but do not affect the indexing result or summary.
 
 ### Progress Feedback
 
