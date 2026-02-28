@@ -393,6 +393,48 @@ describe("Indexer", () => {
     expect((arg as string[]).length).toBeGreaterThan(0);
   });
 
+  it("embed receives enriched text with Module symbols and Imports context", async () => {
+    // File with imports + two exported functions → enricher should add context header
+    const content = [
+      "import { Config } from '../config';",
+      "",
+      "export function signToken() { return 'signed'; }",
+      "",
+      "export function verifyToken() { return true; }",
+    ].join("\n");
+    writeFileSync(join(tmpDir, "jwt.ts"), content);
+    const db = makeDb();
+    const spyEmb: Embeddings = {
+      embed: vi.fn().mockImplementation(async (texts: string | string[]) => {
+        if (Array.isArray(texts)) return texts.map(() => [0.1, 0.2, 0.3, 0.4]);
+        return [0.1, 0.2, 0.3, 0.4];
+      }),
+    } as unknown as Embeddings;
+    const indexer = new Indexer(makeConfig(), db, spyEmb);
+    await indexer.run();
+
+    // Get the enriched texts passed to embed
+    const [embedArg] = vi.mocked(spyEmb.embed).mock.calls[0];
+    const texts = embedArg as string[];
+
+    // Every chunk should have file context
+    for (const text of texts) {
+      expect(text).toContain("File: jwt.ts (typescript)");
+    }
+
+    // At least one chunk should have Module symbols (the function chunks)
+    const hasSymbols = texts.some((t) => t.includes("Module symbols:") && t.includes("signToken") && t.includes("verifyToken"));
+    expect(hasSymbols).toBe(true);
+
+    // At least one chunk should have Imports
+    const hasImports = texts.some((t) => t.includes("Imports: ../config"));
+    expect(hasImports).toBe(true);
+
+    // At least one chunk should have Current: with position
+    const hasCurrent = texts.some((t) => /Current: \w+ \(chunk \d+ of \d+\)/.test(t));
+    expect(hasCurrent).toBe(true);
+  });
+
   it("calls db.rebuildFtsIndex after processing files with changes", async () => {
     writeFileSync(join(tmpDir, "new.ts"), "export const x = 1;");
     const db = makeDb();

@@ -146,6 +146,7 @@ config.ts              — configuration loading + validation
 constants.ts           — shared constants (batch sizes, thresholds, language map)
 embeddings.ts          — OpenAI embeddings wrapper (encoding_format: float)
 chunker.ts             — structural boundary splitting, 80-line max
+context-enricher.ts    — contextual enrichment for embeddings (symbols, imports, position)
 walker.ts              — file discovery + mtime-based incremental cache
 mmr.ts                 — Maximal Marginal Relevance reranking
 db.ts                  — LanceDB wrapper (schema, indexes, hybrid search, optimization)

@@ -81,7 +81,7 @@ The chunking algorithm uses structural boundary detection to align chunk boundar
 
 ### Embedding
 
-For each chunk produced, the indexer constructs an enriched input string (DATA-MODEL.md § Embedding Input) and sends it to the embedding service.
+For each chunk produced, the indexer constructs an enriched input string using the contextual enricher (DATA-MODEL.md § Embedding Input) and sends it to the embedding service. The enricher adds file-level context — sibling symbols, import names, and chunk position — to improve retrieval quality without any LLM cost.
 
 Embedding calls are batched: up to **20 chunks per API call** (`EMBED_BATCH_SIZE`). Up to **3 API calls are made concurrently** (`EMBED_CONCURRENCY`). Each batch is a single OpenAI `embeddings.create` call with an array of 20 enriched text strings.
 

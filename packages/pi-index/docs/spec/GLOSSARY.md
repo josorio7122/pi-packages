@@ -39,6 +39,10 @@ A formula for merging two ranked lists into one. Each item in each list receives
 
 A reranking step that balances relevance with diversity. Without MMR, a search for "authentication logic" might return eight chunks all from the same file. MMR detects when results are too similar to each other and promotes results from other files, giving the agent a broader view of the codebase in fewer results.
 
+### Contextual Enrichment
+
+A pre-processing step that adds file-level context to each chunk before sending it to the embedding service. The enricher prepends a header with the file's sibling symbols (all function/class names in the same file), import/require module names, and the current chunk's position. This makes the resulting embedding aware of the chunk's place in the codebase — not just its own text. The enrichment is deterministic (no LLM calls) and only affects the embedding input; the stored `text` field remains the raw source lines. Inspired by Anthropic's Contextual Retrieval technique.
+
 ### Scope Filter
 
 A modifier appended to a search query that restricts results to a specific file, directory, extension, or language. For example, adding `@dir:src/payments` to a query limits results to files inside `src/payments/`. Scope filters are written directly in the query string and are stripped before the search runs.
