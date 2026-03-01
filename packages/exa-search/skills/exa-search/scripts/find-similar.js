@@ -39,7 +39,7 @@ const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.length === 0) {
   const lines = [];
-  const src = await import("fs").then(fs => fs.readFileSync(new URL(import.meta.url), "utf8"));
+  const src = await import("fs").then((fs) => fs.readFileSync(new URL(import.meta.url), "utf8"));
   for (const line of src.split("\n")) {
     if (line.startsWith(" * ") || line.startsWith(" */")) {
       if (line.startsWith(" */")) break;
@@ -74,9 +74,17 @@ if (typeof opts.contents === "object") contentsOpts = { ...contentsOpts, ...opts
 
 const searchOpts = {};
 for (const key of [
-  "numResults", "excludeSourceDomain", "includeDomains", "excludeDomains",
-  "startCrawlDate", "endCrawlDate", "startPublishedDate", "endPublishedDate",
-  "category", "includeText", "excludeText"
+  "numResults",
+  "excludeSourceDomain",
+  "includeDomains",
+  "excludeDomains",
+  "startCrawlDate",
+  "endCrawlDate",
+  "startPublishedDate",
+  "endPublishedDate",
+  "category",
+  "includeText",
+  "excludeText",
 ]) {
   if (opts[key] !== undefined) searchOpts[key] = opts[key];
 }

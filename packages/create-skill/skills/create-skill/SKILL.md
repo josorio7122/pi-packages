@@ -67,14 +67,14 @@ Instructions the agent follows when this skill is activated.
 
 ### Frontmatter Fields
 
-| Field | Required | Constraints |
-|-------|----------|-------------|
-| `name` | Yes | Max 64 chars. Lowercase letters, numbers, hyphens only. No leading/trailing/consecutive hyphens. Must match parent directory name. |
-| `description` | Yes | Max 1024 chars. Non-empty. Describes what the skill does AND when to use it. |
-| `license` | No | License name or reference to bundled file. |
-| `compatibility` | No | Max 500 chars. Environment requirements. |
-| `metadata` | No | Arbitrary key-value string mapping. |
-| `allowed-tools` | No | Space-delimited list of pre-approved tools. (Experimental) |
+| Field           | Required | Constraints                                                                                                                        |
+| --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | Yes      | Max 64 chars. Lowercase letters, numbers, hyphens only. No leading/trailing/consecutive hyphens. Must match parent directory name. |
+| `description`   | Yes      | Max 1024 chars. Non-empty. Describes what the skill does AND when to use it.                                                       |
+| `license`       | No       | License name or reference to bundled file.                                                                                         |
+| `compatibility` | No       | Max 500 chars. Environment requirements.                                                                                           |
+| `metadata`      | No       | Arbitrary key-value string mapping.                                                                                                |
+| `allowed-tools` | No       | Space-delimited list of pre-approved tools. (Experimental)                                                                         |
 
 **Only these six fields are allowed.** The `skills-ref` validator rejects unknown frontmatter fields.
 
@@ -91,11 +91,13 @@ Instructions the agent follows when this skill is activated.
 The description determines whether the agent loads the skill. It is the single most important field.
 
 **Good** — says what AND when:
+
 ```yaml
 description: Extracts text and tables from PDF files, fills PDF forms, and merges multiple PDFs. Use when working with PDF documents.
 ```
 
 **Bad** — vague, no trigger:
+
 ```yaml
 description: Helps with PDFs.
 ```
@@ -110,13 +112,13 @@ description: Helps with PDFs.
 
 ## How Pi Discovers Skills
 
-| Location | Scope |
-|----------|-------|
-| `~/.pi/agent/skills/` | Global (all projects) |
-| `~/.agents/skills/` | Global (Agent Skills standard) |
-| `.pi/skills/` | Project-local |
-| `.agents/skills/` in cwd and ancestors | Project-local (standard) |
-| Pi packages `skills/` directory | Shared via npm/git |
+| Location                               | Scope                          |
+| -------------------------------------- | ------------------------------ |
+| `~/.pi/agent/skills/`                  | Global (all projects)          |
+| `~/.agents/skills/`                    | Global (Agent Skills standard) |
+| `.pi/skills/`                          | Project-local                  |
+| `.agents/skills/` in cwd and ancestors | Project-local (standard)       |
+| Pi packages `skills/` directory        | Shared via npm/git             |
 
 At startup, pi extracts names and descriptions into the system prompt as XML. When a task matches, the agent uses `read` to load the full SKILL.md. Users can also invoke with `/skill:name`.
 
@@ -198,12 +200,14 @@ read references/agentskills/docs/skill-creation/using-scripts.mdx
 ### 4. Choose Structure
 
 **Instructions only:**
+
 ```
 my-skill/
 └── SKILL.md
 ```
 
 **With references (detail on-demand):**
+
 ```
 my-skill/
 ├── SKILL.md
@@ -212,6 +216,7 @@ my-skill/
 ```
 
 **With scripts:**
+
 ```
 my-skill/
 ├── SKILL.md
@@ -220,6 +225,7 @@ my-skill/
 ```
 
 **With scripts that need npm deps:**
+
 ```
 my-skill/
 ├── SKILL.md

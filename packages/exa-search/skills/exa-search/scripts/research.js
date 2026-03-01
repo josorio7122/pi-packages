@@ -58,7 +58,7 @@ const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.length === 0) {
   const lines = [];
-  const src = await import("fs").then(fs => fs.readFileSync(new URL(import.meta.url), "utf8"));
+  const src = await import("fs").then((fs) => fs.readFileSync(new URL(import.meta.url), "utf8"));
   for (const line of src.split("\n")) {
     if (line.startsWith(" * ") || line.startsWith(" */")) {
       if (line.startsWith(" */")) break;
@@ -71,7 +71,6 @@ if (args.includes("--help") || args.length === 0) {
 
 const subcommand = args[0];
 const arg1 = args[1];
-const optsArg = args[2] || args[1]; // For 'list', opts is the second arg
 
 if (!process.env.EXA_API_KEY) {
   console.error("Error: EXA_API_KEY environment variable is required.");
@@ -84,7 +83,10 @@ const exa = new Exa();
 try {
   switch (subcommand) {
     case "create": {
-      if (!arg1) { console.error("Error: instructions required."); process.exit(1); }
+      if (!arg1) {
+        console.error("Error: instructions required.");
+        process.exit(1);
+      }
       const opts = args[2] ? JSON.parse(args[2]) : {};
       const result = await exa.research.create({
         instructions: arg1,
@@ -96,7 +98,10 @@ try {
     }
 
     case "get": {
-      if (!arg1) { console.error("Error: research-id required."); process.exit(1); }
+      if (!arg1) {
+        console.error("Error: research-id required.");
+        process.exit(1);
+      }
       const opts = args[2] ? JSON.parse(args[2]) : {};
       if (opts.stream) {
         for await (const event of exa.research.get(arg1, { stream: true, ...opts })) {
@@ -110,7 +115,10 @@ try {
     }
 
     case "poll": {
-      if (!arg1) { console.error("Error: research-id required."); process.exit(1); }
+      if (!arg1) {
+        console.error("Error: research-id required.");
+        process.exit(1);
+      }
       const opts = args[2] ? JSON.parse(args[2]) : {};
       const result = await exa.research.pollUntilFinished(arg1, opts);
       console.log(JSON.stringify(result, null, 2));
@@ -118,7 +126,10 @@ try {
     }
 
     case "run": {
-      if (!arg1) { console.error("Error: instructions required."); process.exit(1); }
+      if (!arg1) {
+        console.error("Error: instructions required.");
+        process.exit(1);
+      }
       const opts = args[2] ? JSON.parse(args[2]) : {};
       const created = await exa.research.create({
         instructions: arg1,

@@ -2,10 +2,14 @@
   "name": "@josorio/create-skill",
   "version": "1.0.0",
   "description": "Pi skill for creating Agent Skills — follows the agentskills.io specification and pi conventions",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "author": "josorio7122",
   "license": "MIT",
   "pi": {
-    "skills": ["./skills"]
+    "skills": [
+      "./skills"
+    ]
   }
 }

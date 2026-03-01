@@ -3,17 +3,28 @@
   "private": true,
   "version": "0.0.0",
   "description": "Pi packages monorepo — extensions and skills for the pi coding agent",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "license": "MIT",
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
-    "lint": "turbo run lint",
-    "dev": "turbo run dev --parallel"
+    "lint": "eslint .",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "globals": "^17.3.0",
+    "prettier": "^3.8.1",
     "turbo": "latest",
     "typescript": "^5.9.3"
-  }
+  },
+  "type": "module"
 }

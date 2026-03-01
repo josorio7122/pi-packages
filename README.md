@@ -6,10 +6,10 @@ A collection of [pi](https://github.com/mariozechner/pi) extensions — packages
 
 ## Packages
 
-| Package | Version | Description |
-|---|---|---|
-| [`@josorio/pi-memory`](./packages/pi-memory) | 0.1.0 | Persistent conversation memory via LanceDB + OpenAI embeddings |
-| [`@josorio/pi-index`](./packages/pi-index) | 0.1.0 | Semantic codebase search via hybrid vector + BM25 indexing |
+| Package                                      | Version | Description                                                    |
+| -------------------------------------------- | ------- | -------------------------------------------------------------- |
+| [`@josorio/pi-memory`](./packages/pi-memory) | 0.1.0   | Persistent conversation memory via LanceDB + OpenAI embeddings |
+| [`@josorio/pi-index`](./packages/pi-index)   | 0.1.0   | Semantic codebase search via hybrid vector + BM25 indexing     |
 
 ---
 
@@ -27,10 +27,7 @@ pnpm add @josorio/pi-index
 
 ```json
 {
-  "extensions": [
-    "@josorio/pi-memory",
-    "@josorio/pi-index"
-  ]
+  "extensions": ["@josorio/pi-memory", "@josorio/pi-index"]
 }
 ```
 

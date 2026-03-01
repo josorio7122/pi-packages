@@ -33,13 +33,13 @@ Get an API key at: https://dashboard.exa.ai/api-keys
 
 All scripts output JSON to stdout. Pass options as a JSON string argument. Run any script with `--help` for full usage.
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/search.js` | Semantic search + search with contents |
-| `scripts/find-similar.js` | Find pages similar to a URL |
-| `scripts/contents.js` | Extract contents from URLs |
-| `scripts/answer.js` | AI-generated answers with citations |
-| `scripts/research.js` | Deep research tasks (create, poll, run) |
+| Script                    | Purpose                                 |
+| ------------------------- | --------------------------------------- |
+| `scripts/search.js`       | Semantic search + search with contents  |
+| `scripts/find-similar.js` | Find pages similar to a URL             |
+| `scripts/contents.js`     | Extract contents from URLs              |
+| `scripts/answer.js`       | AI-generated answers with citations     |
+| `scripts/research.js`     | Deep research tasks (create, poll, run) |
 
 ## Search
 
@@ -70,25 +70,25 @@ node scripts/search.js "quantum computing breakthroughs" '{"type":"deep","additi
 
 ### Key Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `numResults` | number | Number of results (default 10) |
-| `type` | string | `"auto"`, `"fast"`, `"deep"`, `"deep-reasoning"`, `"deep-max"`, `"instant"` |
-| `text` | bool/object | Include page text. Object: `{"maxCharacters":5000}` |
-| `highlights` | bool/object | Include highlights. Object: `{"query":"...", "numSentences":3}` |
-| `summary` | bool/object | Include summary. Object: `{"query":"summarize pricing"}` |
-| `includeDomains` | string[] | Only search these domains |
-| `excludeDomains` | string[] | Exclude these domains |
-| `category` | string | Filter by content category |
-| `startPublishedDate` | string | ISO date — results published after this |
-| `endPublishedDate` | string | ISO date — results published before this |
-| `includeText` | string[] | Page must contain these strings (max 1, up to 5 words) |
-| `excludeText` | string[] | Page must not contain these strings |
-| `useAutoprompt` | bool | Enhance query automatically |
-| `subpages` | number | Number of subpages per result |
-| `subpageTarget` | string | Text to match subpages against |
-| `additionalQueries` | string[] | Alt queries for deep search (max 5) |
-| `outputSchema` | object | JSON Schema for deep search structured output |
+| Option               | Type        | Description                                                                 |
+| -------------------- | ----------- | --------------------------------------------------------------------------- |
+| `numResults`         | number      | Number of results (default 10)                                              |
+| `type`               | string      | `"auto"`, `"fast"`, `"deep"`, `"deep-reasoning"`, `"deep-max"`, `"instant"` |
+| `text`               | bool/object | Include page text. Object: `{"maxCharacters":5000}`                         |
+| `highlights`         | bool/object | Include highlights. Object: `{"query":"...", "numSentences":3}`             |
+| `summary`            | bool/object | Include summary. Object: `{"query":"summarize pricing"}`                    |
+| `includeDomains`     | string[]    | Only search these domains                                                   |
+| `excludeDomains`     | string[]    | Exclude these domains                                                       |
+| `category`           | string      | Filter by content category                                                  |
+| `startPublishedDate` | string      | ISO date — results published after this                                     |
+| `endPublishedDate`   | string      | ISO date — results published before this                                    |
+| `includeText`        | string[]    | Page must contain these strings (max 1, up to 5 words)                      |
+| `excludeText`        | string[]    | Page must not contain these strings                                         |
+| `useAutoprompt`      | bool        | Enhance query automatically                                                 |
+| `subpages`           | number      | Number of subpages per result                                               |
+| `subpageTarget`      | string      | Text to match subpages against                                              |
+| `additionalQueries`  | string[]    | Alt queries for deep search (max 5)                                         |
+| `outputSchema`       | object      | JSON Schema for deep search structured output                               |
 
 ## Find Similar
 
