@@ -12,9 +12,6 @@
     "lint": "turbo run lint",
     "dev": "turbo run dev --parallel"
   },
-  "pi": {
-    "skills": ["./packages/pi-skill-expert/skills"]
-  },
   "devDependencies": {
     "turbo": "latest",
     "typescript": "^5.9.3"
