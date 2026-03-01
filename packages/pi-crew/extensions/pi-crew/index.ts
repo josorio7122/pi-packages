@@ -147,27 +147,9 @@ ${currentState}
 6. **Ask humans for design decisions** — During design phase, present options and ask. During build phase, agents should auto-fix (rules 1-3) and escalate architectural changes (rule 4).`;
 }
 
-// ── Status Bar ──────────────────────────────────────────────────────
-
-function buildStatusText(config: { profile: string }, state: { phase: string | null; progress: string | null } | null): string {
-	if (state?.phase) {
-		const parts = [state.phase];
-		if (state.progress) parts.push(`${state.progress} tasks`);
-		parts.push(config.profile);
-		return parts.join(" │ ");
-	}
-	return `idle │ ${config.profile}`;
-}
-
 // ── Extension Entry Point ───────────────────────────────────────────
 
 export default function piCrew(pi: any) {
-	// ── Session start: set status bar ────────────────────────────────
-	pi.on("session_start", async (_event: any, ctx: any) => {
-		const config = readConfig(ctx.cwd);
-		const state = readState(ctx.cwd);
-		ctx.ui.setStatus("crew", buildStatusText(config, state));
-	});
 
 	// ── Before agent start: inject crew system prompt ────────────────
 	pi.on("before_agent_start", async (event: any, ctx: any) => {
@@ -554,7 +536,6 @@ export default function piCrew(pi: any) {
 			const config = readConfig(ctx.cwd);
 			config.profile = profileName;
 			writeConfig(ctx.cwd, config);
-			ctx.ui.setStatus("crew", buildStatusText(config, readState(ctx.cwd)));
 			ctx.ui.notify(`Profile switched to ${profileName}`, "success");
 		},
 	});
@@ -593,8 +574,6 @@ export default function piCrew(pi: any) {
 			} else {
 				ctx.ui.notify("No state to clear.", "info");
 			}
-			const config = readConfig(ctx.cwd);
-			ctx.ui.setStatus("crew", buildStatusText(config, null));
 		},
 	});
 
