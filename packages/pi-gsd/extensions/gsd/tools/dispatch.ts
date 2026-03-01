@@ -155,6 +155,8 @@ export function registerDispatchTool(pi: ExtensionAPI, agentsDir: string): void 
       ]),
       task: Type.String({ description: 'Full task description for the agent' }),
       model: Type.Optional(Type.String({ description: 'Model override (default: resolved from config profile)' })),
+      session: Type.Optional(Type.String({ description: 'Session file path for persistent agent sessions. Enables resuming agent context across calls.' })),
+      continue_session: Type.Optional(Type.Boolean({ description: 'If true and session is set, continue an existing session instead of starting fresh.' })),
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -191,17 +193,28 @@ export function registerDispatchTool(pi: ExtensionAPI, agentsDir: string): void 
         const { spawn } = await import('node:child_process');
 
         const output = await new Promise<string>((resolve, reject) => {
-          const proc = spawn('pi', [
+          // Build args — support persistent sessions
+          const piArgs: string[] = [
             '-p', params.task,
             '--system-prompt', systemPrompt,
             '--model', model,
             '--mode', 'json',
-            '--no-session',
             '--no-extensions',
             '--no-skills',
             '--no-prompt-templates',
             '--tools', 'read,bash,edit,write,grep,find,ls',
-          ], {
+          ];
+
+          if (params.session) {
+            piArgs.push('--session', params.session);
+            if (params.continue_session) {
+              piArgs.push('-c');
+            }
+          } else {
+            piArgs.push('--no-session');
+          }
+
+          const proc = spawn('pi', piArgs, {
             cwd,
             stdio: ['ignore', 'pipe', 'pipe'],
             env: { ...process.env },

@@ -10,8 +10,11 @@ import { registerVerifyTool } from './tools/verify.js';
 import { registerUtilTool } from './tools/util.js';
 import { registerDispatchTool } from './tools/dispatch.js';
 import { registerDispatchWaveTool } from './tools/dispatch-wave.js';
+import { registerDispatchAsyncTool } from './tools/dispatch-async.js';
 import { registerContextMonitor } from './hooks/context-monitor.js';
 import { registerStatusline } from './hooks/statusline.js';
+import { registerSystemPromptInjection } from './hooks/system-prompt.js';
+import { registerToolGating } from './hooks/tool-gating.js';
 
 export default function (pi: ExtensionAPI): void {
   const extensionDir = path.dirname(new URL(import.meta.url).pathname);
@@ -32,11 +35,14 @@ export default function (pi: ExtensionAPI): void {
   registerVerifyTool(pi);
   registerUtilTool(pi, runtimeDir);
 
-  // Dispatch tools (2)
+  // Dispatch tools (3)
   registerDispatchTool(pi, agentsDir);
   registerDispatchWaveTool(pi, agentsDir);
+  registerDispatchAsyncTool(pi, agentsDir);
 
   // Hooks
   registerContextMonitor(pi);
   registerStatusline(pi);
+  registerSystemPromptInjection(pi);
+  registerToolGating(pi);
 }
