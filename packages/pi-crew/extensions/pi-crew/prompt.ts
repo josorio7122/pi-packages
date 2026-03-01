@@ -9,7 +9,7 @@ import { getWorkflowProgress } from "./state.js";
  * Shows presets, dispatch syntax, and how to start a workflow.
  */
 export function buildIdlePrompt(presetDocs: string): string {
-	return `## Crew — Agentic Workflow Orchestration
+  return `## Crew — Agentic Workflow Orchestration
 
 You have access to the \`dispatch_crew\` tool which spawns isolated pi agents with preset configurations.
 
@@ -47,12 +47,23 @@ dispatch_crew({
 
 You can override a preset's model if needed: \`dispatch_crew({ preset: "executor", model: "claude-opus-4", task: "..." })\`
 
-### When to Use a Workflow
+### ⚠️ Mandatory Workflow Gate
 
-Start a structured workflow when the task involves:
-- 3+ files to create or modify
-- New features or architectural changes
-- The user explicitly asks for a structured approach
+**BEFORE writing any implementation code, you MUST check whether a workflow is needed.**
+
+A workflow is required when ANY of these are true:
+- **3+ files** to create or modify (including package manifests, configs, READMEs)
+- **New feature, new package, or new module** being added to the codebase
+- **Architectural changes** — new directories, new patterns, cross-cutting concerns
+- **The user explicitly asks** for a structured approach
+
+**Concrete examples that REQUIRE a workflow:**
+- Creating a new package or library (even a small one — it has package.json, source files, README)
+- Adding a new module, extension, or plugin to an existing project
+- Implementing a feature that touches multiple files across the codebase
+- Refactoring that affects 3+ files
+
+**Do NOT rationalize skipping the workflow.** If the task matches any criterion above, write \`.crew/state.md\` BEFORE writing any implementation file. Choose the appropriate workflow shortcut (Quick or Minimal for small tasks).
 
 To start a workflow, write \`.crew/state.md\`:
 
@@ -91,13 +102,13 @@ Not every task needs all 6 phases. Choose the right subset when starting:
  * Injects enforcement header, progress bar, presets, and full skill content.
  */
 export function buildActivePrompt(
-	presetDocs: string,
-	state: CrewState,
-	skillContent: string,
+  presetDocs: string,
+  state: CrewState,
+  skillContent: string,
 ): string {
-	const progress = getWorkflowProgress(state);
+  const progress = getWorkflowProgress(state);
 
-	return `## ⚠️ ACTIVE WORKFLOW: "${state.feature}"
+  return `## ⚠️ ACTIVE WORKFLOW: "${state.feature}"
 
 ${progress}
 
@@ -117,23 +128,23 @@ ${skillContent}`;
  * Route to idle or active prompt based on state.
  */
 export function buildCrewPrompt(
-	presetDocs: string,
-	state: CrewState | null,
-	skillContent: string | null,
+  presetDocs: string,
+  state: CrewState | null,
+  skillContent: string | null,
 ): string {
-	if (state?.workflow && state.workflow.length > 0 && skillContent) {
-		return buildActivePrompt(presetDocs, state, skillContent);
-	}
-	return buildIdlePrompt(presetDocs);
+  if (state?.workflow && state.workflow.length > 0 && skillContent) {
+    return buildActivePrompt(presetDocs, state, skillContent);
+  }
+  return buildIdlePrompt(presetDocs);
 }
 
 /**
  * Build the nudge message sent on agent_end when workflow is incomplete.
  */
 export function buildNudgeMessage(state: CrewState): string {
-	const progress = getWorkflowProgress(state);
+  const progress = getWorkflowProgress(state);
 
-	return `⚠️ Workflow in progress: "${state.feature}" — phase: ${state.phase}
+  return `⚠️ Workflow in progress: "${state.feature}" — phase: ${state.phase}
 ${progress}
 Continue with the current phase. The instructions are in your system prompt.`;
 }
