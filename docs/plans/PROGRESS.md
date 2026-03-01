@@ -48,6 +48,14 @@
 - **Notes:** `AgentToolResult<T>` requires `details: T` — all returns include `details: null`. TypeBox `Type.Record(Type.String(), Type.Unknown())` used for `updates` in gsd_state (not `Type.Record(Type.String(), Type.String())`). `gsd_dispatch` and `gsd_dispatch_wave` parse pi's JSON event stream for `agent_end`/`agent_response` events to extract final text output. `gsd_util` render-template heuristic: if template contains `{{` or newlines, treat as inline; otherwise try filename first.
 - **Timestamp:** 2026-02-28
 
+### Task 10+11: Create 24 secondary + utility skills
+- **Status:** ✅ Complete
+- **Commit:** 1e7877a feat(pi-gsd): create 16 utility and management skills (+ 4b09224 for secondary)
+- **Built:** Created 24 GSD skill files across two commits. 8 secondary workflow skills: gsd-quick, gsd-progress, gsd-help, gsd-pause-work, gsd-resume-work, gsd-discovery-phase, gsd-transition, gsd-map-codebase. 16 utility/management skills: gsd-add-phase, gsd-insert-phase, gsd-remove-phase, gsd-list-phase-assumptions, gsd-plan-milestone-gaps, gsd-research-phase, gsd-audit-milestone, gsd-settings, gsd-set-profile, gsd-add-todo, gsd-check-todos, gsd-add-tests, gsd-cleanup, gsd-debug, gsd-health, gsd-update.
+- **Tests:** N/A (static markdown files)
+- **Notes:** 6 of the 8 secondary skills were already present (untracked) from a prior session and were included in the task 9 commit. Only gsd-transition and gsd-map-codebase were newly added in the secondary commit.
+- **Timestamp:** 2026-02-28
+
 ### Task 9: Create 7 core workflow skills
 - **Status:** ✅ Complete
 - **Commit:** 259dfbf feat(pi-gsd): create 7 core workflow skills
