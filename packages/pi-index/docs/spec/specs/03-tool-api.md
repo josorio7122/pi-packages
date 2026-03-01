@@ -1,6 +1,6 @@
 # Subsystem Spec: Tool API
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **File:** `specs/03-tool-api.md`
 **Depends on:** CONSTITUTION.md, DATA-MODEL.md, specs/01-indexing.md, specs/02-search.md
 
@@ -31,6 +31,14 @@ Searches the index using hybrid vector + full-text search with MMR reranking. Th
 Delegates entirely to the search subsystem (`specs/02-search.md`). The full search pipeline runs: query parsing → query embedding → hybrid search → scope filtering → RRF fusion → score threshold → MMR reranking → result formatting.
 
 If the index is empty (zero chunks), returns `Error: [INDEX_NOT_INITIALIZED] ...`.
+
+If `indexer.isRunning` is `true` at the time of the call, a warning line is prepended to the result:
+
+```
+⚠️ Index is currently being updated — results may be incomplete.
+```
+
+This warning appears even when results are returned successfully. It is omitted when no index run is in progress.
 
 ### Returns
 
@@ -74,13 +82,22 @@ Triggers an incremental index of the configured directories. On first call, buil
 
 Delegates to the indexing subsystem (`specs/01-indexing.md`).
 
+`codebase_index` always starts the indexer via `runAsync()` and **returns immediately** — it does not wait for indexing to complete. The full indexing pipeline runs in the background.
+
 When `force: false`: runs the incremental diff against the mtime cache. Only new, changed, and deleted files are processed.
 
 When `force: true`: deletes all chunks from the index and clears the mtime cache, then indexes all eligible files from scratch.
 
 ### Returns
 
-On success: a plain text summary (the header says "Index updated:" for incremental runs or "Index rebuilt:" for `force: true`):
+On success (immediate — indexing started in background):
+
+```
+Started indexing {N} file(s) in the background.
+Check progress with codebase_status.
+```
+
+When the background run completes, the full summary is available via `codebase_status`. The final summary uses the header "Index updated:" for incremental runs or "Index rebuilt:" for `force: true`:
 
 ```
 Index updated:
@@ -136,6 +153,7 @@ On success (index not yet built — `chunkCount == 0` and `cache.size == 0`):
 pi-index status:
   Index path:    {dbPath}
   Status:        Not built. Call codebase_index to create the index.
+  Provider:      {openai | ollama | voyage}
   Auto-index:    {on | off}
   Index dirs:    {comma-separated list of indexDirs}
 ```
@@ -149,10 +167,13 @@ pi-index status:
   Files indexed: {N}
   Last indexed:  {relative time, e.g. "3 hours ago"}
   Model:         {model name}
+  Provider:      {openai | ollama | voyage}
   Auto-index:    {on | off}
   Index dirs:    {comma-separated list of indexDirs}
-  (Index currently rebuilding in background)   ← only if indexer.isRunning
+  (Indexing in progress: {N}/{M} files — {pct}%)   ← only if indexer.isRunning
 ```
+
+The progress line (`Indexing in progress: …`) is only shown when `indexer.isRunning` is `true`. It displays the count of files processed so far (`N`), the total files to process (`M`), and the percentage complete (`pct`). When `isRunning` is `false` but a previous async run completed, the status shows the result of the last completed run.
 
 On error: `Error: [STATUS_FAILED] {reason}`.
 
@@ -172,23 +193,29 @@ Given the index contains more than 5 matching chunks for the query,
 When `codebase_search` is called with `limit: 3`,
 Then at most 3 results are returned.
 
-**Scenario 3 — codebase_index: incremental run**
+**Scenario 3 — codebase_index: async immediate return**
 
 Given the index was built with 100 files and 5 have been modified,
 When `codebase_index` is called with `force: false`,
-Then the summary reports 0 added, 5 updated, 0 removed, 95 skipped.
+Then the tool returns immediately with "Started indexing…" and `indexer.isRunning` is `true`. After the background run completes, `codebase_status` shows a summary reporting 0 added, 5 updated, 0 removed, 95 skipped.
 
 **Scenario 4 — codebase_index: force rebuild**
 
 Given the index exists,
 When `codebase_index` is called with `force: true`,
-Then all chunks are deleted, the index is rebuilt from scratch, and the summary header says "Index rebuilt:".
+Then the tool returns immediately with "Started indexing…". After the background run completes, all chunks have been replaced and the summary header says "Index rebuilt:".
 
 **Scenario 5 — codebase_status: populated index**
 
-Given the index contains 4000 chunks across 300 files, last indexed 2 hours ago,
+Given the index contains 4000 chunks across 300 files, last indexed 2 hours ago, and no index run is in progress,
 When `codebase_status` is called,
-Then the output includes `Total chunks: 4000`, `Files indexed: 300`, and a last-indexed time approximately 2 hours ago.
+Then the output includes `Total chunks: 4000`, `Files indexed: 300`, a last-indexed time approximately 2 hours ago, and no progress line.
+
+**Scenario 5b — codebase_status: indexing in progress**
+
+Given an index run is currently running and has processed 40 of 100 files,
+When `codebase_status` is called,
+Then the output includes `Indexing in progress: 40/100 files — 40%`.
 
 **Scenario 6 — codebase_status: empty index**
 
@@ -196,11 +223,17 @@ Given `codebase_index` has never been called,
 When `codebase_status` is called,
 Then the output includes `Status: Not built. Call codebase_index to create the index.`
 
-**Scenario 7 — all tools: missing API key**
+**Scenario 7 — all tools: missing API key (OpenAI provider)**
 
-Given neither `OPENAI_API_KEY` nor `PI_INDEX_API_KEY` is set,
+Given `PI_INDEX_PROVIDER` is `openai` (or unset) and neither `OPENAI_API_KEY` nor `PI_INDEX_API_KEY` is set,
 When any tool is called,
 Then the tool returns `Error: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_INDEX_API_KEY to enable pi-index.`
+
+**Scenario 7b — all tools: missing API key (Voyage provider)**
+
+Given `PI_INDEX_PROVIDER` is `voyage` and `PI_INDEX_VOYAGE_API_KEY` is not set,
+When any tool is called,
+Then the tool returns `Error: [CONFIG_MISSING_API_KEY] Set PI_INDEX_VOYAGE_API_KEY to use the Voyage AI provider.`
 
 ---
 
@@ -211,5 +244,6 @@ Then the tool returns `Error: [CONFIG_MISSING_API_KEY] Set OPENAI_API_KEY or PI_
 | `codebase_search` with `limit: 0` | Returns `Found 0 results for "..."`. No error. |
 | `codebase_search` with `limit: 25` | Capped to 20. Returns at most 20 results. |
 | `codebase_index` while auto-index session-start run is in progress | Returns `Error: [INDEX_ALREADY_RUNNING] ...`. The session-start run continues. |
-| `codebase_status` while `codebase_index` is running | Returns status as of last completed run, with note `(Index currently rebuilding in background)`. |
-| `codebase_index` with `force: true` and all embeddings fail | Index is left empty (all old chunks deleted, none inserted). Summary reports all files as failed. |
+| `codebase_status` while `codebase_index` is running | Returns status as of last completed run, with `Indexing in progress: N/M files — pct%` progress line. |
+| `codebase_index` with `force: true` and all embeddings fail | Index is left empty (all old chunks deleted, none inserted). Summary (available via `codebase_status`) reports all files as failed. |
+| `codebase_search` while `codebase_index` is running | Returns results from the current (possibly incomplete) index with a `⚠️ Index is currently being updated — results may be incomplete.` warning prepended. |

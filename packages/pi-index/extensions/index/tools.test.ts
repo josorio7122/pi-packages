@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createIndexTools, formatSummary } from "./tools.js";
 import { readMtimeCache } from "./walker.js";
-import type { Indexer, IndexSummary } from "./indexer.js";
+import type { Indexer, IndexSummary, AsyncIndexResult } from "./indexer.js";
 import type { Searcher } from "./searcher.js";
 import type { IndexDB } from "./db.js";
 import type { IndexConfig } from "./config.js";
@@ -27,15 +27,28 @@ function makeSearcher(result = "Found 1 result"): Searcher {
 
 function makeIndexer(
   summary: Partial<IndexSummary> = {},
-  opts: { isRunning?: boolean } = {},
+  opts: {
+    isRunning?: boolean;
+    runAsyncStatus?: "started" | "already_running";
+    progress?: string | null;
+    lastError?: string | null;
+  } = {},
 ): Indexer {
   const defaults: IndexSummary = {
     added: 1, addedChunks: 3, updated: 0, updatedChunks: 0, removed: 0, skipped: 0,
     skippedTooLarge: 0, failedFiles: [], totalChunks: 5, elapsedMs: 1000,
   };
+  const runAsyncResult: AsyncIndexResult =
+    opts.runAsyncStatus === "already_running"
+      ? { status: "already_running", progress: opts.progress ?? null }
+      : { status: "started" };
   return {
     run: vi.fn().mockResolvedValue({ ...defaults, ...summary }),
+    runAsync: vi.fn().mockReturnValue(runAsyncResult),
     isRunning: opts.isRunning ?? false,
+    lastResult: null,
+    lastError: opts.lastError ?? null,
+    progress: opts.progress ?? null,
   } as unknown as Indexer;
 }
 
@@ -152,145 +165,92 @@ describe("createIndexTools", () => {
       const result = await tool.handler({ query: "auth" });
       expect(result).toContain("[SEARCH_FAILED]");
     });
+
+    it("appends indexing-in-progress warning when indexer.isRunning is true", async () => {
+      const searcher = makeSearcher("Found 2 results");
+      const indexer = makeIndexer({}, { isRunning: true });
+      const { tools } = createIndexTools(searcher, indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_search")!;
+      const result = await tool.handler({ query: "test" });
+      expect(result).toContain("Found 2 results");
+      expect(result).toContain("ndexing is currently in progress");
+    });
+
+    it("does not append warning when indexer.isRunning is false", async () => {
+      const searcher = makeSearcher("Found 1 result");
+      const indexer = makeIndexer({}, { isRunning: false });
+      const { tools } = createIndexTools(searcher, indexer, makeDb(), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_search")!;
+      const result = await tool.handler({ query: "test" });
+      expect(result).toBe("Found 1 result");
+      expect(result).not.toContain("in progress");
+    });
   });
 
   describe("codebase_index", () => {
-    it("calls indexer.run() with no options by default", async () => {
+    it("calls indexer.runAsync() with force false by default", async () => {
       const indexer = makeIndexer();
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
       await tool.handler({});
-      expect(indexer.run).toHaveBeenCalledWith({ force: false });
+      expect(indexer.runAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ force: false }),
+      );
     });
 
-    it("calls indexer.run({ force: true }) when force is true", async () => {
+    it("calls indexer.runAsync({ force: true }) when force is true", async () => {
       const indexer = makeIndexer();
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
       await tool.handler({ force: true });
-      expect(indexer.run).toHaveBeenCalledWith({ force: true });
+      expect(indexer.runAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ force: true }),
+      );
     });
 
-    it("returns a summary string with Added/Updated/Skipped", async () => {
-      const indexer = makeIndexer({ added: 3, addedChunks: 12, updated: 1, updatedChunks: 4, removed: 0, skipped: 95, skippedTooLarge: 0, totalChunks: 200, elapsedMs: 5000 });
+    it("returns 'Started indexing' message when runAsync returns started", async () => {
+      const indexer = makeIndexer({}, { runAsyncStatus: "started" });
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
       const result = await tool.handler({});
-      expect(result).toContain("Added:");
-      expect(result).toContain("Updated:");
-      expect(result).toContain("Skipped:");
+      expect(result).toContain("Started indexing");
     });
 
-    it("returns 'Index updated:' header for incremental run (force=false)", async () => {
-      const indexer = makeIndexer();
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
-      const tool = tools.find((t) => t.name === "codebase_index")!;
-      const result = await tool.handler({ force: false });
-      expect(result).toContain("Index updated:");
-      expect(result).not.toContain("Index rebuilt:");
-    });
-
-    it("returns 'Index rebuilt:' header for force=true run", async () => {
-      const indexer = makeIndexer();
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
-      const tool = tools.find((t) => t.name === "codebase_index")!;
-      const result = await tool.handler({ force: true });
-      expect(result).toContain("Index rebuilt:");
-      expect(result).not.toContain("Index updated:");
-    });
-
-    it("includes chunk counts in Added and Updated lines", async () => {
-      const indexer = makeIndexer({ added: 3, addedChunks: 12, updated: 1, updatedChunks: 4, skippedTooLarge: 0 });
+    it("returns 'already in progress' message when runAsync returns already_running", async () => {
+      const indexer = makeIndexer({}, { runAsyncStatus: "already_running" });
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
       const result = await tool.handler({});
-      expect(result).toContain("3 files (12 chunks)");
-      expect(result).toContain("1 file (4 chunks)");
+      expect(result).toContain("already in progress");
     });
 
-    it("shows skippedTooLarge line when files were skipped for size", async () => {
-      const indexer = makeIndexer({ skippedTooLarge: 2 });
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
-      const tool = tools.find((t) => t.name === "codebase_index")!;
-      const result = await tool.handler({});
-      expect(result).toContain("Too large:");
-      expect(result).toContain("2 files (size limit)");
-    });
-
-    it("does not include Failed: line even when failedFiles is non-empty", async () => {
-      const indexer = makeIndexer({ failedFiles: ["bad.ts", "broken.ts"] });
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
-      const tool = tools.find((t) => t.name === "codebase_index")!;
-      const result = await tool.handler({});
-      expect(result).not.toContain("Failed:");
-    });
-
-    it("calls notify with an info-level message when codebase_index runs successfully", async () => {
-      const notify = vi.fn();
-      const indexer: Indexer = {
-        run: vi.fn().mockImplementation(async (opts: { force?: boolean; onProgress?: (msg: string) => void } = {}) => {
-          opts.onProgress?.("⚡ Indexing 1 file(s)...");
-          return { added: 1, addedChunks: 3, updated: 0, updatedChunks: 0, removed: 0, skipped: 0, skippedTooLarge: 0, failedFiles: [], totalChunks: 5, elapsedMs: 1000 };
-        }),
-        isRunning: false,
-      } as unknown as Indexer;
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig(), { notify });
-      const tool = tools.find((t) => t.name === "codebase_index")!;
-      await tool.handler({});
-      expect(notify).toHaveBeenCalledWith(expect.any(String), "info");
-    });
-
-    it("codebase_index forwards progress via notify parameter (per-call, not opts)", async () => {
+    it("passes onProgress to runAsync when notify is provided", async () => {
       const notifications: string[] = [];
       const notify = (msg: string, level: string) => notifications.push(`${level}:${msg}`);
-      const indexer: Indexer = {
-        run: vi.fn().mockImplementation(async (opts: { force?: boolean; onProgress?: (msg: string) => void } = {}) => {
-          opts.onProgress?.("⚡ Indexing 1 file(s)...");
-          opts.onProgress?.("✅ Done");
-          return { added: 1, addedChunks: 3, updated: 0, updatedChunks: 0, removed: 0, skipped: 0, skippedTooLarge: 0, failedFiles: [], totalChunks: 5, elapsedMs: 1000 };
-        }),
-        isRunning: false,
-      } as unknown as Indexer;
-      // createIndexTools called WITHOUT opts.notify — notify comes per-call via handler 2nd arg
+      const indexer = makeIndexer();
+      // Capture the onProgress callback and invoke it
+      vi.mocked(indexer.runAsync).mockImplementation((opts) => {
+        opts?.onProgress?.("⚡ Test progress");
+        return { status: "started" };
+      });
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_index")!;
       await tool.handler({}, notify);
-      expect(notifications).toHaveLength(2);
-      expect(notifications[0]).toBe("info:⚡ Indexing 1 file(s)...");
-      expect(notifications[1]).toBe("info:✅ Done");
+      expect(notifications).toContain("info:⚡ Test progress");
     });
 
-    it("returns INDEX_ALREADY_RUNNING error when indexer throws that", async () => {
-
-      const indexer = {
-        run: vi.fn().mockRejectedValue(new Error("INDEX_ALREADY_RUNNING: still running")),
-        isRunning: false,
-      } as unknown as Indexer;
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
+    it("passes onProgress from opts.notify when no per-call notify provided", async () => {
+      const notifications: string[] = [];
+      const globalNotify = (msg: string, level: string) => notifications.push(`${level}:${msg}`);
+      const indexer = makeIndexer();
+      vi.mocked(indexer.runAsync).mockImplementation((opts) => {
+        opts?.onProgress?.("⚡ Global progress");
+        return { status: "started" };
+      });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig(), { notify: globalNotify });
       const tool = tools.find((t) => t.name === "codebase_index")!;
-      const result = await tool.handler({});
-      expect(result).toContain("[INDEX_ALREADY_RUNNING]");
-    });
-
-    it("returns CONFIG_MISSING_API_KEY error when indexer throws it", async () => {
-      const indexer = {
-        run: vi.fn().mockRejectedValue(new Error("CONFIG_MISSING_API_KEY: no key set")),
-      } as unknown as Indexer;
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
-      const tool = tools.find((t) => t.name === "codebase_index")!;
-      const result = await tool.handler({});
-      expect(result).toContain("[CONFIG_MISSING_API_KEY]");
-    });
-
-    it("codebase_index returns INDEX_FAILED for unexpected errors", async () => {
-      const indexer = {
-        run: vi.fn().mockRejectedValue(new Error("disk full")),
-        isRunning: false,
-      } as unknown as Indexer;
-      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
-      const tool = tools.find((t) => t.name === "codebase_index")!;
-      const result = await tool.handler({});
-      expect(result).toContain("[INDEX_FAILED]");
+      await tool.handler({});
+      expect(notifications).toContain("info:⚡ Global progress");
     });
   });
 
@@ -338,20 +298,40 @@ describe("createIndexTools", () => {
       expect(result).toContain("5 minutes ago");
     });
 
-    it("appends rebuilding note when indexer.isRunning is true", async () => {
+    it("appends 'Indexing: In progress' when indexer.isRunning is true", async () => {
       const indexer = makeIndexer({}, { isRunning: true });
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
-      expect(result).toContain("(Index currently rebuilding in background)");
+      expect(result).toContain("Indexing:");
+      expect(result).toContain("In progress");
     });
 
-    it("does not append rebuilding note when indexer.isRunning is false", async () => {
+    it("includes progress message in Indexing line when progress is set", async () => {
+      vi.mocked(readMtimeCache).mockResolvedValueOnce(makeMtimeCache(2));
+      const indexer = makeIndexer({}, { isRunning: true, progress: "⚡ Embedding 10/50" });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb({ chunkCount: 5 }), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("⚡ Embedding 10/50");
+    });
+
+    it("does not include Indexing line when indexer.isRunning is false", async () => {
       const indexer = makeIndexer({}, { isRunning: false });
       const { tools } = createIndexTools(makeSearcher(), indexer, makeDb(), makeConfig());
       const tool = tools.find((t) => t.name === "codebase_status")!;
       const result = await tool.handler({});
-      expect(result).not.toContain("rebuilding");
+      expect(result).not.toContain("In progress");
+    });
+
+    it("shows Last error line when indexer.lastError is set", async () => {
+      vi.mocked(readMtimeCache).mockResolvedValueOnce(makeMtimeCache(2));
+      const indexer = makeIndexer({}, { lastError: "API key missing" });
+      const { tools } = createIndexTools(makeSearcher(), indexer, makeDb({ chunkCount: 5 }), makeConfig());
+      const tool = tools.find((t) => t.name === "codebase_status")!;
+      const result = await tool.handler({});
+      expect(result).toContain("Last error:");
+      expect(result).toContain("API key missing");
     });
 
     it("codebase_status not-built includes dbPath", async () => {

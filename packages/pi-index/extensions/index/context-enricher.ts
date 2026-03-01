@@ -8,6 +8,7 @@ import type { CodeChunk } from "./chunker.js";
  * - Python: `from X import Y`, `import X`
  * - CommonJS: `require('Y')`
  * - Ruby: `require 'Y'`, `require_relative 'Y'`
+ * - SCSS/LESS: `@import 'Y'`, `@use 'Y'`, `@forward 'Y'`
  *
  * @param text - Source text (typically the first chunk of a file)
  * @returns Array of unique module/package names in order of first appearance
@@ -52,6 +53,10 @@ export function extractImportNames(text: string): string[] {
     // Ruby: require 'Y' or require_relative 'Y'
     const rbReq = trimmed.match(/^require(?:_relative)?\s+['"]([^'"]+)['"]/);
     if (rbReq) { add(rbReq[1]); continue; }
+
+    // SCSS/LESS: @import 'Y', @use 'Y', @forward 'Y'
+    const scssImport = trimmed.match(/^@(?:import|use|forward)\s+['"]([^'"]+)['"]/);
+    if (scssImport) { add(scssImport[1]); continue; }
   }
 
   return modules;

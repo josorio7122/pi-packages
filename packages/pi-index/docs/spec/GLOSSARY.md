@@ -1,6 +1,6 @@
 # pi-index — Glossary
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Status:** Current
 
 ---
@@ -74,6 +74,38 @@ A BTREE index on a metadata column (`filePath`, `language`, or `extension`) that
 ### Vector Index
 
 An approximate nearest-neighbor index (IVF-PQ) on the `vector` column that speeds up vector search for large codebases. Instead of comparing the query vector against every stored vector (brute-force), the index partitions vectors into clusters and only searches the most promising clusters. Automatically created when the index exceeds 10,000 chunks — below that, brute-force is fast enough.
+
+### EmbeddingProvider
+
+An interface that abstracts the embedding service used to convert text into vectors. The extension supports three implementations: `OpenAIProvider` (default), `OllamaProvider` (local/offline), and `VoyageProvider` (code-optimized). Each provider implements four operations: `embed(text)`, `embedBatch(texts)`, `getDimension()`, and `getProvider()`. The active provider is created at startup by the `createProvider(cfg)` factory function based on the `PI_INDEX_PROVIDER` environment variable.
+
+### Ollama
+
+A local embedding provider that runs open-source models on the developer's machine. No API key or internet connection is required. Ollama is suitable for air-gapped or privacy-sensitive environments. The extension communicates with Ollama via its HTTP API (default: `http://localhost:11434`). The model is configured via `PI_INDEX_OLLAMA_MODEL` (default: `nomic-embed-text`).
+
+### Voyage AI
+
+A cloud embedding provider specialised for code retrieval. Voyage AI models are trained on large code corpora and produce higher-quality embeddings for semantic code search than general-purpose models. The extension uses the `voyage-code-2` model by default (configurable via `PI_INDEX_VOYAGE_MODEL`). Requires `PI_INDEX_VOYAGE_API_KEY`.
+
+### tree-sitter
+
+A parser library that produces a full abstract syntax tree (AST) for source code. pi-index uses tree-sitter grammars for TypeScript, JavaScript, Python, Ruby, CSS, and SCSS to identify structural boundaries — function definitions, class declarations, method bodies — when splitting files into chunks. AST-based chunking is more accurate than regex pattern matching because it understands the full syntactic structure of the file, not just line patterns.
+
+### AST Chunking
+
+The chunk-boundary detection strategy that uses a tree-sitter AST to locate structural nodes (functions, classes, methods) in source files. When tree-sitter support exists for a language, the chunker queries the AST for top-level and class-member declarations and uses those node boundaries as chunk split points. This replaces the previous regex-based boundary detection. `chunkFile()` is asynchronous because tree-sitter parsing is performed asynchronously.
+
+### LangChain
+
+An open-source library that provides text-splitting utilities used as the fallback chunking strategy for languages without tree-sitter support. Specifically, the extension uses LangChain's `RecursiveCharacterTextSplitter`, which splits text by a hierarchy of separator characters (blank lines, single newlines, etc.) while respecting a maximum chunk size. LangChain splitting is used for: SQL, Markdown, HTML, JSON, YAML, TOML, plain text, LESS, and ERB.
+
+### Periodic Sync
+
+The automatic re-indexing behaviour triggered on a timer when `autoIndexInterval > 0`. A `setInterval` timer is registered at startup; on each tick, incremental indexing runs unless the indexer is already running (in which case the tick is skipped). The timer complements the session-start one-shot auto-index — it keeps the index fresh during long-running sessions without requiring the developer to manually call `codebase_index`.
+
+### AsyncIndexResult
+
+The immediate response returned by `codebase_index` when the indexing run is started asynchronously via `runAsync()`. Instead of waiting for indexing to complete, the tool returns a "Started indexing …" message immediately and the indexer runs in the background. Progress can be checked at any time via `codebase_status`, which shows a progress indicator and the percentage of files processed when an index run is in progress.
 
 ### Table Optimization
 

@@ -1,6 +1,6 @@
 # pi-index — Overview
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Status:** Current
 
 ---
@@ -21,14 +21,14 @@ This workflow runs once per project, the first time a developer sets up pi-index
 
 1. The developer installs pi-index from GitHub following the README. The extension loads on the next pi session start.
 2. The developer sets `OPENAI_API_KEY` (or `PI_INDEX_API_KEY`) in their shell environment.
-3. The developer calls `codebase_index` (or the LLM calls it on their behalf). This is the trigger for the first build. (`PI_INDEX_AUTO` is `false` by default — see `specs/01-indexing.md`.)
+3. The developer calls `codebase_index` (or the LLM calls it on their behalf). This is the trigger for the first build. (`PI_INDEX_AUTO` is `false` by default — see `specs/01-indexing.md`.) The tool returns immediately with a "Started indexing…" message; the indexer runs in the background.
 4. The indexer walks the configured directories, applies the file inclusion rules from DATA-MODEL.md, and collects all eligible files.
 5. For each eligible file, the indexer splits it into chunks (see `specs/01-indexing.md`). Each chunk gets a start line, end line, language label, and best-effort symbol name.
 6. The indexer enriches each chunk with file-level context (sibling symbols, imports, position) and sends the enriched text to the embedding service in batches. Each chunk produces a vector.
 7. The indexer writes each chunk — text, vector, metadata — to the index database.
 8. After all chunks are written, the indexer updates the mtime cache atomically.
-9. The tool returns a summary: files indexed, chunks created, time elapsed.
-10. The LLM can now call `codebase_search` at any point in the session.
+9. When the background run completes, the summary (files indexed, chunks created, time elapsed) is available via `codebase_status`.
+10. The LLM can call `codebase_search` at any point — even while indexing is still running. Results include a warning note when the index is incomplete.
 
 ### Workflow 2: Incremental Refresh
 
@@ -63,29 +63,40 @@ This workflow runs every time the LLM calls `codebase_search` during a session.
 ```
 Developer / LLM
       │
-      ├─► codebase_index ──────────────────────────────────────────────┐
-      │                                                                  │
-      │   Indexing Pipeline                                              │
-      │   ┌─────────────┐  ┌──────────┐  ┌───────────┐  ┌────────────┐  │
-      │   │  File Walker │─►│  Chunker │─►│  Enricher │─►│  Embed API │  │
-      │   └─────────────┘  └──────────┘  └───────────┘  └────────────┘  │
-      │         │                                         │              │
-      │   (mtime diff)                              (vectors)            │
-      │         │                                         │              │
-      │         ▼                                         ▼              │
-      │   ┌─────────────┐                    ┌──────────────────────┐  │
-      │   │ Mtime Cache │                    │   Index Database     │  │
-      │   │ (JSON file) │                    │  (chunks + vectors   │  │
-      │   └─────────────┘                    │   + FTS index)       │  │
-      │                                      └──────────────────────┘  │
-      │                                                  │              │
-      └─► codebase_search                                │◄─────────────┘
-                │                                        │
-                │   Search Pipeline                      │
-                │   ┌──────────────────────────────┐     │
-                └──►│ Scope Filter Parser           │     │
-                    │ Query Embedder                │     │
-                    │ Vector Search  ──────────────►│◄────┘
+      ├─► codebase_index ──────────────────────────────────────────────────┐
+      │   (returns immediately — indexing runs in background)              │
+      │                                                                    │
+      │   Indexing Pipeline                                                │
+      │   ┌─────────────┐  ┌─────────────┐  ┌───────────┐                 │
+      │   │  File Walker │─►│ AST Chunker │─►│  Enricher │                 │
+      │   └─────────────┘  │ (tree-sitter│  └─────┬─────┘                 │
+      │         │           │  + LangChain│        │                       │
+      │   (mtime diff)      │  fallback)  │        ▼                       │
+      │         │           └─────────────┘  ┌──────────────────────────┐ │
+      │         │                            │   EmbeddingProvider      │ │
+      │         │                            │  ┌──────────┐            │ │
+      │         │                            │  │  OpenAI  │ (default)  │ │
+      │         │                            │  ├──────────┤            │ │
+      │         │                            │  │  Ollama  │ (local)    │ │
+      │         │                            │  ├──────────┤            │ │
+      │         │                            │  │ Voyage AI│ (code)     │ │
+      │         │                            │  └──────────┘            │ │
+      │         │                            └──────────┬───────────────┘ │
+      │         │                                 (vectors)               │
+      │         ▼                                       ▼                 │
+      │   ┌─────────────┐                  ┌──────────────────────┐      │
+      │   │ Mtime Cache │                  │   Index Database     │      │
+      │   │ (JSON file) │                  │  (chunks + vectors   │      │
+      │   └─────────────┘                  │   + FTS index)       │      │
+      │                                    └──────────────────────┘      │
+      │                                                │                  │
+      └─► codebase_search                              │◄─────────────────┘
+                │                                      │
+                │   Search Pipeline                    │
+                │   ┌──────────────────────────────┐   │
+                └──►│ Scope Filter Parser           │   │
+                    │ Query Embedder                │   │
+                    │ Vector Search  ──────────────►│◄──┘
                     │ Full-Text Search ────────────►│
                     │ RRF Fusion                    │
                     │ Score Threshold Filter        │
@@ -94,6 +105,7 @@ Developer / LLM
                                    │
                                    ▼
                             Ranked Results
+                     (+ warning if indexing in progress)
                             (returned to LLM)
 ```
 
@@ -119,6 +131,12 @@ Developer / LLM
 **Hybrid search over pure vector.** Code search has two modes: semantic ("find auth logic") and exact ("find handleStripeWebhook"). Pure vector search performs poorly on exact identifier queries. The extension uses LanceDB's built-in full-text (BM25) and vector search together, fused with RRF, to handle both modes in a single call.
 
 **autoIndex is off by default.** The first index build on a large project takes several minutes and costs real money in embedding API calls. The developer explicitly triggers the first build. After that, incremental refreshes are fast enough to be triggered automatically if desired.
+
+**Async-first indexing.** `codebase_index` returns immediately with a "Started indexing…" message. The indexer runs in the background so the LLM can continue working. `codebase_status` shows progress, and search results include a warning when the index is incomplete.
+
+**Multi-provider embeddings.** The embedding layer is abstracted behind an `EmbeddingProvider` interface. OpenAI is the default; Ollama enables local/offline use; Voyage AI provides code-optimized embeddings. The provider is selected by `PI_INDEX_PROVIDER`.
+
+**AST-based chunking.** For languages with tree-sitter grammar support (TypeScript, JavaScript, Python, Ruby, CSS, SCSS), the chunker walks the AST to find structural boundaries — function and class definitions — instead of using regex pattern matching. This produces more semantically coherent chunks. LangChain `RecursiveCharacterTextSplitter` is the fallback for unsupported languages.
 
 **Project-local index.** The index is stored in `.pi/index/` inside the project. This means each project has an independent index, different projects never interfere, and the index is easy to inspect or delete. It is gitignored — it is a derived artifact.
 
