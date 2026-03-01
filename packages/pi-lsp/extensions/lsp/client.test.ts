@@ -188,7 +188,102 @@ describe('LSPClient LSP requests', () => {
   });
 });
 
-// ─── Test 12: shutdown ────────────────────────────────────────────────────────
+// ─── Tests 13–16: TypeScript first-publish skip ──────────────────────────────
+
+describe('TypeScript first-publish skip', () => {
+  let tsClient: LSPClient;
+  let pyrightClient: LSPClient;
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pi-lsp-ts-skip-'));
+
+    tsClient = await LSPClient.create({
+      serverID: 'typescript',
+      process: spawnMockServer() as any,
+      root: tmpDir,
+      ...SHORT_OPTS,
+    });
+
+    pyrightClient = await LSPClient.create({
+      serverID: 'pyright',
+      process: spawnMockServer() as any,
+      root: tmpDir,
+      ...SHORT_OPTS,
+    });
+  });
+
+  afterAll(async () => {
+    await tsClient.shutdown();
+    await pyrightClient.shutdown();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('first publishDiagnostics does NOT resolve waitForDiagnostics for typescript', async () => {
+    const file = path.join(tmpDir, 'ts-skip-first.ts');
+    await fs.writeFile(file, 'const x = 1;\n');
+
+    const waitPromise = tsClient.waitForDiagnostics(file);
+    await tsClient.openFile(file);
+
+    // After 200ms the mock publish has already arrived (~60ms), but
+    // the first-publish guard should have suppressed the listener call.
+    const raceResult = await Promise.race([
+      waitPromise.then(() => 'resolved'),
+      new Promise<string>((r) => setTimeout(() => r('pending'), 200)),
+    ]);
+
+    expect(raceResult).toBe('pending');
+    // Let the overall-timer clean up in background (don't block the test suite)
+  });
+
+  it('second publishDiagnostics DOES resolve waitForDiagnostics for typescript', async () => {
+    const file = path.join(tmpDir, 'ts-skip-second.ts');
+    await fs.writeFile(file, 'const y = 2;\n');
+
+    // First open → first publish (should be skipped)
+    await tsClient.openFile(file);
+    // Wait for first publish to arrive and be stored-but-skipped
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Second open → didChange → second publish (should notify)
+    const waitPromise = tsClient.waitForDiagnostics(file);
+    await tsClient.openFile(file);
+    await waitPromise;
+
+    const diags = tsClient.getDiagnostics(file);
+    expect(diags).toHaveLength(1);
+    expect(diags[0].message).toBe('Updated error from mock server');
+  });
+
+  it('first publishDiagnostics resolves waitForDiagnostics immediately for pyright', async () => {
+    const file = path.join(tmpDir, 'pyright-first.ts');
+    await fs.writeFile(file, 'const z = 3;\n');
+
+    const waitPromise = pyrightClient.waitForDiagnostics(file);
+    await pyrightClient.openFile(file);
+    await waitPromise;
+
+    const diags = pyrightClient.getDiagnostics(file);
+    expect(diags).toHaveLength(1);
+    expect(diags[0].message).toBe('Test error from mock server');
+  });
+
+  it('diagnostics from first skipped publish ARE stored (getDiagnostics returns them)', async () => {
+    const file = path.join(tmpDir, 'ts-skip-stored.ts');
+    await fs.writeFile(file, 'const w = 4;\n');
+
+    await tsClient.openFile(file);
+    // Wait long enough for the first publish to arrive and be stored
+    await new Promise((r) => setTimeout(r, 100));
+
+    const diags = tsClient.getDiagnostics(file);
+    expect(diags).toHaveLength(1);
+    expect(diags[0].message).toBe('Test error from mock server');
+  });
+});
+
+// ─── Test 17: shutdown ────────────────────────────────────────────────────────
 
 describe('LSPClient.shutdown()', () => {
   it('cleanly closes connection', async () => {
