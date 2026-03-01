@@ -10,38 +10,31 @@ metadata:
 
 Create skills that follow the Agent Skills specification and work with pi's skill discovery system.
 
-## Prerequisites
+## Step 0: Ensure the Spec is Available
 
-The Agent Skills repo must be cloned locally. This is the single source of truth for the spec, the validator CLI, and the script authoring guide.
-
-### Setup (one-time)
+The Agent Skills repo lives inside this skill at `references/agentskills/`. Clone it if missing, then always pull main before creating anything.
 
 ```bash
-# Clone if not already present
-if [ ! -d "$HOME/Code/agents.md/agentskills" ]; then
-  mkdir -p "$HOME/Code/agents.md"
-  git clone https://github.com/agentskills/agentskills.git "$HOME/Code/agents.md/agentskills"
+SKILL_DIR="$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")"
+REFS_DIR="references/agentskills"
+
+# Clone if not present
+if [ ! -d "$REFS_DIR" ]; then
+  git clone https://github.com/agentskills/agentskills.git "$REFS_DIR"
 fi
 
-# Install the validator
-cd "$HOME/Code/agents.md/agentskills/skills-ref"
-uv sync
+# Always pull latest main
+cd "$REFS_DIR" && git checkout main && git pull && cd -
 ```
 
-### Update (before each use)
+The agent must run these commands (resolved to absolute paths) from the skill directory before proceeding.
 
-```bash
-cd "$HOME/Code/agents.md/agentskills" && git pull
-```
+## Step 1: Read the Spec
 
-## Step 0: Read the Spec
+Read these two files from the local clone before creating any skill:
 
-Before creating any skill, read the canonical specification and the script guide from the local clone:
-
-```
-$HOME/Code/agents.md/agentskills/docs/specification.mdx
-$HOME/Code/agents.md/agentskills/docs/skill-creation/using-scripts.mdx
-```
+- **Specification:** `references/agentskills/docs/specification.mdx`
+- **Script guide:** `references/agentskills/docs/skill-creation/using-scripts.mdx`
 
 These are the authoritative sources. The summary below is for quick reference only — always defer to the spec files when in doubt.
 
@@ -132,7 +125,7 @@ At startup, pi extracts names and descriptions into the system prompt as XML. Wh
 Read the full guide before creating script-based skills:
 
 ```
-$HOME/Code/agents.md/agentskills/docs/skill-creation/using-scripts.mdx
+references/agentskills/docs/skill-creation/using-scripts.mdx
 ```
 
 Key points:
@@ -150,8 +143,11 @@ Key points:
 
 ### Validate with skills-ref CLI
 
+The validator is part of the cloned repo:
+
 ```bash
-cd "$HOME/Code/agents.md/agentskills/skills-ref"
+cd references/agentskills/skills-ref
+uv sync   # one-time setup
 uv run skills-ref validate /path/to/my-skill
 ```
 
@@ -179,22 +175,27 @@ Pi shows startup warnings for spec violations and loads the full SKILL.md conten
 
 ## Creation Workflow
 
-### 1. Read the Spec
+### 1. Pull Latest Spec
 
 ```bash
-# Read these two files before proceeding
-read $HOME/Code/agents.md/agentskills/docs/specification.mdx
-read $HOME/Code/agents.md/agentskills/docs/skill-creation/using-scripts.mdx
+cd references/agentskills && git pull
 ```
 
-### 2. Clarify Intent
+### 2. Read the Spec
+
+```
+read references/agentskills/docs/specification.mdx
+read references/agentskills/docs/skill-creation/using-scripts.mdx
+```
+
+### 3. Clarify Intent
 
 - What does the skill do? (one sentence)
 - When should the agent load it? (trigger conditions for the description)
 - Does it need scripts, references, or templates?
 - Global (`~/.pi/agent/skills/`) or project-local (`.pi/skills/`)?
 
-### 3. Choose Structure
+### 4. Choose Structure
 
 **Instructions only:**
 ```
@@ -227,20 +228,20 @@ my-skill/
 └── package.json
 ```
 
-### 4. Write SKILL.md
+### 5. Write SKILL.md
 
 Use the template below. Keep the body under 500 lines. Move detail into `references/`.
 
-### 5. Validate
+### 6. Validate
 
 ```bash
-cd "$HOME/Code/agents.md/agentskills/skills-ref"
+cd references/agentskills/skills-ref
 uv run skills-ref validate /path/to/my-skill
 ```
 
 Fix any errors before delivering.
 
-### 6. Verify in Pi
+### 7. Verify in Pi
 
 ```bash
 pi --no-session "/skill:name"

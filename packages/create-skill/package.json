@@ -1,5 +1,5 @@
 {
-  "name": "@josorio/pi-skill-expert",
+  "name": "@josorio/create-skill",
   "version": "1.0.0",
   "description": "Pi skill for creating Agent Skills — follows the agentskills.io specification and pi conventions",
   "keywords": ["pi-package"],
