@@ -14,7 +14,7 @@
     "postinstall": "cd packages/pi-memory && npm install"
   },
   "pi": {
-    "extensions": ["./packages/pi-memory/extensions"],
+    "extensions": ["./packages/pi-memory/extensions", "./packages/pi-meta/extensions"],
     "skills": ["./packages/pi-memory/skills"]
   },
   "devDependencies": {

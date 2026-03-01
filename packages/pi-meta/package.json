@@ -1,0 +1,36 @@
+{
+  "name": "@josorio/pi-meta",
+  "version": "0.1.0",
+  "description": "Pi Meta — meta-agent that builds Pi agents using parallel domain-expert research",
+  "keywords": ["pi-package", "pi-meta", "meta-agent", "ai-agent"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "extensions",
+    "agents",
+    "lib"
+  ],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "echo 'No tests yet'",
+    "lint": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@sinclair/typebox": "*"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@sinclair/typebox": "*",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}
