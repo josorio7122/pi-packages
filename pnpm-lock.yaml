@@ -17,6 +17,8 @@ importers:
 
   packages/create-skill: {}
 
+  packages/exa-search: {}
+
 packages:
 
   turbo-darwin-64@2.8.11:

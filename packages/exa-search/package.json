@@ -1,0 +1,11 @@
+{
+  "name": "@josorio/exa-search",
+  "version": "1.0.0",
+  "description": "Pi skill for Exa search, content extraction, answers, and research via the exa-js SDK",
+  "keywords": ["pi-package"],
+  "author": "josorio7122",
+  "license": "MIT",
+  "pi": {
+    "skills": ["./skills"]
+  }
+}

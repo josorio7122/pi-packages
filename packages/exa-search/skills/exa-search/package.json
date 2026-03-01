@@ -1,0 +1,8 @@
+{
+  "name": "exa-search-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "exa-js": "latest"
+  }
+}
