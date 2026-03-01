@@ -23,24 +23,24 @@ You now have the `dispatch_crew` tool and all 10 skills available in every pi se
 
 ### Extension
 
-| Extension | Tool | Description |
-|-----------|------|-------------|
+| Extension                      | Tool            | Description                                                       |
+| ------------------------------ | --------------- | ----------------------------------------------------------------- |
 | [pi-crew](./packages/pi-crew/) | `dispatch_crew` | Dispatch specialized AI agents through structured workflow phases |
 
 ### Skills
 
-| Skill | Package | Description |
-|-------|---------|-------------|
-| `crew-explore` | [pi-crew](./packages/pi-crew/) | Dispatch scouts to map codebase structure, patterns, and conventions |
-| `crew-design` | [pi-crew](./packages/pi-crew/) | Discuss design approaches, dispatch architects, lock decisions |
-| `crew-plan` | [pi-crew](./packages/pi-crew/) | Break designs into executable task waves with dependencies |
-| `crew-build` | [pi-crew](./packages/pi-crew/) | Execute plans wave-by-wave with executor agents; retry failures with debuggers |
-| `crew-review` | [pi-crew](./packages/pi-crew/) | Three-gate review: spec compliance → code quality → security |
-| `crew-ship` | [pi-crew](./packages/pi-crew/) | Squash commits, push branch, open PR/MR |
-| `exa-search` | [exa-search](./packages/exa-search/) | Semantic web search, content extraction, and AI answers via Exa API |
-| `gh` | [gh](./packages/gh/) | GitHub CLI — pull requests, issues, releases, Actions, API |
-| `glab` | [glab](./packages/glab/) | GitLab CLI — merge requests, issues, CI/CD, stacked diffs, API |
-| `create-skill` | [create-skill](./packages/create-skill/) | Expert system for creating pi skills following the Agent Skills spec |
+| Skill          | Package                                  | Description                                                                    |
+| -------------- | ---------------------------------------- | ------------------------------------------------------------------------------ |
+| `crew-explore` | [pi-crew](./packages/pi-crew/)           | Dispatch scouts to map codebase structure, patterns, and conventions           |
+| `crew-design`  | [pi-crew](./packages/pi-crew/)           | Discuss design approaches, dispatch architects, lock decisions                 |
+| `crew-plan`    | [pi-crew](./packages/pi-crew/)           | Break designs into executable task waves with dependencies                     |
+| `crew-build`   | [pi-crew](./packages/pi-crew/)           | Execute plans wave-by-wave with executor agents; retry failures with debuggers |
+| `crew-review`  | [pi-crew](./packages/pi-crew/)           | Three-gate review: spec compliance → code quality → security                   |
+| `crew-ship`    | [pi-crew](./packages/pi-crew/)           | Squash commits, push branch, open PR/MR                                        |
+| `exa-search`   | [exa-search](./packages/exa-search/)     | Semantic web search, content extraction, and AI answers via Exa API            |
+| `gh`           | [gh](./packages/gh/)                     | GitHub CLI — pull requests, issues, releases, Actions, API                     |
+| `glab`         | [glab](./packages/glab/)                 | GitLab CLI — merge requests, issues, CI/CD, stacked diffs, API                 |
+| `create-skill` | [create-skill](./packages/create-skill/) | Expert system for creating pi skills following the Agent Skills spec           |
 
 ## Packages
 

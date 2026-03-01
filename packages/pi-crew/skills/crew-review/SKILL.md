@@ -17,13 +17,16 @@ Verify the implementation through three sequential review gates.
 ### 1. Load Context
 
 Read:
+
 - `.crew/phases/<feature>/design.md` — spec for compliance check
 - `.crew/phases/<feature>/build/summary.md` — what was built
 
 Get the diff:
+
 ```bash
 git diff main...HEAD
 ```
+
 (or `master...HEAD`, or the appropriate base branch)
 
 ### 2. Three Review Gates
@@ -41,6 +44,7 @@ dispatch_crew({
 ```
 
 **If FAIL:** Present critical findings to user. Options:
+
 - Dispatch executor to fix specific issues
 - Accept the deviation with justification
 
@@ -76,15 +80,19 @@ Write `.crew/phases/<feature>/review.md`:
 # Review: {feature-name}
 
 ## Gate 1: Spec Compliance — PASS/FAIL
+
 {findings}
 
 ## Gate 2: Code Quality — PASS/FAIL
+
 {findings}
 
 ## Gate 3: Security — PASS/FAIL
+
 {findings}
 
 ## Overall: PASS/FAIL
+
 {summary}
 ```
 
@@ -103,15 +111,16 @@ Keep the `workflow` field unchanged.
 
 ```yaml
 ---
-feature: {feature-name}
-phase: {next phase from workflow}
-workflow: {keep the same workflow from before}
+feature: { feature-name }
+phase: { next phase from workflow }
+workflow: { keep the same workflow from before }
 ---
 ```
 
 ## Evaluation Gate
 
 Before moving to ship:
+
 - [ ] All three gates pass (or user explicitly accepts with justification)
 - [ ] Review report written
 - [ ] No critical security findings unresolved

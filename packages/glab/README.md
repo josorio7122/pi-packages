@@ -9,17 +9,17 @@ GitLab CLI skill for [pi](https://github.com/mariozechner/pi). Comprehensive com
 
 ## What It Covers
 
-| Domain | Key Commands |
-|--------|-------------|
-| Merge Requests | create, list, view, checkout, approve, merge, rebase, comments, notes |
-| Issues | create, list, view, board, edit, close, reopen, subscribe |
-| CI/CD Pipelines | status, list, run, view (TUI), delete, variables, schedules, lint |
-| CI/CD Variables | list, get, set, update, delete, export |
-| Repository | view, clone, fork, create, search, members, transfer, mirror, archive |
-| Releases | create, upload, download, edit, delete |
-| Tokens | list, create, revoke, rotate |
-| Stacked Diffs | create, save, amend, sync, first/prev/next/last, move, reorder |
-| API | REST and GraphQL with placeholder substitution, auto-pagination, ndjson streaming |
+| Domain          | Key Commands                                                                      |
+| --------------- | --------------------------------------------------------------------------------- |
+| Merge Requests  | create, list, view, checkout, approve, merge, rebase, comments, notes             |
+| Issues          | create, list, view, board, edit, close, reopen, subscribe                         |
+| CI/CD Pipelines | status, list, run, view (TUI), delete, variables, schedules, lint                 |
+| CI/CD Variables | list, get, set, update, delete, export                                            |
+| Repository      | view, clone, fork, create, search, members, transfer, mirror, archive             |
+| Releases        | create, upload, download, edit, delete                                            |
+| Tokens          | list, create, revoke, rotate                                                      |
+| Stacked Diffs   | create, save, amend, sync, first/prev/next/last, move, reorder                    |
+| API             | REST and GraphQL with placeholder substitution, auto-pagination, ndjson streaming |
 
 ## Usage
 

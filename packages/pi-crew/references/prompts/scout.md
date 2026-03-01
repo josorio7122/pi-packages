@@ -24,18 +24,23 @@ Return findings in this structure:
 ## Findings: {area explored}
 
 ### Structure
+
 - {directory}: {purpose} ({N} files)
 
 ### Key Files
+
 - `{path}` ({N} lines): {what it does, why it matters}
 
 ### Patterns
+
 - {pattern observed}: {example file path}
 
 ### Concerns
+
 - {anything notable — tech debt, missing tests, complexity}
 
 ### Relevant to Task
+
 - {specific findings related to the task you were given}
 ```
 

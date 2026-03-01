@@ -37,148 +37,148 @@ gh auth login --hostname github.example.com
 
 ### Pull Requests
 
-| Task | Command |
-|------|---------|
-| Create PR from current branch | `gh pr create --fill` |
-| Create PR with title and body | `gh pr create --title "feat: add X" --body "Details"` |
-| Create PR targeting specific branch | `gh pr create --base develop --fill` |
-| Create draft PR | `gh pr create --fill --draft` |
-| Create PR with labels | `gh pr create --fill --label "bug" --label "priority"` |
-| Create PR with assignee | `gh pr create --fill --assignee @me` |
-| Create PR with reviewer | `gh pr create --fill --reviewer username` |
-| List open PRs | `gh pr list` |
-| List my PRs | `gh pr list --author @me` |
-| List PRs needing review | `gh pr list --search "review-requested:@me"` |
-| View PR details | `gh pr view <number>` |
-| View PR diff | `gh pr diff <number>` |
-| View PR in browser | `gh pr view <number> --web` |
-| View PR as JSON | `gh pr view <number> --json title,body,state,reviews` |
-| Checkout PR locally | `gh pr checkout <number>` |
-| Review PR (approve) | `gh pr review <number> --approve` |
-| Review PR (request changes) | `gh pr review <number> --request-changes --body "Details"` |
-| Review PR (comment) | `gh pr review <number> --comment --body "Looks good"` |
-| Merge PR | `gh pr merge <number>` |
-| Merge PR with squash | `gh pr merge <number> --squash` |
-| Merge PR with rebase | `gh pr merge <number> --rebase` |
-| Merge and delete branch | `gh pr merge <number> --squash --delete-branch` |
-| Mark PR as ready | `gh pr ready <number>` |
-| Update PR branch | `gh pr update-branch <number>` |
-| Add comment to PR | `gh pr comment <number> --body "comment text"` |
-| Edit PR | `gh pr edit <number> --title "new title"` |
-| Close PR | `gh pr close <number>` |
-| Reopen PR | `gh pr reopen <number>` |
-| View PR checks | `gh pr checks <number>` |
-| Wait for checks to pass | `gh pr checks <number> --watch` |
-| Lock PR conversation | `gh pr lock <number>` |
+| Task                                | Command                                                    |
+| ----------------------------------- | ---------------------------------------------------------- |
+| Create PR from current branch       | `gh pr create --fill`                                      |
+| Create PR with title and body       | `gh pr create --title "feat: add X" --body "Details"`      |
+| Create PR targeting specific branch | `gh pr create --base develop --fill`                       |
+| Create draft PR                     | `gh pr create --fill --draft`                              |
+| Create PR with labels               | `gh pr create --fill --label "bug" --label "priority"`     |
+| Create PR with assignee             | `gh pr create --fill --assignee @me`                       |
+| Create PR with reviewer             | `gh pr create --fill --reviewer username`                  |
+| List open PRs                       | `gh pr list`                                               |
+| List my PRs                         | `gh pr list --author @me`                                  |
+| List PRs needing review             | `gh pr list --search "review-requested:@me"`               |
+| View PR details                     | `gh pr view <number>`                                      |
+| View PR diff                        | `gh pr diff <number>`                                      |
+| View PR in browser                  | `gh pr view <number> --web`                                |
+| View PR as JSON                     | `gh pr view <number> --json title,body,state,reviews`      |
+| Checkout PR locally                 | `gh pr checkout <number>`                                  |
+| Review PR (approve)                 | `gh pr review <number> --approve`                          |
+| Review PR (request changes)         | `gh pr review <number> --request-changes --body "Details"` |
+| Review PR (comment)                 | `gh pr review <number> --comment --body "Looks good"`      |
+| Merge PR                            | `gh pr merge <number>`                                     |
+| Merge PR with squash                | `gh pr merge <number> --squash`                            |
+| Merge PR with rebase                | `gh pr merge <number> --rebase`                            |
+| Merge and delete branch             | `gh pr merge <number> --squash --delete-branch`            |
+| Mark PR as ready                    | `gh pr ready <number>`                                     |
+| Update PR branch                    | `gh pr update-branch <number>`                             |
+| Add comment to PR                   | `gh pr comment <number> --body "comment text"`             |
+| Edit PR                             | `gh pr edit <number> --title "new title"`                  |
+| Close PR                            | `gh pr close <number>`                                     |
+| Reopen PR                           | `gh pr reopen <number>`                                    |
+| View PR checks                      | `gh pr checks <number>`                                    |
+| Wait for checks to pass             | `gh pr checks <number> --watch`                            |
+| Lock PR conversation                | `gh pr lock <number>`                                      |
 
 ### Issues
 
-| Task | Command |
-|------|---------|
-| Create issue | `gh issue create --title "Bug: X" --body "Details"` |
-| Create issue with labels | `gh issue create --title "X" --label "bug" --label "urgent"` |
-| Create issue with assignee | `gh issue create --title "X" --assignee @me` |
-| List open issues | `gh issue list` |
-| List my issues | `gh issue list --assignee @me` |
-| List issues by label | `gh issue list --label "bug"` |
-| List closed issues | `gh issue list --state closed` |
-| View issue | `gh issue view <number>` |
-| View issue as JSON | `gh issue view <number> --json title,body,labels,assignees` |
-| View issue in browser | `gh issue view <number> --web` |
-| Add comment to issue | `gh issue comment <number> --body "comment text"` |
-| Close issue | `gh issue close <number>` |
-| Close with reason | `gh issue close <number> --reason "not planned"` |
-| Reopen issue | `gh issue reopen <number>` |
-| Edit issue | `gh issue edit <number> --title "new title"` |
-| Pin issue | `gh issue pin <number>` |
-| Transfer issue | `gh issue transfer <number> owner/other-repo` |
-| Delete issue | `gh issue delete <number>` |
-| Create branch from issue | `gh issue develop <number>` |
+| Task                       | Command                                                      |
+| -------------------------- | ------------------------------------------------------------ |
+| Create issue               | `gh issue create --title "Bug: X" --body "Details"`          |
+| Create issue with labels   | `gh issue create --title "X" --label "bug" --label "urgent"` |
+| Create issue with assignee | `gh issue create --title "X" --assignee @me`                 |
+| List open issues           | `gh issue list`                                              |
+| List my issues             | `gh issue list --assignee @me`                               |
+| List issues by label       | `gh issue list --label "bug"`                                |
+| List closed issues         | `gh issue list --state closed`                               |
+| View issue                 | `gh issue view <number>`                                     |
+| View issue as JSON         | `gh issue view <number> --json title,body,labels,assignees`  |
+| View issue in browser      | `gh issue view <number> --web`                               |
+| Add comment to issue       | `gh issue comment <number> --body "comment text"`            |
+| Close issue                | `gh issue close <number>`                                    |
+| Close with reason          | `gh issue close <number> --reason "not planned"`             |
+| Reopen issue               | `gh issue reopen <number>`                                   |
+| Edit issue                 | `gh issue edit <number> --title "new title"`                 |
+| Pin issue                  | `gh issue pin <number>`                                      |
+| Transfer issue             | `gh issue transfer <number> owner/other-repo`                |
+| Delete issue               | `gh issue delete <number>`                                   |
+| Create branch from issue   | `gh issue develop <number>`                                  |
 
 ### Repository
 
-| Task | Command |
-|------|---------|
-| View repo info | `gh repo view` |
-| View repo in browser | `gh repo view --web` |
-| View repo as JSON | `gh repo view --json name,description,defaultBranchRef` |
-| Clone a repo | `gh repo clone owner/repo` |
-| Fork a repo | `gh repo fork owner/repo` |
-| Fork and clone | `gh repo fork owner/repo --clone` |
-| Create a new repo | `gh repo create my-repo --public` |
-| Create private repo | `gh repo create my-repo --private` |
-| Create from template | `gh repo create my-repo --template owner/template` |
-| List your repos | `gh repo list` |
-| List org repos | `gh repo list <org>` |
-| Edit repo settings | `gh repo edit --description "New description"` |
-| Rename repo | `gh repo rename new-name` |
-| Set default repo | `gh repo set-default owner/repo` |
-| Sync fork with upstream | `gh repo sync` |
-| Archive repo | `gh repo archive` |
-| Delete repo | `gh repo delete owner/repo --yes` |
-| Add deploy key | `gh repo deploy-key add key.pub --title "CI key"` |
-| List deploy keys | `gh repo deploy-key list` |
+| Task                    | Command                                                 |
+| ----------------------- | ------------------------------------------------------- |
+| View repo info          | `gh repo view`                                          |
+| View repo in browser    | `gh repo view --web`                                    |
+| View repo as JSON       | `gh repo view --json name,description,defaultBranchRef` |
+| Clone a repo            | `gh repo clone owner/repo`                              |
+| Fork a repo             | `gh repo fork owner/repo`                               |
+| Fork and clone          | `gh repo fork owner/repo --clone`                       |
+| Create a new repo       | `gh repo create my-repo --public`                       |
+| Create private repo     | `gh repo create my-repo --private`                      |
+| Create from template    | `gh repo create my-repo --template owner/template`      |
+| List your repos         | `gh repo list`                                          |
+| List org repos          | `gh repo list <org>`                                    |
+| Edit repo settings      | `gh repo edit --description "New description"`          |
+| Rename repo             | `gh repo rename new-name`                               |
+| Set default repo        | `gh repo set-default owner/repo`                        |
+| Sync fork with upstream | `gh repo sync`                                          |
+| Archive repo            | `gh repo archive`                                       |
+| Delete repo             | `gh repo delete owner/repo --yes`                       |
+| Add deploy key          | `gh repo deploy-key add key.pub --title "CI key"`       |
+| List deploy keys        | `gh repo deploy-key list`                               |
 
 ### Releases
 
-| Task | Command |
-|------|---------|
-| Create release | `gh release create v1.0.0 --notes "Release notes"` |
-| Create release from file | `gh release create v1.0.0 --notes-file CHANGELOG.md` |
-| Create draft release | `gh release create v1.0.0 --draft --notes "WIP"` |
-| Create prerelease | `gh release create v1.0.0-rc1 --prerelease --notes "RC"` |
-| Generate release notes | `gh release create v1.0.0 --generate-notes` |
-| Upload assets to release | `gh release upload v1.0.0 ./dist/*.tar.gz` |
-| List releases | `gh release list` |
-| View release | `gh release view v1.0.0` |
-| Download release assets | `gh release download v1.0.0` |
-| Edit release | `gh release edit v1.0.0 --notes "Updated notes"` |
-| Delete release | `gh release delete v1.0.0 --yes` |
+| Task                     | Command                                                  |
+| ------------------------ | -------------------------------------------------------- |
+| Create release           | `gh release create v1.0.0 --notes "Release notes"`       |
+| Create release from file | `gh release create v1.0.0 --notes-file CHANGELOG.md`     |
+| Create draft release     | `gh release create v1.0.0 --draft --notes "WIP"`         |
+| Create prerelease        | `gh release create v1.0.0-rc1 --prerelease --notes "RC"` |
+| Generate release notes   | `gh release create v1.0.0 --generate-notes`              |
+| Upload assets to release | `gh release upload v1.0.0 ./dist/*.tar.gz`               |
+| List releases            | `gh release list`                                        |
+| View release             | `gh release view v1.0.0`                                 |
+| Download release assets  | `gh release download v1.0.0`                             |
+| Edit release             | `gh release edit v1.0.0 --notes "Updated notes"`         |
+| Delete release           | `gh release delete v1.0.0 --yes`                         |
 
 ### Actions — Workflows
 
-| Task | Command |
-|------|---------|
-| List workflows | `gh workflow list` |
-| View workflow | `gh workflow view <id-or-name>` |
-| Run workflow (dispatch) | `gh workflow run <workflow> --ref main` |
-| Run with inputs | `gh workflow run <workflow> -f key=value` |
-| Enable workflow | `gh workflow enable <id-or-name>` |
-| Disable workflow | `gh workflow disable <id-or-name>` |
+| Task                    | Command                                   |
+| ----------------------- | ----------------------------------------- |
+| List workflows          | `gh workflow list`                        |
+| View workflow           | `gh workflow view <id-or-name>`           |
+| Run workflow (dispatch) | `gh workflow run <workflow> --ref main`   |
+| Run with inputs         | `gh workflow run <workflow> -f key=value` |
+| Enable workflow         | `gh workflow enable <id-or-name>`         |
+| Disable workflow        | `gh workflow disable <id-or-name>`        |
 
 ### Actions — Runs
 
-| Task | Command |
-|------|---------|
-| List recent runs | `gh run list` |
-| List runs for workflow | `gh run list --workflow <name>` |
-| View run details | `gh run view <run-id>` |
-| View run as JSON | `gh run view <run-id> --json status,conclusion,jobs` |
-| View run logs | `gh run view <run-id> --log` |
-| Watch run in real time | `gh run watch <run-id>` |
-| Rerun failed jobs | `gh run rerun <run-id> --failed` |
-| Rerun entire run | `gh run rerun <run-id>` |
-| Cancel a run | `gh run cancel <run-id>` |
-| Download run artifacts | `gh run download <run-id>` |
-| Delete a run | `gh run delete <run-id>` |
+| Task                   | Command                                              |
+| ---------------------- | ---------------------------------------------------- |
+| List recent runs       | `gh run list`                                        |
+| List runs for workflow | `gh run list --workflow <name>`                      |
+| View run details       | `gh run view <run-id>`                               |
+| View run as JSON       | `gh run view <run-id> --json status,conclusion,jobs` |
+| View run logs          | `gh run view <run-id> --log`                         |
+| Watch run in real time | `gh run watch <run-id>`                              |
+| Rerun failed jobs      | `gh run rerun <run-id> --failed`                     |
+| Rerun entire run       | `gh run rerun <run-id>`                              |
+| Cancel a run           | `gh run cancel <run-id>`                             |
+| Download run artifacts | `gh run download <run-id>`                           |
+| Delete a run           | `gh run delete <run-id>`                             |
 
 ### Actions — Cache
 
-| Task | Command |
-|------|---------|
-| List caches | `gh cache list` |
-| Delete a cache | `gh cache delete <id-or-key>` |
-| Delete all caches | `gh cache delete --all` |
+| Task              | Command                       |
+| ----------------- | ----------------------------- |
+| List caches       | `gh cache list`               |
+| Delete a cache    | `gh cache delete <id-or-key>` |
+| Delete all caches | `gh cache delete --all`       |
 
 ### Search
 
-| Task | Command |
-|------|---------|
-| Search repos | `gh search repos "query"` |
-| Search issues | `gh search issues "query"` |
-| Search PRs | `gh search prs "query"` |
-| Search code | `gh search code "query"` |
-| Search commits | `gh search commits "query"` |
+| Task                | Command                                                 |
+| ------------------- | ------------------------------------------------------- |
+| Search repos        | `gh search repos "query"`                               |
+| Search issues       | `gh search issues "query"`                              |
+| Search PRs          | `gh search prs "query"`                                 |
+| Search code         | `gh search code "query"`                                |
+| Search commits      | `gh search commits "query"`                             |
 | Search with filters | `gh search issues "bug" --repo owner/repo --state open` |
 
 ### API (Raw Requests)
@@ -301,17 +301,17 @@ gh run list -R owner/other-repo
 
 ## Environment Variables
 
-| Variable | Purpose |
-|----------|---------|
-| `GITHUB_TOKEN` | Authentication token (alternative to `gh auth login`) |
-| `GH_TOKEN` | Authentication token (takes precedence over `GITHUB_TOKEN`) |
-| `GH_HOST` | Default GitHub hostname (for Enterprise) |
-| `GH_ENTERPRISE_TOKEN` | Token for GitHub Enterprise instance |
-| `GH_REPO` | Default repository in `owner/repo` format |
-| `GH_EDITOR` | Editor for gh commands (overrides `gh config set editor`) |
-| `NO_COLOR` | Disable color output |
-| `GH_PAGER` | Pager for command output (default: system pager) |
-| `GH_BROWSER` | Browser to use for `--web` commands |
+| Variable              | Purpose                                                     |
+| --------------------- | ----------------------------------------------------------- |
+| `GITHUB_TOKEN`        | Authentication token (alternative to `gh auth login`)       |
+| `GH_TOKEN`            | Authentication token (takes precedence over `GITHUB_TOKEN`) |
+| `GH_HOST`             | Default GitHub hostname (for Enterprise)                    |
+| `GH_ENTERPRISE_TOKEN` | Token for GitHub Enterprise instance                        |
+| `GH_REPO`             | Default repository in `owner/repo` format                   |
+| `GH_EDITOR`           | Editor for gh commands (overrides `gh config set editor`)   |
+| `NO_COLOR`            | Disable color output                                        |
+| `GH_PAGER`            | Pager for command output (default: system pager)            |
+| `GH_BROWSER`          | Browser to use for `--web` commands                         |
 
 ## JSON Output
 

@@ -17,6 +17,7 @@ Ship the completed, reviewed feature.
 ### 1. Verify Readiness
 
 Check:
+
 - [ ] `.crew/phases/<feature>/review.md` exists and shows PASS
 - [ ] Tests pass: run the project's test suite
 - [ ] No uncommitted changes: `git status`
@@ -28,6 +29,7 @@ git log --oneline main..HEAD  # or master..HEAD
 ```
 
 Present the commits to the user. Ask preference:
+
 - **Squash** — single clean commit (default)
 - **Keep** — preserve atomic commits
 
@@ -38,6 +40,7 @@ git rebase -i main  # squash all into one commit
 ```
 
 Commit message generated from design + build summary:
+
 ```
 feat: {feature name}
 
@@ -81,6 +84,7 @@ Generate PR description from `.crew/` artifacts:
 ```
 
 Use the appropriate CLI:
+
 - GitHub: `gh pr create --title "..." --body "..."`
 - GitLab: `glab mr create --title "..." --description "..."`
 
@@ -92,20 +96,25 @@ Write `.crew/phases/<feature>/summary.md`:
 # Feature Summary: {feature-name}
 
 ## What was built
+
 {One paragraph}
 
 ## Commits
-| Hash | Message | Files |
-|------|---------|-------|
+
+| Hash   | Message   | Files   |
+| ------ | --------- | ------- |
 | {hash} | {message} | {count} |
 
 ## Decisions Made
+
 - {decision}: {rationale}
 
 ## Deviations from Plan
+
 - {deviation}: {what happened, why}
 
 ## Stats
+
 - **Agents dispatched:** {count}
 - **Total cost:** ${amount}
 - **PR/MR:** {url}
@@ -117,9 +126,9 @@ Update `.crew/state.md` — set `phase` to the last phase in your workflow (this
 
 ```yaml
 ---
-feature: {feature-name}
+feature: { feature-name }
 phase: ship
-workflow: {keep the same workflow from before}
+workflow: { keep the same workflow from before }
 ---
 ```
 

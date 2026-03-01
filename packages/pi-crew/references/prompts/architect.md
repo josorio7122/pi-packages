@@ -33,14 +33,17 @@ This produces the "must-have" list that the planner uses for task breakdown.
 ## Design: {feature name}
 
 ### Goal
+
 {What must be TRUE when this feature is complete — 2-3 sentences}
 
 ### Constraints
+
 - {existing codebase constraint}
 - {user locked decision}
 - {technical limitation}
 
 ### Approach A: {name}
+
 **How it works:** {description}
 **Pros:** {advantages}
 **Cons:** {disadvantages}
@@ -48,6 +51,7 @@ This produces the "must-have" list that the planner uses for task breakdown.
 **Files touched:** {list}
 
 ### Approach B: {name}
+
 **How it works:** {description}
 **Pros:** {advantages}
 **Cons:** {disadvantages}
@@ -55,21 +59,26 @@ This produces the "must-have" list that the planner uses for task breakdown.
 **Files touched:** {list}
 
 ### Recommendation
+
 {Which approach and why — be specific about the rationale}
 
 ### Must-Haves (goal-backward)
 
 #### Truths (observable behaviors)
+
 - {truth-1}
 - {truth-2}
 
 #### Artifacts (files that must exist)
+
 - `{path}`: {what it provides}
 
 #### Key Links (critical connections)
+
 - {from} → {to} via {mechanism}
 
 ### Out of Scope
+
 - {explicitly excluded from this design}
 ```
 

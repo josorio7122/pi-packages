@@ -18,16 +18,17 @@ Make design decisions with the user before writing any code.
 ### 1. Load Context
 
 Read the explore findings:
+
 ```
 .crew/phases/<feature>/explore.md
 ```
 
 ### 2. Assess Design Complexity
 
-| Complexity | Approach |
-|-----------|----------|
-| Obvious (1 clear way) | Propose it directly, ask user to confirm |
-| Moderate (2-3 options) | Present options yourself based on explore findings |
+| Complexity                                         | Approach                                                             |
+| -------------------------------------------------- | -------------------------------------------------------------------- |
+| Obvious (1 clear way)                              | Propose it directly, ask user to confirm                             |
+| Moderate (2-3 options)                             | Present options yourself based on explore findings                   |
 | Complex (architectural decisions, many trade-offs) | Dispatch an **architect** agent with explore findings + requirements |
 
 ### 3. For Complex Designs — Dispatch Architect
@@ -58,33 +59,43 @@ After the user approves, write `.crew/phases/<feature>/design.md`:
 # Design: {feature-name}
 
 ## Goal
+
 {What must be TRUE when this feature works}
 
 ## Locked Decisions
+
 {User-approved choices — these are NON-NEGOTIABLE during implementation}
+
 - {decision 1}: {rationale}
 - {decision 2}: {rationale}
 
 ## Technical Approach
+
 {How it will be built — components, data flow, key patterns}
 
 ## Must-Haves
 
 ### Truths (observable behaviors)
+
 - {truth-1}
 - {truth-2}
 
 ### Artifacts (files that must exist)
+
 - `{path}`: {purpose}
 
 ### Key Links (critical connections)
+
 - {from} → {to} via {mechanism}
 
 ## Deferred Ideas
+
 {Explicitly out of scope for this implementation}
+
 - {idea 1}: deferred because {reason}
 
 ## Out of Scope
+
 - {thing not being built}
 ```
 
@@ -95,15 +106,16 @@ Keep the `workflow` field unchanged.
 
 ```yaml
 ---
-feature: {feature-name}
-phase: {next phase from workflow}
-workflow: {keep the same workflow from before}
+feature: { feature-name }
+phase: { next phase from workflow }
+workflow: { keep the same workflow from before }
 ---
 ```
 
 ## Evaluation Gate
 
 Before moving to the next phase:
+
 - [ ] User explicitly approved the design
 - [ ] Design written to `.crew/phases/<feature>/design.md`
 - [ ] Locked decisions are specific and actionable

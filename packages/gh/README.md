@@ -9,15 +9,15 @@ GitHub CLI skill for [pi](https://github.com/mariozechner/pi). Comprehensive com
 
 ## What It Covers
 
-| Domain | Key Commands |
-|--------|-------------|
+| Domain        | Key Commands                                                                   |
+| ------------- | ------------------------------------------------------------------------------ |
 | Pull Requests | create, list, view, checkout, review, merge, edit, close, reopen, diff, checks |
-| Issues | create, list, view, edit, close, transfer, pin, delete |
-| Repository | view, clone, fork, create, sync, archive, deploy keys |
-| Releases | create, upload, list, download, edit, delete |
-| Actions | workflow list/run/enable/disable, run view/watch/rerun, cache list/delete |
-| Search | repos, issues, PRs, code, commits |
-| API | REST and GraphQL with `--jq` and `--template` support |
+| Issues        | create, list, view, edit, close, transfer, pin, delete                         |
+| Repository    | view, clone, fork, create, sync, archive, deploy keys                          |
+| Releases      | create, upload, list, download, edit, delete                                   |
+| Actions       | workflow list/run/enable/disable, run view/watch/rerun, cache list/delete      |
+| Search        | repos, issues, PRs, code, commits                                              |
+| API           | REST and GraphQL with `--jq` and `--template` support                          |
 
 ## Usage
 

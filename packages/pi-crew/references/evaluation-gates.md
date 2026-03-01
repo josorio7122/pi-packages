@@ -1,6 +1,6 @@
 # Evaluation Gates
 
-Quick reference for all phase gates in one place. The authoritative definitions live in each phase skill (skills/crew-*/SKILL.md). This file exists so the LLM or user can review all gates without loading every skill.
+Quick reference for all phase gates in one place. The authoritative definitions live in each phase skill (skills/crew-\*/SKILL.md). This file exists so the LLM or user can review all gates without loading every skill.
 
 Each phase has an evaluation gate that must pass before advancing.
 

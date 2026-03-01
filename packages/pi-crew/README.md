@@ -32,23 +32,23 @@ Pi-crew adds a `dispatch_crew` tool and 6 phase skills. The tool spawns isolated
 explore → design → plan → build → review → ship
 ```
 
-| Phase | Skill | What happens |
-|-------|-------|-------------|
-| **Explore** | `crew-explore` | Scouts map codebase structure, tech stack, patterns, conventions |
-| **Design** | `crew-design` | Discuss approaches with user, dispatch architect for complex designs, lock decisions |
-| **Plan** | `crew-plan` | Break design into task waves with dependencies and verification criteria |
-| **Build** | `crew-build` | Execute tasks wave-by-wave with executors; retry failures with debuggers |
-| **Review** | `crew-review` | Three-gate verification: spec compliance → code quality → security |
-| **Ship** | `crew-ship` | Squash commits, push branch, open PR/MR with generated description |
+| Phase       | Skill          | What happens                                                                         |
+| ----------- | -------------- | ------------------------------------------------------------------------------------ |
+| **Explore** | `crew-explore` | Scouts map codebase structure, tech stack, patterns, conventions                     |
+| **Design**  | `crew-design`  | Discuss approaches with user, dispatch architect for complex designs, lock decisions |
+| **Plan**    | `crew-plan`    | Break design into task waves with dependencies and verification criteria             |
+| **Build**   | `crew-build`   | Execute tasks wave-by-wave with executors; retry failures with debuggers             |
+| **Review**  | `crew-review`  | Three-gate verification: spec compliance → code quality → security                   |
+| **Ship**    | `crew-ship`    | Squash commits, push branch, open PR/MR with generated description                   |
 
 **Not every task needs every phase.** Choose a workflow when starting:
 
-| Scope | Workflow | When |
-|-------|----------|------|
-| Full | explore,design,plan,build,review,ship | New features, architectural changes |
-| Standard | explore,plan,build,review,ship | Clear scope, no design debate needed |
-| Quick | explore,build,ship | Small feature, obvious implementation |
-| Minimal | build,ship | Bug fix, config change, documentation |
+| Scope    | Workflow                              | When                                  |
+| -------- | ------------------------------------- | ------------------------------------- |
+| Full     | explore,design,plan,build,review,ship | New features, architectural changes   |
+| Standard | explore,plan,build,review,ship        | Clear scope, no design debate needed  |
+| Quick    | explore,build,ship                    | Small feature, obvious implementation |
+| Minimal  | build,ship                            | Bug fix, config change, documentation |
 
 For simple tasks, dispatch agents directly without a workflow.
 
@@ -62,14 +62,14 @@ Once a workflow starts, pi-crew enforces completion through three mechanisms:
 
 ## Agent Presets
 
-| Preset | Model Tier | Tools | Purpose |
-|--------|-----------|-------|---------|
-| `scout` | budget | read, bash, grep, find, ls | Fast codebase exploration — compressed findings |
-| `researcher` | budget | read, bash, grep, find, ls | Web/docs research via exa-search skill |
-| `architect` | quality | read, bash, grep, find, ls | Design decisions, component breakdowns, specs |
-| `executor` | balanced | read, write, edit, bash, grep, find, ls | Implements tasks. Follows TDD. Commits per task |
-| `reviewer` | balanced | read, bash, grep, find, ls | Code review — spec compliance, quality, security |
-| `debugger` | balanced | read, write, edit, bash, grep, find, ls | Root cause analysis, surgical repair |
+| Preset       | Model Tier | Tools                                   | Purpose                                          |
+| ------------ | ---------- | --------------------------------------- | ------------------------------------------------ |
+| `scout`      | budget     | read, bash, grep, find, ls              | Fast codebase exploration — compressed findings  |
+| `researcher` | budget     | read, bash, grep, find, ls              | Web/docs research via exa-search skill           |
+| `architect`  | quality    | read, bash, grep, find, ls              | Design decisions, component breakdowns, specs    |
+| `executor`   | balanced   | read, write, edit, bash, grep, find, ls | Implements tasks. Follows TDD. Commits per task  |
+| `reviewer`   | balanced   | read, bash, grep, find, ls              | Code review — spec compliance, quality, security |
+| `debugger`   | balanced   | read, write, edit, bash, grep, find, ls | Root cause analysis, surgical repair             |
 
 Each preset has a dedicated system prompt, scoped tool access, and model tier. Agents are spawned with `--no-extensions` to prevent recursive dispatch while preserving skill access.
 
@@ -133,11 +133,11 @@ dispatch_crew({
 
 Profiles map agent tiers to concrete models. Switch profiles to trade cost for capability.
 
-| Profile | Budget Tier | Balanced Tier | Quality Tier |
-|---------|-------------|---------------|-------------|
-| **quality** | claude-sonnet-4-5 | claude-sonnet-4-5 | claude-opus-4 |
-| **balanced** (default) | claude-haiku-4-5 | claude-sonnet-4-5 | claude-sonnet-4-5 |
-| **budget** | claude-haiku-4-5 | claude-haiku-4-5 | claude-sonnet-4-5 |
+| Profile                | Budget Tier       | Balanced Tier     | Quality Tier      |
+| ---------------------- | ----------------- | ----------------- | ----------------- |
+| **quality**            | claude-sonnet-4-5 | claude-sonnet-4-5 | claude-opus-4     |
+| **balanced** (default) | claude-haiku-4-5  | claude-sonnet-4-5 | claude-sonnet-4-5 |
+| **budget**             | claude-haiku-4-5  | claude-haiku-4-5  | claude-sonnet-4-5 |
 
 Change profile:
 
@@ -193,21 +193,21 @@ The `workflow` field is set once when the workflow starts and never changes. The
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/crew` | Show current crew status (feature, phase, profile) |
-| `/crew:profile <name>` | Switch model profile (`quality`, `balanced`, `budget`) |
-| `/crew:override <preset> <model>` | Override a specific agent's model |
-| `/crew:reset` | Reset all overrides to profile defaults |
-| `/crew:status` | Show detailed status of current feature |
+| Command                           | Description                                            |
+| --------------------------------- | ------------------------------------------------------ |
+| `/crew`                           | Show current crew status (feature, phase, profile)     |
+| `/crew:profile <name>`            | Switch model profile (`quality`, `balanced`, `budget`) |
+| `/crew:override <preset> <model>` | Override a specific agent's model                      |
+| `/crew:reset`                     | Reset all overrides to profile defaults                |
+| `/crew:status`                    | Show detailed status of current feature                |
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DISPATCH_CREW_MAX_CONCURRENT` | `4` | Max concurrent agents in parallel mode (max: 8) |
+| Variable                       | Default | Description                                     |
+| ------------------------------ | ------- | ----------------------------------------------- |
+| `DISPATCH_CREW_MAX_CONCURRENT` | `4`     | Max concurrent agents in parallel mode (max: 8) |
 
 ### `.crew/config.json`
 

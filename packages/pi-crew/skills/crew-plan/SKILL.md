@@ -18,6 +18,7 @@ Break the approved design into tasks that executor agents can implement independ
 ### 1. Load Context
 
 Read:
+
 - `.crew/phases/<feature>/design.md` — locked decisions, must-haves
 - `.crew/phases/<feature>/explore.md` — codebase context
 
@@ -33,6 +34,7 @@ Break the design into tasks. Each task must be:
 #### Task Structure
 
 Each task needs:
+
 - **Name** — Action-oriented: "Create auth middleware" not "Authentication"
 - **Files** — Exact paths to create/modify
 - **Action** — Specific implementation instructions. Enough detail that the executor doesn't need to make design decisions.
@@ -49,6 +51,7 @@ Could a different agent implement this task without asking clarifying questions?
 ### 3. Dependency Analysis
 
 For each task, identify:
+
 - **Needs:** What must exist before this task can run?
 - **Creates:** What does this task produce?
 
@@ -68,6 +71,7 @@ Wave 3: Depends on Wave 2
 ```
 
 **Prefer vertical slices over horizontal layers:**
+
 - ✓ "User feature (model + API + UI)" — self-contained, can run parallel with other features
 - ✗ "All models, then all APIs, then all UI" — forces sequential execution
 
@@ -91,23 +95,25 @@ Write `.crew/phases/<feature>/plan.md`:
 ## Waves
 
 ### Wave 1 (parallel)
-| Task | Name | Files | Depends On |
-|------|------|-------|-----------|
-| 01 | {name} | {files} | none |
-| 02 | {name} | {files} | none |
+
+| Task | Name   | Files   | Depends On |
+| ---- | ------ | ------- | ---------- |
+| 01   | {name} | {files} | none       |
+| 02   | {name} | {files} | none       |
 
 ### Wave 2 (parallel)
-| Task | Name | Files | Depends On |
-|------|------|-------|-----------|
-| 03 | {name} | {files} | 01 |
+
+| Task | Name   | Files   | Depends On |
+| ---- | ------ | ------- | ---------- |
+| 03   | {name} | {files} | 01         |
 
 ## Must-Haves Traceability
 
-| Must-Have | Type | Task |
-|-----------|------|------|
-| {truth-1} | truth | 01 |
-| {artifact-1} | artifact | 02 |
-| {link-1} | key-link | 03 |
+| Must-Have    | Type     | Task |
+| ------------ | -------- | ---- |
+| {truth-1}    | truth    | 01   |
+| {artifact-1} | artifact | 02   |
+| {link-1}     | key-link | 03   |
 ```
 
 Write individual task files to `.crew/phases/<feature>/build/task-NN.md` using the task template.
@@ -115,6 +121,7 @@ Write individual task files to `.crew/phases/<feature>/build/task-NN.md` using t
 ### 6. Present to User
 
 Show the wave structure and ask for approval. Highlight:
+
 - Total task count and estimated waves
 - Any dependencies or potential bottlenecks
 - File overlap between tasks (if any — should be avoided)
@@ -126,15 +133,16 @@ Keep the `workflow` field unchanged.
 
 ```yaml
 ---
-feature: {feature-name}
-phase: {next phase from workflow}
-workflow: {keep the same workflow from before}
+feature: { feature-name }
+phase: { next phase from workflow }
+workflow: { keep the same workflow from before }
 ---
 ```
 
 ## Evaluation Gate
 
 Before moving to build:
+
 - [ ] User approved the plan
 - [ ] Every task has: name, files, action, verify, done criteria
 - [ ] Every must-have from the design maps to at least one task

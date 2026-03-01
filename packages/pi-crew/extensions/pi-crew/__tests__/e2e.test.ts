@@ -12,256 +12,273 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-	AuthStorage,
-	createAgentSession,
-	DefaultResourceLoader,
-	ModelRegistry,
-	SessionManager,
-	SettingsManager,
-	createCodingTools,
+  AuthStorage,
+  createAgentSession,
+  DefaultResourceLoader,
+  ModelRegistry,
+  SessionManager,
+  SettingsManager,
+  createCodingTools,
 } from "@mariozechner/pi-coding-agent";
+import type { Message } from "@mariozechner/pi-ai";
+
+// Type definitions inferred from SDK usage
+interface ContentBlock {
+  type: string;
+  text?: string;
+}
+
+interface EventMessage extends Record<string, unknown> {
+  customType?: string;
+}
+
+interface AgentSessionEvent {
+  type: string;
+  message?: EventMessage;
+}
+
+interface AgentSession {
+  messages: Message[];
+  prompt: (text: string) => Promise<void>;
+  subscribe: (handler: (event: AgentSessionEvent) => void) => () => void;
+  dispose: () => void;
+  agent: {
+    waitForIdle: () => Promise<void>;
+  };
+}
 
 const EXTENSION_PATH = path.resolve(__dirname, "../index.ts");
 
-async function createTestSession(cwd: string) {
-	const authStorage = AuthStorage.create();
-	const modelRegistry = new ModelRegistry(authStorage);
+async function createTestSession(cwd: string): Promise<AgentSession> {
+  const authStorage = AuthStorage.create();
+  const modelRegistry = new ModelRegistry(authStorage);
 
-	const settingsManager = SettingsManager.inMemory({
-		compaction: { enabled: false },
-		retry: { enabled: true, maxRetries: 2 },
-	});
+  const settingsManager = SettingsManager.inMemory({
+    compaction: { enabled: false },
+    retry: { enabled: true, maxRetries: 2 },
+  });
 
-	const loader = new DefaultResourceLoader({
-		cwd,
-		settingsManager,
-		additionalExtensionPaths: [EXTENSION_PATH],
-	});
-	await loader.reload();
+  const loader = new DefaultResourceLoader({
+    cwd,
+    settingsManager,
+    additionalExtensionPaths: [EXTENSION_PATH],
+  });
+  await loader.reload();
 
-	const { session } = await createAgentSession({
-		cwd,
-		authStorage,
-		modelRegistry,
-		resourceLoader: loader,
-		tools: createCodingTools(cwd),
-		sessionManager: SessionManager.inMemory(),
-		settingsManager,
-		thinkingLevel: "off",
-	});
+  const { session } = await createAgentSession({
+    cwd,
+    authStorage,
+    modelRegistry,
+    resourceLoader: loader,
+    tools: createCodingTools(cwd),
+    sessionManager: SessionManager.inMemory(),
+    settingsManager,
+    thinkingLevel: "off",
+  });
 
-	return session;
+  return session as AgentSession;
 }
 
-/**
- * Collect all assistant text from a session's events.
- */
-function collectAssistantText(session: any): string {
-	let text = "";
-	session.subscribe((event: any) => {
-		if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
-			text += event.assistantMessageEvent.delta;
-		}
-	});
-	return ""; // We'll read session.messages after prompt() resolves
-}
-
-function getAssistantText(session: any): string {
-	let text = "";
-	for (const msg of session.messages) {
-		if (msg.role === "assistant" && Array.isArray(msg.content)) {
-			for (const block of msg.content) {
-				if (block.type === "text" && block.text) text += block.text + "\n";
-			}
-		}
-	}
-	return text;
+function getAssistantText(session: AgentSession): string {
+  let text = "";
+  for (const msg of session.messages) {
+    if (msg.role === "assistant" && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        const contentBlock = block as ContentBlock;
+        if (contentBlock.type === "text" && contentBlock.text) {
+          text += contentBlock.text + "\n";
+        }
+      }
+    }
+  }
+  return text;
 }
 
 describe("e2e: workflow enforcement via SDK", () => {
-	let tmpDir: string;
+  let tmpDir: string;
 
-	beforeEach(() => {
-		tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-e2e-"));
-	});
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-e2e-"));
+  });
 
-	afterEach(() => {
-		fs.rmSync(tmpDir, { recursive: true, force: true });
-	});
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 
-	it("creates state.md with workflow field when asked to start a workflow", async () => {
-		const session = await createTestSession(tmpDir);
+  it("creates state.md with workflow field when asked to start a workflow", async () => {
+    const session = await createTestSession(tmpDir);
 
-		await session.prompt(
-			`Create a .crew/state.md file with a "minimal" workflow (build,ship) for feature "test-health-endpoint". ` +
-			`Use the write tool to create the file with proper YAML frontmatter including feature, phase, and workflow fields. ` +
-			`Set phase to "build". Do NOT do anything else — just create the file.`,
-		);
+    await session.prompt(
+      `Create a .crew/state.md file with a "minimal" workflow (build,ship) for feature "test-health-endpoint". ` +
+        `Use the write tool to create the file with proper YAML frontmatter including feature, phase, and workflow fields. ` +
+        `Set phase to "build". Do NOT do anything else — just create the file.`,
+    );
 
-		// Verify state.md was created
-		const statePath = path.join(tmpDir, ".crew", "state.md");
-		expect(fs.existsSync(statePath)).toBe(true);
+    // Verify state.md was created
+    const statePath = path.join(tmpDir, ".crew", "state.md");
+    expect(fs.existsSync(statePath)).toBe(true);
 
-		const content = fs.readFileSync(statePath, "utf-8");
-		expect(content).toContain("feature:");
-		expect(content).toContain("test-health-endpoint");
-		expect(content).toContain("workflow:");
-		expect(content).toContain("build");
-		expect(content).toContain("ship");
-		expect(content).toContain("phase:");
+    const content = fs.readFileSync(statePath, "utf-8");
+    expect(content).toContain("feature:");
+    expect(content).toContain("test-health-endpoint");
+    expect(content).toContain("workflow:");
+    expect(content).toContain("build");
+    expect(content).toContain("ship");
+    expect(content).toContain("phase:");
 
-		session.dispose();
-	}, 60_000);
+    session.dispose();
+  }, 60_000);
 
-	it("dispatch_crew tool is registered and callable", async () => {
-		const session = await createTestSession(tmpDir);
+  it("dispatch_crew tool is registered and callable", async () => {
+    const session = await createTestSession(tmpDir);
 
-		await session.prompt(
-			'List all the tools you have access to. ' +
-			'Do you have a tool called "dispatch_crew"? Reply with YES or NO at the end.',
-		);
+    await session.prompt(
+      "List all the tools you have access to. " +
+        'Do you have a tool called "dispatch_crew"? Reply with YES or NO at the end.',
+    );
 
-		const text = getAssistantText(session);
-		expect(text.toUpperCase()).toContain("YES");
+    const text = getAssistantText(session);
+    expect(text.toUpperCase()).toContain("YES");
 
-		session.dispose();
-	}, 60_000);
+    session.dispose();
+  }, 60_000);
 
-	it("active workflow injects phase skill into system prompt", async () => {
-		// Pre-create state.md with explore phase
-		const crewDir = path.join(tmpDir, ".crew");
-		fs.mkdirSync(crewDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(crewDir, "state.md"),
-			"---\nfeature: test-feat\nphase: explore\nworkflow: explore,build,ship\n---\n",
-		);
+  it("active workflow injects phase skill into system prompt", async () => {
+    // Pre-create state.md with explore phase
+    const crewDir = path.join(tmpDir, ".crew");
+    fs.mkdirSync(crewDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(crewDir, "state.md"),
+      "---\nfeature: test-feat\nphase: explore\nworkflow: explore,build,ship\n---\n",
+    );
 
-		const session = await createTestSession(tmpDir);
+    const session = await createTestSession(tmpDir);
 
-		await session.prompt(
-			'Your system prompt has instructions for the "explore" phase. ' +
-			'What scaling table does the explore skill reference for project size vs number of scouts? ' +
-			'How many scouts for a LARGE project (500+ files)? Reply with just the number range.',
-		);
+    await session.prompt(
+      'Your system prompt has instructions for the "explore" phase. ' +
+        "What scaling table does the explore skill reference for project size vs number of scouts? " +
+        "How many scouts for a LARGE project (500+ files)? Reply with just the number range.",
+    );
 
-		const text = getAssistantText(session);
-		// The explore SKILL.md says 3-4 scouts for large projects
-		expect(text).toMatch(/3.?4/);
+    const text = getAssistantText(session);
+    // The explore SKILL.md says 3-4 scouts for large projects
+    expect(text).toMatch(/3.?4/);
 
-		session.dispose();
-	}, 60_000);
+    session.dispose();
+  }, 60_000);
 
-	it("nudge fires on agent_end when workflow is incomplete", async () => {
-		// Pre-create state.md mid-workflow
-		const crewDir = path.join(tmpDir, ".crew");
-		fs.mkdirSync(crewDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(crewDir, "state.md"),
-			"---\nfeature: nudge-test\nphase: build\nworkflow: build,ship\n---\n",
-		);
+  it("nudge fires on agent_end when workflow is incomplete", async () => {
+    // Pre-create state.md mid-workflow
+    const crewDir = path.join(tmpDir, ".crew");
+    fs.mkdirSync(crewDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(crewDir, "state.md"),
+      "---\nfeature: nudge-test\nphase: build\nworkflow: build,ship\n---\n",
+    );
 
-		const session = await createTestSession(tmpDir);
-		const allEvents: string[] = [];
+    const session = await createTestSession(tmpDir);
+    const allEvents: string[] = [];
 
-		session.subscribe((event: any) => {
-			allEvents.push(event.type + (event.message?.customType ? `:${event.message.customType}` : ""));
-		});
+    session.subscribe((event: AgentSessionEvent) => {
+      allEvents.push(
+        event.type + (event.message?.customType ? `:${event.message.customType}` : ""),
+      );
+    });
 
-		await session.prompt(
-			'Say "hello" and nothing else. Do not use any tools.',
-		);
+    await session.prompt('Say "hello" and nothing else. Do not use any tools.');
 
-		// prompt() resolves on first agent_end, but the nudge triggers a second turn.
-		// Wait for the second agent_end to fire.
-		await new Promise<void>((resolve) => {
-			let agentEndCount = 0;
-			const unsub = session.subscribe((event: any) => {
-				if (event.type === "agent_end") {
-					agentEndCount++;
-					if (agentEndCount >= 1) {
-						// First agent_end from nudge-triggered turn (the initial one already fired)
-						unsub();
-						resolve();
-					}
-				}
-			});
-			// Safety timeout
-			setTimeout(() => { unsub(); resolve(); }, 15000);
-		});
+    // prompt() resolves on first agent_end, but the nudge triggers a second turn.
+    // Wait for the second agent_end to fire.
+    await new Promise<void>((resolve) => {
+      let agentEndCount = 0;
+      const unsub = session.subscribe((event: AgentSessionEvent) => {
+        if (event.type === "agent_end") {
+          agentEndCount++;
+          if (agentEndCount >= 1) {
+            // First agent_end from nudge-triggered turn (the initial one already fired)
+            unsub();
+            resolve();
+          }
+        }
+      });
+      // Safety timeout
+      setTimeout(() => {
+        unsub();
+        resolve();
+      }, 15000);
+    });
 
-		await session.agent.waitForIdle();
+    await session.agent.waitForIdle();
 
-		const messageCount = session.messages.length;
+    const messageCount = session.messages.length;
 
-		// The nudge should have been delivered as a message
-		const hasNudge = allEvents.some((e) => e.includes("crew-nudge"));
-		expect(hasNudge).toBe(true);
+    // The nudge should have been delivered as a message
+    const hasNudge = allEvents.some((e) => e.includes("crew-nudge"));
+    expect(hasNudge).toBe(true);
 
-		// triggerTurn works! Events show: agent_end → agent_start → crew-nudge → message_updates
-		// Expected messages: user → assistant → nudge → assistant (4+)
-		expect(messageCount).toBeGreaterThanOrEqual(4);
+    // triggerTurn works! Events show: agent_end → agent_start → crew-nudge → message_updates
+    // Expected messages: user → assistant → nudge → assistant (4+)
+    expect(messageCount).toBeGreaterThanOrEqual(4);
 
-		session.dispose();
-	}, 90_000);
+    session.dispose();
+  }, 90_000);
 
-	it("minimal workflow advances through build → ship on a real task", async () => {
-		// Create a tiny Express-like project
-		fs.writeFileSync(
-			path.join(tmpDir, "index.js"),
-			`const express = require("express");\nconst app = express();\napp.get("/", (req, res) => res.send("ok"));\nmodule.exports = app;\n`,
-		);
+  it("minimal workflow advances through build → ship on a real task", async () => {
+    // Create a tiny Express-like project
+    fs.writeFileSync(
+      path.join(tmpDir, "index.js"),
+      `const express = require("express");\nconst app = express();\napp.get("/", (req, res) => res.send("ok"));\nmodule.exports = app;\n`,
+    );
 
-		// Pre-create state with minimal workflow, starting at build
-		const crewDir = path.join(tmpDir, ".crew");
-		fs.mkdirSync(crewDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(crewDir, "state.md"),
-			"---\nfeature: health-endpoint\nphase: build\nworkflow: build,ship\n---\n",
-		);
+    // Pre-create state with minimal workflow, starting at build
+    const crewDir = path.join(tmpDir, ".crew");
+    fs.mkdirSync(crewDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(crewDir, "state.md"),
+      "---\nfeature: health-endpoint\nphase: build\nworkflow: build,ship\n---\n",
+    );
 
-		const session = await createTestSession(tmpDir);
+    const session = await createTestSession(tmpDir);
 
-		await session.prompt(
-			'Add a GET /health endpoint to index.js that returns { status: "ok" }. ' +
-			'Use the edit tool to add it. Then update .crew/state.md to advance to the "ship" phase ' +
-			'(keep the same workflow field, just change phase to "ship").',
-		);
+    await session.prompt(
+      'Add a GET /health endpoint to index.js that returns { status: "ok" }. ' +
+        'Use the edit tool to add it. Then update .crew/state.md to advance to the "ship" phase ' +
+        '(keep the same workflow field, just change phase to "ship").',
+    );
 
-		// Wait for all nudge-triggered turns to settle
-		await new Promise((resolve) => setTimeout(resolve, 5000));
-		await session.agent.waitForIdle();
+    // Wait for all nudge-triggered turns to settle
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await session.agent.waitForIdle();
 
-		// Verify the endpoint was added
-		const content = fs.readFileSync(path.join(tmpDir, "index.js"), "utf-8");
-		expect(content).toContain("/health");
+    // Verify the endpoint was added
+    const content = fs.readFileSync(path.join(tmpDir, "index.js"), "utf-8");
+    expect(content).toContain("/health");
 
-		// Verify state was advanced to ship
-		const stateContent = fs.readFileSync(path.join(crewDir, "state.md"), "utf-8");
-		expect(stateContent).toContain("phase: ship");
-		expect(stateContent).toContain("workflow:");
+    // Verify state was advanced to ship
+    const stateContent = fs.readFileSync(path.join(crewDir, "state.md"), "utf-8");
+    expect(stateContent).toContain("phase: ship");
+    expect(stateContent).toContain("workflow:");
 
-		session.dispose();
-	}, 120_000);
+    session.dispose();
+  }, 120_000);
 
-	it("no nudge when workflow is complete (phase = last in workflow)", async () => {
-		// State where phase is the last in workflow = complete
-		const crewDir = path.join(tmpDir, ".crew");
-		fs.mkdirSync(crewDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(crewDir, "state.md"),
-			"---\nfeature: done-test\nphase: ship\nworkflow: build,ship\n---\n",
-		);
+  it("no nudge when workflow is complete (phase = last in workflow)", async () => {
+    // State where phase is the last in workflow = complete
+    const crewDir = path.join(tmpDir, ".crew");
+    fs.mkdirSync(crewDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(crewDir, "state.md"),
+      "---\nfeature: done-test\nphase: ship\nworkflow: build,ship\n---\n",
+    );
 
-		const session = await createTestSession(tmpDir);
+    const session = await createTestSession(tmpDir);
 
-		await session.prompt(
-			'Say "done" and nothing else. Do not use any tools.',
-		);
+    await session.prompt('Say "done" and nothing else. Do not use any tools.');
 
-		// Should be exactly 2 messages: user + assistant (no nudge)
-		const messageCount = session.messages.length;
-		expect(messageCount).toBe(2);
+    // Should be exactly 2 messages: user + assistant (no nudge)
+    const messageCount = session.messages.length;
+    expect(messageCount).toBe(2);
 
-		session.dispose();
-	}, 60_000);
+    session.dispose();
+  }, 60_000);
 });

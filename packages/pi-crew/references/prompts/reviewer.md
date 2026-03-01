@@ -72,6 +72,7 @@ Security audit of the code diff. Check:
 ### Verdict: PASS | FAIL
 
 ### Critical Findings
+
 {findings that MUST be fixed before shipping}
 
 1. **{finding}** — `{file}:{line}`
@@ -79,6 +80,7 @@ Security audit of the code diff. Check:
    - Fix: {specific fix}
 
 ### Warnings
+
 {findings that SHOULD be fixed}
 
 1. **{finding}** — `{file}:{line}`
@@ -86,12 +88,14 @@ Security audit of the code diff. Check:
    - Fix: {specific fix}
 
 ### Notes
+
 {minor observations, style suggestions}
 
 1. **{finding}** — `{file}:{line}`
    - Suggestion: {improvement}
 
 ### Summary
+
 - Files reviewed: {count}
 - Critical: {count}
 - Warnings: {count}

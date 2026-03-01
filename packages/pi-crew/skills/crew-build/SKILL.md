@@ -17,6 +17,7 @@ Execute the plan by dispatching executor agents wave by wave.
 ### 1. Load Context
 
 Read:
+
 - `.crew/phases/<feature>/plan.md` — wave structure
 - `.crew/phases/<feature>/design.md` — locked decisions (pass to executors)
 - `.crew/phases/<feature>/build/task-*.md` — individual task specs and statuses
@@ -75,11 +76,13 @@ Dispatch all tasks in the wave as a parallel `dispatch_crew` call. Progress rend
 After the wave completes, for each task:
 
 **If task succeeded:**
+
 - Read the executor's output
 - Update the task file: status → done, commit hash, any deviations
 - Verify: run the task's verify command yourself to confirm
 
 **If task failed:**
+
 - Read the error output
 - Dispatch a **debugger** agent to diagnose:
 
@@ -96,6 +99,7 @@ dispatch_crew({
 - **Max 3 retry attempts per task** — after 3 failures, mark as failed and continue
 
 **If task returned a Rule 4 deviation (architectural change needed):**
+
 - Present the deviation to the user
 - Wait for decision
 - Re-dispatch executor with the decision, or adjust the plan
@@ -103,6 +107,7 @@ dispatch_crew({
 #### d. Verify Wave
 
 After all tasks in a wave are done:
+
 - Run the project's test suite
 - Check that all expected files exist
 - Verify no regressions from previous waves
@@ -117,19 +122,23 @@ After all waves complete, write `.crew/phases/<feature>/build/summary.md`:
 # Build Summary: {feature-name}
 
 ## Tasks
-| Task | Name | Status | Commit | Deviations |
-|------|------|--------|--------|-----------|
-| 01 | {name} | done | {hash} | none |
-| 02 | {name} | done | {hash} | [Rule 1] fixed null check |
+
+| Task | Name   | Status | Commit | Deviations                |
+| ---- | ------ | ------ | ------ | ------------------------- |
+| 01   | {name} | done   | {hash} | none                      |
+| 02   | {name} | done   | {hash} | [Rule 1] fixed null check |
 
 ## Deviations
+
 - [Rule 1 - Bug] {description of auto-fix}
 - [Rule 2 - Critical] {description of added functionality}
 
 ## Test Results
+
 {Final test suite output summary}
 
 ## Files Changed
+
 - `{path}`: {what changed}
 ```
 
@@ -140,16 +149,17 @@ Keep the `workflow` field unchanged. While building, update `progress` to track 
 
 ```yaml
 ---
-feature: {feature-name}
-phase: {next phase from workflow when done, or keep "build" while in progress}
-progress: {N/M tasks}
-workflow: {keep the same workflow from before}
+feature: { feature-name }
+phase: { next phase from workflow when done, or keep "build" while in progress }
+progress: { N/M tasks }
+workflow: { keep the same workflow from before }
 ---
 ```
 
 ## Evaluation Gate
 
 Before moving to review:
+
 - [ ] All tasks complete (status: done) or explicitly failed with documentation
 - [ ] Test suite passes
 - [ ] All expected files exist
@@ -159,6 +169,7 @@ Before moving to review:
 ## Error Recovery
 
 If a wave fails and can't be fixed after retries:
+
 1. Document what failed and why
 2. Present to user with options:
    - Fix manually and resume
