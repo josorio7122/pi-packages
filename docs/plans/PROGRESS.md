@@ -63,3 +63,11 @@
 - **Tests:** N/A (static markdown files)
 - **Notes:** Found 7 additional untracked skill files (gsd-discovery-phase, gsd-help, gsd-pause-work, gsd-progress, gsd-quick, gsd-resume-work, gsd-discovery-phase) already present from a prior task session; included them in the commit since they're valid and follow the same format.
 - **Timestamp:** 2026-02-28
+
+### Task 12: README.md and SYNC.md
+- **Status:** ✅ Complete
+- **Commit:** 2a46289 docs(pi-gsd): add README.md and SYNC.md
+- **Built:** Created `packages/pi-gsd/README.md` (user-facing package docs with tools, skills, agents, quick start, directory structure, model profiles, dev commands) and `packages/pi-gsd/SYNC.md` (upstream sync instructions with step-by-step copy, adapt, and replace guide).
+- **Tests:** N/A (documentation files)
+- **Notes:** none
+- **Timestamp:** 2026-02-28

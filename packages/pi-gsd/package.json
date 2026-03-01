@@ -18,11 +18,13 @@
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
     "@sinclair/typebox": "*",
     "@mariozechner/pi-ai": "*"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
     "@sinclair/typebox": "*",
     "@mariozechner/pi-ai": "*",
     "@types/node": "^24.0.0",
