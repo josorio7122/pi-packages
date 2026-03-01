@@ -112,19 +112,35 @@ export default function (pi: ExtensionAPI): void {
       const diagnostics = manager.getDiagnostics(absolutePath);
       const errors = filterErrors(diagnostics);
 
-      if (errors.length === 0) return;
-
-      // Append diagnostics to the tool result
-      const diagnosticsText = formatDiagnosticsXml(
-        absolutePath,
-        errors,
-        config.maxDiagnosticsPerFile,
-      );
-
       const existingText = (event.content as any[])
         .filter((c: any) => c.type === 'text')
         .map((c: any) => c.text)
         .join('\n');
+
+      let diagnosticsText = '';
+
+      // Own-file diagnostics (edit and write)
+      if (errors.length > 0) {
+        diagnosticsText += formatDiagnosticsXml(absolutePath, errors, config.maxDiagnosticsPerFile);
+      }
+
+      // Cross-file diagnostics (write only)
+      if (event.toolName === 'write' && config.maxCrossFileDiagnostics > 0) {
+        const allDiags = manager.getAllDiagnostics();
+        let crossFileCount = 0;
+        for (const [file, diags] of allDiags) {
+          if (file === absolutePath) continue;
+          const fileErrors = filterErrors(diags);
+          if (fileErrors.length === 0) continue;
+          if (crossFileCount >= config.maxCrossFileDiagnostics) break;
+          crossFileCount++;
+          const crossFileXml = formatDiagnosticsXml(file, fileErrors, config.maxDiagnosticsPerFile)
+            .replace('LSP errors detected in this file', 'LSP errors detected in other files');
+          diagnosticsText += (diagnosticsText ? '\n\n' : '') + crossFileXml;
+        }
+      }
+
+      if (!diagnosticsText) return;
 
       return {
         content: [{

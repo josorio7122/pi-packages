@@ -92,4 +92,31 @@ describe("loadConfig()", () => {
     const config = loadConfig(FAKE_PKG_DIR);
     expect(config.autoDownload).toBe(false);
   });
+
+  it("default maxCrossFileDiagnostics is 5", () => {
+    const config = loadConfig(FAKE_PKG_DIR);
+    expect(config.maxCrossFileDiagnostics).toBe(5);
+  });
+
+  it("PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS=3 → maxCrossFileDiagnostics: 3", () => {
+    process.env.PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS = "3";
+    const config = loadConfig(FAKE_PKG_DIR);
+    expect(config.maxCrossFileDiagnostics).toBe(3);
+  });
+
+  it("PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS=0 → maxCrossFileDiagnostics: 0 (valid, disables)", () => {
+    process.env.PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS = "0";
+    const config = loadConfig(FAKE_PKG_DIR);
+    expect(config.maxCrossFileDiagnostics).toBe(0);
+  });
+
+  it("PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS=-1 → throws CONFIG_INVALID_VALUE", () => {
+    process.env.PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS = "-1";
+    expect(() => loadConfig(FAKE_PKG_DIR)).toThrow("CONFIG_INVALID_VALUE");
+  });
+
+  it("PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS=abc → throws CONFIG_INVALID_VALUE", () => {
+    process.env.PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS = "abc";
+    expect(() => loadConfig(FAKE_PKG_DIR)).toThrow("CONFIG_INVALID_VALUE");
+  });
 });
