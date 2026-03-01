@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      exa-js:
-        specifier: ^2.6.1
-        version: 2.6.1(ws@8.19.0)
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -58,6 +54,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/exit: {}
+
   packages/gh: {}
 
   packages/glab: {}
@@ -88,6 +86,8 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.3.3)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/summarize: {}
 
 packages:
 
