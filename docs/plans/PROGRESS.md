@@ -16,6 +16,14 @@
 - **Notes:** `RoadmapPhase` uses `phase_number`/`phase_name` field names (matching CJS convention) while `ParsedRoadmap.phases` entries use `number`/`name` (internal type). Success criteria regex handles both `**Success Criteria:**` (colon inside) and `**Success Criteria**:` (colon outside) patterns. `snapshotState` creates a timestamped file copy in `.planning/snapshots/` (CJS `cmdStateSnapshot` only returned JSON — this is a behavioral improvement). `writeState` merges caller-provided FM with auto-built FM derived from body patterns.
 - **Timestamp:** 2026-02-28
 
+### Task 4: Core library — phase, milestone, init, verify
+- **Status:** ✅ Complete
+- **Commit:** 64a73a6 feat(pi-gsd): core library — phase, milestone, init, verify
+- **Built:** Ported 4 library modules from CJS source: `phase.ts` (listPhases, findPhaseDir, nextDecimalPhase, addPhase, insertPhase, removePhase, getPlanIndex, getWaveGroups, completePhase); `milestone.ts` (markRequirementsComplete, completeMilestone, listMilestones); `init.ts` (initNewProject, initPhaseOp, initExecutePhase, initPlanPhase, initNewMilestone, initQuick, initResume, initVerifyWork, initProgress, initMilestoneOp); `verify.ts` (verifySummary, verifyPlanStructure, verifyPhaseCompleteness, verifyReferences, verifyCommits, validateConsistency, validateHealth). All with full TDD test suites.
+- **Tests:** 263 passing (98 new tests across 4 new test files, original 165 untouched)
+- **Notes:** `getWaveGroups` returns `WaveGroup[]` (array of `{wave, plans[]}`) — easier to consume than the CJS `waves` map. `validateHealth` repair actions use `writeState`/`loadState` from state.ts instead of raw file writes. `PhaseListResult.directories` is optional (not always populated — only when not filtering by type). TypeScript compiles clean with `--noEmit`.
+- **Timestamp:** 2026-02-28
+
 ### Task: Fix Wave 2 Remaining Issues
 - **Status:** ✅ Complete
 - **Commit:** 7323ccf (3 commits: 9aa6a09, 3f2734f, 7323ccf)
