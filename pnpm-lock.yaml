@@ -35,7 +35,11 @@ importers:
 
   packages/create-skill: {}
 
-  packages/exa-search: {}
+  packages/exa-search:
+    dependencies:
+      exa-js:
+        specifier: ^2.6.1
+        version: 2.6.1
 
   packages/exa-search/skills/exa-search:
     dependencies:

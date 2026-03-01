@@ -11,5 +11,9 @@
     "skills": [
       "./skills"
     ]
+  },
+  "type": "module",
+  "dependencies": {
+    "exa-js": "^2.6.1"
   }
 }
