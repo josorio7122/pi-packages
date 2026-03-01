@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { ServerManager } from './server-manager.js';
 import { lspToolDefinition, type LSPOperation } from './tools.js';
-import { filterErrors, formatDiagnosticsXml } from './diagnostics.js';
+import { filterErrors, formatDiagnosticsXml, DIAGNOSTICS_LABEL_OTHER_FILE } from './diagnostics.js';
 
 export default function (pi: ExtensionAPI): void {
   const config = loadConfig();
@@ -80,7 +80,18 @@ export default function (pi: ExtensionAPI): void {
     },
   });
 
-  // 2. Intercept edit/write results for auto-diagnostics
+  // 2. Pre-heat LSP on read (non-blocking, no diagnostics)
+  pi.on('tool_result', async (event) => {
+    if (event.toolName !== 'read') return;
+    const filePath = (event.input as any)?.path;
+    if (!filePath || event.isError) return;
+    const abs = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(projectRoot, filePath);
+    manager.touchFile(abs, false).catch(() => {}); // fire-and-forget
+  });
+
+  // 3. Intercept edit/write results for auto-diagnostics
   if (config.diagnosticsEnabled) {
     pi.on('tool_result', async (event) => {
       if (event.toolName !== 'edit' && event.toolName !== 'write') return;
@@ -101,19 +112,34 @@ export default function (pi: ExtensionAPI): void {
       const diagnostics = manager.getDiagnostics(absolutePath);
       const errors = filterErrors(diagnostics);
 
-      if (errors.length === 0) return;
-
-      // Append diagnostics to the tool result
-      const diagnosticsText = formatDiagnosticsXml(
-        absolutePath,
-        errors,
-        config.maxDiagnosticsPerFile,
-      );
-
       const existingText = (event.content as any[])
         .filter((c: any) => c.type === 'text')
         .map((c: any) => c.text)
         .join('\n');
+
+      let diagnosticsText = '';
+
+      // Own-file diagnostics (edit and write)
+      if (errors.length > 0) {
+        diagnosticsText += formatDiagnosticsXml(absolutePath, errors, config.maxDiagnosticsPerFile);
+      }
+
+      // Cross-file diagnostics (write only)
+      if (event.toolName === 'write' && config.maxCrossFileDiagnostics > 0) {
+        const allDiags = manager.getAllDiagnostics();
+        let crossFileCount = 0;
+        for (const [file, diags] of allDiags) {
+          if (file === absolutePath) continue;
+          const fileErrors = filterErrors(diags);
+          if (fileErrors.length === 0) continue;
+          if (crossFileCount >= config.maxCrossFileDiagnostics) break;
+          crossFileCount++;
+          const crossFileXml = formatDiagnosticsXml(file, fileErrors, config.maxDiagnosticsPerFile, DIAGNOSTICS_LABEL_OTHER_FILE);
+          diagnosticsText += (diagnosticsText ? '\n\n' : '') + crossFileXml;
+        }
+      }
+
+      if (!diagnosticsText) return;
 
       return {
         content: [{
@@ -124,12 +150,12 @@ export default function (pi: ExtensionAPI): void {
     });
   }
 
-  // 3. Shutdown on session end
+  // 4. Shutdown on session end
   pi.on('session_shutdown', async () => {
     await manager.shutdownAll();
   });
 
-  // 4. Register /lsp-status command
+  // 5. Register /lsp-status command
   pi.registerCommand('lsp-status', {
     description: 'Show LSP server status',
     handler: async (_args, ctx) => {

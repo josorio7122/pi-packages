@@ -11,7 +11,7 @@ Language Server Protocol (LSP) integration for [pi](https://github.com/mariozech
 - **9 LSP operations** — goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls
 - **Automatic diagnostics** — type errors appended to every edit/write result as `<diagnostics>` XML
 - **Lazy server spawning** — LSP servers start on first use, not on session start
-- **Multi-language** — TypeScript/JavaScript, Python, Go (Phase 1)
+- **Multi-language** — TypeScript/JavaScript, Python, Ruby (Phase 1)
 - **Auto-install** — missing LSP servers are downloaded automatically
 - **Zero config** — works out of the box for most projects
 
@@ -68,6 +68,18 @@ Or add to your pi settings:
 
 ---
 
+## Prerequisites
+
+pi-lsp auto-installs LSP servers on first use. The following package managers must be available:
+
+| Language | Requirement |
+|---|---|
+| TypeScript / JavaScript | `npm` (for `typescript-language-server` and `pyright`) |
+| Python | `npm` |
+| Ruby | `gem` (for `rubocop`) |
+
+---
+
 ## Configuration
 
 pi-lsp is configured via environment variables. All settings are optional — defaults work for most projects.
@@ -81,6 +93,7 @@ pi-lsp is configured via environment variables. All settings are optional — de
 | `PI_LSP_DIAGNOSTICS_TIMEOUT` | `3000` | Max wait for diagnostics after edit (ms) |
 | `PI_LSP_DIAGNOSTICS_DEBOUNCE` | `150` | Debounce window for diagnostic batches (ms) |
 | `PI_LSP_MAX_DIAGNOSTICS` | `20` | Max error lines shown per file |
+| `PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS` | `5` | Max other files to show diagnostics for after write |
 | `PI_LSP_SERVERS` | `auto` | Comma-separated server IDs, or `auto` for all |
 
 ---
@@ -126,6 +139,16 @@ When `PI_LSP_DIAGNOSTICS=true` (default), pi-lsp intercepts every `edit` and `wr
 
 The LLM sees the errors in the same response as the edit confirmation, so it can fix them immediately without an extra turn.
 
+### Cross-file diagnostics
+
+- After `write`, diagnostics from up to 5 other files are also shown (catches cascade errors in files that import the written file)
+- After `edit`, only the edited file's diagnostics are shown
+- **TypeScript first-publish skip**: on the very first `textDocument/didOpen`, TypeScript publishes syntactic-only diagnostics before semantic analysis completes. pi-lsp skips that first publish and waits for the full semantic result.
+
+### Read pre-heating
+
+When the LLM reads a file, the LSP server is pre-heated in the background (fire-and-forget). This means the first `edit` after a `read` gets diagnostics faster because the server has already opened and analyzed the file.
+
 ---
 
 ## Slash Commands
@@ -144,7 +167,7 @@ The LLM sees the errors in the same response as the edit confirmation, so it can
 |---|---|---|---|
 | TypeScript / JavaScript | `typescript-language-server` | `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`, `.cts` | ✓ (npm) |
 | Python | `pyright` | `.py`, `.pyi` | ✓ (npm) |
-| Go | `gopls` | `.go` | ✓ (go install) |
+| Ruby | `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | ✓ (gem) |
 
 ### How Server Detection Works
 
@@ -152,7 +175,7 @@ Each server defines root detection patterns:
 
 - **TypeScript**: walks up looking for `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`. Skips if `deno.json` is found.
 - **Python**: walks up looking for `pyproject.toml`, `setup.py`, `requirements.txt`, `Pipfile`, `pyrightconfig.json`. Auto-detects `.venv/bin/python`.
-- **Go**: prefers `go.work` (workspace mode) over `go.mod` (module mode).
+- **Ruby**: walks up looking for `Gemfile`, `Gemfile.lock`.
 
 ---
 
@@ -164,7 +187,7 @@ extensions/lsp/
 ├── config.ts              Configuration from environment variables
 ├── language-map.ts        File extension → LSP languageId mapping
 ├── root-detector.ts       Walk-up project root detection
-├── server-registry.ts     Server definitions (TS, Python, Go)
+├── server-registry.ts     Server definitions (TS, Python, Ruby)
 ├── installer.ts           Auto-download missing servers
 ├── client.ts              JSON-RPC client (file sync, diagnostics, LSP requests)
 ├── diagnostics.ts         Format diagnostics as XML for LLM
@@ -186,6 +209,11 @@ extensions/lsp/
 ### Diagnostics Flow
 
 ```
+LLM calls read("src/api.ts")
+  ↓
+pi-lsp's tool_result handler fires (fire-and-forget pre-heat)
+  └── Spawns/finds LSP server, sends textDocument/didOpen in background
+
 LLM calls edit("src/api.ts", ...)
   ↓
 Pi's built-in edit tool writes the file
@@ -193,7 +221,7 @@ Pi's built-in edit tool writes the file
 pi-lsp's tool_result handler fires
   ↓
 manager.touchFile("src/api.ts", true)
-  ├── Find/spawn matching LSP server
+  ├── Find/spawn matching LSP server (already warm if file was read first)
   ├── Send textDocument/didChange (full content sync)
   └── Wait for publishDiagnostics notification (150ms debounce, 3s timeout)
   ↓

@@ -14,7 +14,7 @@ export function getInstallDir(serversDir: string, serverId: string): string {
  * Look for a binary in these locations (in order):
  * 1. System PATH (via which)
  * 2. serversDir/serverId/node_modules/.bin/<command> (for npm-installed servers)
- * 3. serversDir/<command> (for Go-installed binaries)
+ * 3. serversDir/<command> (for gem-installed binaries)
  */
 export async function findBinary(
   command: string,
@@ -39,7 +39,7 @@ export async function findBinary(
     // not there
   }
 
-  // Check serversDir/<command> directly (Go binaries)
+  // Check serversDir/<command> directly (gem-installed binaries)
   const directBin = path.join(serversDir, command);
   try {
     await fs.access(directBin, fs.constants.X_OK);
@@ -63,8 +63,8 @@ export async function installServer(
   if (server.npmPackage) {
     return installNpmServer(server, serversDir, onProgress);
   }
-  if (server.goPackage) {
-    return installGoServer(server, serversDir, onProgress);
+  if (server.gemPackage) {
+    return installGemServer(server, serversDir, onProgress);
   }
   return undefined;
 }
@@ -102,24 +102,24 @@ async function installNpmServer(
   }
 }
 
-async function installGoServer(
+async function installGemServer(
   server: ServerInfo,
   serversDir: string,
   onProgress?: (msg: string) => void,
 ): Promise<string | undefined> {
-  // Check if Go is available
+  // Check if gem is available
   try {
-    await execFileAsync('which', ['go']);
+    await execFileAsync('which', ['gem']);
   } catch {
-    onProgress?.('Go is not installed, cannot install ' + server.id);
+    onProgress?.('Ruby gem is not installed, cannot install ' + server.id);
     return undefined;
   }
 
-  onProgress?.(`Installing ${server.goPackage}...`);
+  onProgress?.(`Installing ${server.gemPackage}...`);
   try {
-    await execFileAsync('go', ['install', server.goPackage!], {
+    await execFileAsync('gem', ['install', server.gemPackage!, '--bindir', serversDir], {
       timeout: 120_000,
-      env: { ...process.env, GOBIN: serversDir },
+      env: { ...process.env },
     });
     onProgress?.(`Installed ${server.id}`);
     const binPath = path.join(serversDir, server.command);
@@ -127,7 +127,8 @@ async function installGoServer(
       await fs.access(binPath, fs.constants.X_OK);
       return binPath;
     } catch {
-      return undefined;
+      // Might be on system PATH after gem install
+      return findBinary(server.command, serversDir, server.id);
     }
   } catch (err) {
     onProgress?.(`Failed to install ${server.id}: ${err}`);

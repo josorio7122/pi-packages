@@ -22,6 +22,8 @@ export interface LSPConfig {
   diagnosticsDebounce: number;
   /** Maximum number of diagnostics to report per file. PI_LSP_MAX_DIAGNOSTICS, default: 20 */
   maxDiagnosticsPerFile: number;
+  /** Max number of other files to show diagnostics for after write. PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS, default: 5 */
+  maxCrossFileDiagnostics: number;
   /** Comma-separated server list or 'auto'. PI_LSP_SERVERS, default: 'auto' */
   servers: string;
   /** Absolute path to the lsp-servers/ directory inside the package. Computed. */
@@ -110,6 +112,20 @@ export function loadConfig(packageDir?: string): LSPConfig {
     }
   }
 
+  // maxCrossFileDiagnostics
+  let maxCrossFileDiagnostics = 5;
+  if (process.env.PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS !== undefined) {
+    maxCrossFileDiagnostics = parseEnvInt(
+      "PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS",
+      process.env.PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS
+    );
+    if (maxCrossFileDiagnostics < 0) {
+      throw new Error(
+        `CONFIG_INVALID_VALUE: PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS must be >= 0 (got "${process.env.PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS}")`
+      );
+    }
+  }
+
   // servers
   const servers = process.env.PI_LSP_SERVERS ?? "auto";
 
@@ -124,6 +140,7 @@ export function loadConfig(packageDir?: string): LSPConfig {
     diagnosticsTimeout,
     diagnosticsDebounce,
     maxDiagnosticsPerFile,
+    maxCrossFileDiagnostics,
     servers,
     serversDir,
   };

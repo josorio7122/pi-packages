@@ -57,7 +57,11 @@ export class LSPClient {
       } catch {
         filePath = params.uri;
       }
+      const isFirstPublish = !client.diagnosticsMap.has(filePath);
       client.diagnosticsMap.set(filePath, params.diagnostics);
+      // TypeScript sends syntactic diagnostics first (often empty), then semantic.
+      // Skip the first publish to avoid resolving waitForDiagnostics too early.
+      if (isFirstPublish && options.serverID === 'typescript') return;
       const listeners = client.diagnosticsListeners.get(filePath);
       if (listeners) {
         for (const listener of [...listeners]) listener();
