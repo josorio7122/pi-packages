@@ -19,7 +19,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   '.objc': 'objective-c', '.objcpp': 'objective-cpp',
   '.pl': 'perl', '.php': 'php', '.prisma': 'prisma',
   '.ps1': 'powershell', '.py': 'python', '.pyi': 'python',
-  '.r': 'r', '.rb': 'ruby', '.rs': 'rust',
+  '.r': 'r', '.rb': 'ruby', '.rake': 'ruby', '.gemspec': 'ruby', '.ru': 'ruby', '.erb': 'erb', '.rs': 'rust',
   '.sass': 'sass', '.scss': 'scss', '.scala': 'scala',
   '.sh': 'shellscript', '.bash': 'shellscript', '.zsh': 'shellscript',
   '.sql': 'sql', '.svelte': 'svelte', '.swift': 'swift',

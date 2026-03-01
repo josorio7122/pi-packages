@@ -20,4 +20,8 @@ describe('getLanguageId', () => {
   it('Makefile → makefile', () => expect(getLanguageId('Makefile')).toBe('makefile'));
   it('.vue → vue', () => expect(getLanguageId('foo.vue')).toBe('vue'));
   it('.svelte → svelte', () => expect(getLanguageId('foo.svelte')).toBe('svelte'));
+  it('.rb → ruby', () => expect(getLanguageId('foo.rb')).toBe('ruby'));
+  it('.rake → ruby', () => expect(getLanguageId('foo.rake')).toBe('ruby'));
+  it('.gemspec → ruby', () => expect(getLanguageId('foo.gemspec')).toBe('ruby'));
+  it('.ru → ruby', () => expect(getLanguageId('foo.ru')).toBe('ruby'));
 });
