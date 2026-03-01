@@ -29,18 +29,17 @@
   },
   "type": "module",
   "pi": {
-    "extensions": [
-      "./packages/pi-crew/extensions"
-    ],
     "skills": [
       "./packages/pi-crew/skills",
       "./packages/exa-search/skills",
       "./packages/gh/skills",
       "./packages/glab/skills",
       "./packages/create-skill/skills"
+    ],
+    "extensions": [
+      "./packages/pi-crew/extensions",
+      "./packages/exit/extensions",
+      "./packages/summarize/extensions"
     ]
-  },
-  "dependencies": {
-    "exa-js": "^2.6.1"
   }
 }
