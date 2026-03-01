@@ -224,15 +224,29 @@ my-skill/
     └── process.py    # Self-contained with inline deps
 ```
 
-**With scripts that need npm deps:**
+**With scripts that need npm deps (standalone skill):**
 
 ```
 my-skill/
 ├── SKILL.md
-├── scripts/
-│   └── search.js
-└── package.json
+├── package.json      # pnpm init, then pnpm add <dep>
+└── scripts/
+    └── search.js
 ```
+
+**With scripts that need npm deps (inside a pi package):**
+
+```
+packages/my-package/
+├── package.json      # Single package.json — pi manifest + deps live here
+└── skills/
+    └── my-skill/
+        ├── SKILL.md
+        └── scripts/
+            └── search.js
+```
+
+> **One `package.json` per package — never two.** When a skill lives inside a pi package (`packages/<name>/skills/<skill>/`), the package root `package.json` owns both the `pi` manifest and the npm dependencies. Node resolves imports up the directory tree, so scripts inside `skills/<skill>/scripts/` will find deps installed at the package root. Never create a second `package.json` inside the skill directory.
 
 ### 5. Write SKILL.md
 
@@ -317,7 +331,7 @@ allowed-tools: Bash(git:*) Read
 When the skill touches these domains, include the relevant rules from the user's workflow:
 
 - **Code changes:** TDD first, run tests before commit, `type: description` commit format
-- **New packages:** Never hand-write `package.json` (`pnpm init`) or `pyproject.toml` (`uv init`)
+- **New packages:** Never hand-write `package.json` (`pnpm init`) or `pyproject.toml` (`uv init`). Use `npm pkg set` to modify fields, `pnpm add` for deps. One `package.json` per package — never a second one inside the skill directory
 - **Python:** Use `uv` exclusively, always venv, prefer `uv run`
 - **Git/branching:** Worktrees for feature work, `feature/` `fix/` `refactor/` naming
 - **Subagents:** Full task text (never point to files), always pass `cwd`
