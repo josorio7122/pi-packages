@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Exa answer — get AI-generated answers with citations.
  *
  * Usage:
- *   node scripts/answer.js <query> [options-json]
- *   node scripts/answer.js --help
+ *   tsx scripts/answer.ts <query> [options-json]
+ *   tsx scripts/answer.ts --help
  *
  * Options JSON (all optional):
  *   {
@@ -20,19 +20,20 @@
  *   EXA_API_KEY — required
  *
  * Examples:
- *   node scripts/answer.js "What is the latest Next.js version?"
- *   node scripts/answer.js "Compare React and Vue" '{"text":true}'
- *   node scripts/answer.js "SpaceX valuation" '{"model":"exa","stream":true}'
- *   node scripts/answer.js "List top 3 ORMs" '{"outputSchema":{"type":"object","properties":{"items":{"type":"array","items":{"type":"string"}}}}}'
+ *   tsx scripts/answer.ts "What is the latest Next.js version?"
+ *   tsx scripts/answer.ts "Compare React and Vue" '{"text":true}'
+ *   tsx scripts/answer.ts "SpaceX valuation" '{"model":"exa","stream":true}'
+ *   tsx scripts/answer.ts "List top 3 ORMs" '{"outputSchema":{"type":"object","properties":{"items":{"type":"array","items":{"type":"string"}}}}}'
  */
 
-import Exa from "exa-js";
+import { Exa } from "exa-js";
+import { readFileSync } from "fs";
 
 const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.length === 0) {
-  const lines = [];
-  const src = await import("fs").then((fs) => fs.readFileSync(new URL(import.meta.url), "utf8"));
+  const lines: string[] = [];
+  const src = readFileSync(new URL(import.meta.url), "utf8");
   for (const line of src.split("\n")) {
     if (line.startsWith(" * ") || line.startsWith(" */")) {
       if (line.startsWith(" */")) break;
@@ -44,7 +45,9 @@ if (args.includes("--help") || args.length === 0) {
 }
 
 const query = args[0];
-const opts = args[1] ? JSON.parse(args[1]) : {};
+const opts: Record<string, unknown> = args[1]
+  ? (JSON.parse(args[1]) as Record<string, unknown>)
+  : {};
 
 if (!process.env.EXA_API_KEY) {
   console.error("Error: EXA_API_KEY environment variable is required.");
@@ -54,8 +57,8 @@ if (!process.env.EXA_API_KEY) {
 
 const exa = new Exa();
 
-const answerOpts = {};
-for (const key of ["text", "model", "systemPrompt", "outputSchema", "userLocation"]) {
+const answerOpts: Record<string, unknown> = {};
+for (const key of ["text", "model", "systemPrompt", "outputSchema", "userLocation"] as const) {
   if (opts[key] !== undefined) answerOpts[key] = opts[key];
 }
 
@@ -63,10 +66,11 @@ try {
   if (opts.stream) {
     // Streaming mode — write chunks as they arrive
     for await (const chunk of exa.streamAnswer(query, answerOpts)) {
-      if (chunk.content) process.stdout.write(chunk.content);
-      if (chunk.citations) {
+      const typedChunk = chunk as { content?: string; citations?: unknown };
+      if (typedChunk.content) process.stdout.write(typedChunk.content);
+      if (typedChunk.citations) {
         process.stdout.write("\n");
-        console.log(JSON.stringify({ citations: chunk.citations }, null, 2));
+        console.log(JSON.stringify({ citations: typedChunk.citations }, null, 2));
       }
     }
     process.stdout.write("\n");
@@ -75,6 +79,6 @@ try {
     console.log(JSON.stringify(result, null, 2));
   }
 } catch (err) {
-  console.error(`Error: ${err.message}`);
+  console.error(`Error: ${(err as Error).message}`);
   process.exit(1);
 }

@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Exa find similar — find pages similar to a given URL.
  *
  * Usage:
- *   node scripts/find-similar.js <url> [options-json]
- *   node scripts/find-similar.js --help
+ *   tsx scripts/find-similar.ts <url> [options-json]
+ *   tsx scripts/find-similar.ts --help
  *
  * Options JSON (all optional):
  *   {
@@ -29,17 +29,18 @@
  *   EXA_API_KEY — required
  *
  * Examples:
- *   node scripts/find-similar.js "https://react.dev"
- *   node scripts/find-similar.js "https://react.dev" '{"numResults":5,"text":true,"excludeSourceDomain":true}'
+ *   tsx scripts/find-similar.ts "https://react.dev"
+ *   tsx scripts/find-similar.ts "https://react.dev" '{"numResults":5,"text":true,"excludeSourceDomain":true}'
  */
 
-import Exa from "exa-js";
+import { Exa } from "exa-js";
+import { readFileSync } from "fs";
 
 const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.length === 0) {
-  const lines = [];
-  const src = await import("fs").then((fs) => fs.readFileSync(new URL(import.meta.url), "utf8"));
+  const lines: string[] = [];
+  const src = readFileSync(new URL(import.meta.url), "utf8");
   for (const line of src.split("\n")) {
     if (line.startsWith(" * ") || line.startsWith(" */")) {
       if (line.startsWith(" */")) break;
@@ -51,7 +52,9 @@ if (args.includes("--help") || args.length === 0) {
 }
 
 const url = args[0];
-const opts = args[1] ? JSON.parse(args[1]) : {};
+const opts: Record<string, unknown> = args[1]
+  ? (JSON.parse(args[1]) as Record<string, unknown>)
+  : {};
 
 if (!process.env.EXA_API_KEY) {
   console.error("Error: EXA_API_KEY environment variable is required.");
@@ -63,17 +66,18 @@ const exa = new Exa();
 
 const wantContents = opts.contents || opts.text || opts.highlights || opts.summary;
 
-let contentsOpts = {};
+let contentsOpts: Record<string, unknown> = {};
 if (opts.text === true) contentsOpts.text = true;
 else if (typeof opts.text === "object") contentsOpts.text = opts.text;
 if (opts.highlights === true) contentsOpts.highlights = true;
 else if (typeof opts.highlights === "object") contentsOpts.highlights = opts.highlights;
 if (opts.summary === true) contentsOpts.summary = true;
 else if (typeof opts.summary === "object") contentsOpts.summary = opts.summary;
-if (typeof opts.contents === "object") contentsOpts = { ...contentsOpts, ...opts.contents };
+if (typeof opts.contents === "object")
+  contentsOpts = { ...contentsOpts, ...(opts.contents as Record<string, unknown>) };
 
-const searchOpts = {};
-for (const key of [
+const searchOpts: Record<string, unknown> = {};
+const findSimilarKeys = [
   "numResults",
   "excludeSourceDomain",
   "includeDomains",
@@ -85,7 +89,9 @@ for (const key of [
   "category",
   "includeText",
   "excludeText",
-]) {
+] as const;
+
+for (const key of findSimilarKeys) {
   if (opts[key] !== undefined) searchOpts[key] = opts[key];
 }
 
@@ -98,6 +104,6 @@ try {
   }
   console.log(JSON.stringify(result, null, 2));
 } catch (err) {
-  console.error(`Error: ${err.message}`);
+  console.error(`Error: ${(err as Error).message}`);
   process.exit(1);
 }

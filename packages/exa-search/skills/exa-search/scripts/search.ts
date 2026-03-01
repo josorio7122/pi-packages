@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Exa search — semantic search and search with contents.
  *
  * Usage:
- *   node scripts/search.js <query> [options-json]
- *   node scripts/search.js --help
+ *   tsx scripts/search.ts <query> [options-json]
+ *   tsx scripts/search.ts --help
  *
  * Options JSON (all optional):
  *   {
@@ -37,18 +37,19 @@
  *   EXA_API_KEY — required
  *
  * Examples:
- *   node scripts/search.js "latest AI research"
- *   node scripts/search.js "AI startups" '{"numResults":5,"type":"deep","contents":true}'
- *   node scripts/search.js "React best practices" '{"text":true,"highlights":true,"includeDomains":["react.dev"]}'
+ *   tsx scripts/search.ts "latest AI research"
+ *   tsx scripts/search.ts "AI startups" '{"numResults":5,"type":"deep","contents":true}'
+ *   tsx scripts/search.ts "React best practices" '{"text":true,"highlights":true,"includeDomains":["react.dev"]}'
  */
 
-import Exa from "exa-js";
+import { Exa } from "exa-js";
+import { readFileSync } from "fs";
 
 const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.length === 0) {
-  const lines = [];
-  const src = await import("fs").then((fs) => fs.readFileSync(new URL(import.meta.url), "utf8"));
+  const lines: string[] = [];
+  const src = readFileSync(new URL(import.meta.url), "utf8");
   for (const line of src.split("\n")) {
     if (line.startsWith(" * ") || line.startsWith(" */")) {
       if (line.startsWith(" */")) break;
@@ -60,7 +61,9 @@ if (args.includes("--help") || args.length === 0) {
 }
 
 const query = args[0];
-const opts = args[1] ? JSON.parse(args[1]) : {};
+const opts: Record<string, unknown> = args[1]
+  ? (JSON.parse(args[1]) as Record<string, unknown>)
+  : {};
 
 if (!process.env.EXA_API_KEY) {
   console.error("Error: EXA_API_KEY environment variable is required.");
@@ -74,18 +77,19 @@ const exa = new Exa();
 const wantContents = opts.contents || opts.text || opts.highlights || opts.summary;
 
 // Build contents options
-let contentsOpts = {};
+let contentsOpts: Record<string, unknown> = {};
 if (opts.text === true) contentsOpts.text = true;
 else if (typeof opts.text === "object") contentsOpts.text = opts.text;
 if (opts.highlights === true) contentsOpts.highlights = true;
 else if (typeof opts.highlights === "object") contentsOpts.highlights = opts.highlights;
 if (opts.summary === true) contentsOpts.summary = true;
 else if (typeof opts.summary === "object") contentsOpts.summary = opts.summary;
-if (typeof opts.contents === "object") contentsOpts = { ...contentsOpts, ...opts.contents };
+if (typeof opts.contents === "object")
+  contentsOpts = { ...contentsOpts, ...(opts.contents as Record<string, unknown>) };
 
 // Build search options
-const searchOpts = {};
-for (const key of [
+const searchOpts: Record<string, unknown> = {};
+const searchKeys = [
   "numResults",
   "type",
   "includeDomains",
@@ -106,7 +110,9 @@ for (const key of [
   "subpageTarget",
   "maxAgeHours",
   "filterEmptyResults",
-]) {
+] as const;
+
+for (const key of searchKeys) {
   if (opts[key] !== undefined) searchOpts[key] = opts[key];
 }
 
@@ -119,6 +125,6 @@ try {
   }
   console.log(JSON.stringify(result, null, 2));
 } catch (err) {
-  console.error(`Error: ${err.message}`);
+  console.error(`Error: ${(err as Error).message}`);
   process.exit(1);
 }

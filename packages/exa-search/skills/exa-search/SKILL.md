@@ -1,7 +1,7 @@
 ---
 name: exa-search
 description: Semantic web search, content extraction, AI-powered answers, and deep research via the Exa API (exa-js SDK). Use when searching documentation, facts, web content, finding similar pages, extracting page text, getting AI answers with citations, or running deep research tasks. Requires EXA_API_KEY environment variable.
-compatibility: "Requires Node.js 18+ and EXA_API_KEY environment variable set"
+compatibility: "Requires Node.js 18+, tsx, and EXA_API_KEY environment variable set"
 metadata:
   author: josorio7122
   version: "1.0"
@@ -35,11 +35,11 @@ All scripts output JSON to stdout. Pass options as a JSON string argument. Run a
 
 | Script                    | Purpose                                 |
 | ------------------------- | --------------------------------------- |
-| `scripts/search.js`       | Semantic search + search with contents  |
-| `scripts/find-similar.js` | Find pages similar to a URL             |
-| `scripts/contents.js`     | Extract contents from URLs              |
-| `scripts/answer.js`       | AI-generated answers with citations     |
-| `scripts/research.js`     | Deep research tasks (create, poll, run) |
+| `scripts/search.ts`       | Semantic search + search with contents  |
+| `scripts/find-similar.ts` | Find pages similar to a URL             |
+| `scripts/contents.ts`     | Extract contents from URLs              |
+| `scripts/answer.ts`       | AI-generated answers with citations     |
+| `scripts/research.ts`     | Deep research tasks (create, poll, run) |
 
 ## Search
 
@@ -47,25 +47,25 @@ Semantic search across the web. Supports six search types: `auto` (default), `fa
 
 ```bash
 # Basic search
-node scripts/search.js "latest AI research"
+tsx scripts/search.ts "latest AI research"
 
 # Search with contents (text + highlights)
-node scripts/search.js "React best practices" '{"text":true,"highlights":true,"numResults":5}'
+tsx scripts/search.ts "React best practices" '{"text":true,"highlights":true,"numResults":5}'
 
 # Deep search with structured output
-node scripts/search.js "AI startups 2025" '{"type":"deep","numResults":10,"contents":true}'
+tsx scripts/search.ts "AI startups 2025" '{"type":"deep","numResults":10,"contents":true}'
 
 # Filter by domain and date
-node scripts/search.js "Next.js app router" '{"includeDomains":["nextjs.org","vercel.com"],"startPublishedDate":"2025-01-01T00:00:00.000Z"}'
+tsx scripts/search.ts "Next.js app router" '{"includeDomains":["nextjs.org","vercel.com"],"startPublishedDate":"2025-01-01T00:00:00.000Z"}'
 
 # Category search (news, research paper, company, pdf, tweet, personal site, financial report, people)
-node scripts/search.js "OpenAI" '{"category":"news","numResults":5,"text":true}'
+tsx scripts/search.ts "OpenAI" '{"category":"news","numResults":5,"text":true}'
 
 # Text filtering
-node scripts/search.js "machine learning" '{"includeText":["transformer"],"excludeText":["beginner"]}'
+tsx scripts/search.ts "machine learning" '{"includeText":["transformer"],"excludeText":["beginner"]}'
 
 # Deep search with additional query formulations
-node scripts/search.js "quantum computing breakthroughs" '{"type":"deep","additionalQueries":["recent quantum computing papers","quantum advantage experiments"]}'
+tsx scripts/search.ts "quantum computing breakthroughs" '{"type":"deep","additionalQueries":["recent quantum computing papers","quantum advantage experiments"]}'
 ```
 
 ### Key Options
@@ -96,13 +96,13 @@ Find pages similar to a given URL.
 
 ```bash
 # Basic
-node scripts/find-similar.js "https://react.dev"
+tsx scripts/find-similar.ts "https://react.dev"
 
 # With contents, excluding source domain
-node scripts/find-similar.js "https://react.dev" '{"text":true,"excludeSourceDomain":true,"numResults":5}'
+tsx scripts/find-similar.ts "https://react.dev" '{"text":true,"excludeSourceDomain":true,"numResults":5}'
 
 # Filter by domain
-node scripts/find-similar.js "https://nextjs.org/blog" '{"includeDomains":["vercel.com","remix.run"],"text":true}'
+tsx scripts/find-similar.ts "https://nextjs.org/blog" '{"includeDomains":["vercel.com","remix.run"],"text":true}'
 ```
 
 ## Get Contents
@@ -111,19 +111,19 @@ Extract text, highlights, or summaries from specific URLs.
 
 ```bash
 # Get text from a single URL
-node scripts/contents.js "https://example.com/article"
+tsx scripts/contents.ts "https://example.com/article"
 
 # Get text with character limit
-node scripts/contents.js "https://example.com" '{"text":{"maxCharacters":2000}}'
+tsx scripts/contents.ts "https://example.com" '{"text":{"maxCharacters":2000}}'
 
 # Multiple URLs with highlights
-node scripts/contents.js '["https://a.com","https://b.com"]' '{"text":true,"highlights":true}'
+tsx scripts/contents.ts '["https://a.com","https://b.com"]' '{"text":true,"highlights":true}'
 
 # Get subpages
-node scripts/contents.js "https://docs.example.com" '{"text":true,"subpages":3,"subpageTarget":"API reference"}'
+tsx scripts/contents.ts "https://docs.example.com" '{"text":true,"subpages":3,"subpageTarget":"API reference"}'
 
 # Force fresh content (ignore cache)
-node scripts/contents.js "https://example.com" '{"text":true,"maxAgeHours":0}'
+tsx scripts/contents.ts "https://example.com" '{"text":true,"maxAgeHours":0}'
 ```
 
 ## Answer
@@ -132,19 +132,19 @@ Get AI-generated answers with citations from Exa's search index.
 
 ```bash
 # Basic question
-node scripts/answer.js "What is the latest Next.js version?"
+tsx scripts/answer.ts "What is the latest Next.js version?"
 
 # With full source text
-node scripts/answer.js "Compare React and Vue" '{"text":true}'
+tsx scripts/answer.ts "Compare React and Vue" '{"text":true}'
 
 # With system prompt
-node scripts/answer.js "Best ORMs for Node.js" '{"systemPrompt":"Be concise. List only the top 3 with one sentence each."}'
+tsx scripts/answer.ts "Best ORMs for Node.js" '{"systemPrompt":"Be concise. List only the top 3 with one sentence each."}'
 
 # Structured output
-node scripts/answer.js "Top 3 JS frameworks" '{"outputSchema":{"type":"object","properties":{"frameworks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"description":{"type":"string"}}}}}}}'
+tsx scripts/answer.ts "Top 3 JS frameworks" '{"outputSchema":{"type":"object","properties":{"frameworks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"description":{"type":"string"}}}}}}}'
 
 # Streaming
-node scripts/answer.js "Explain quantum computing" '{"stream":true}'
+tsx scripts/answer.ts "Explain quantum computing" '{"stream":true}'
 ```
 
 ## Research
@@ -153,21 +153,21 @@ Deep research tasks that run asynchronously. Three models available: `exa-resear
 
 ```bash
 # One-step: create + poll until done
-node scripts/research.js run "What is SpaceX's latest valuation?"
+tsx scripts/research.ts run "What is SpaceX's latest valuation?"
 
 # With pro model
-node scripts/research.js run "Comprehensive analysis of AI chip market 2025" '{"model":"exa-research-pro"}'
+tsx scripts/research.ts run "Comprehensive analysis of AI chip market 2025" '{"model":"exa-research-pro"}'
 
 # With structured output
-node scripts/research.js run "Top 5 YC companies by valuation" '{"outputSchema":{"type":"object","properties":{"companies":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"valuation":{"type":"string"}}}}}}}'
+tsx scripts/research.ts run "Top 5 YC companies by valuation" '{"outputSchema":{"type":"object","properties":{"companies":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"valuation":{"type":"string"}}}}}}}'
 
 # Manual workflow: create, then poll separately
-node scripts/research.js create "Research quantum computing startups"
-node scripts/research.js get "RESEARCH_ID_HERE"
-node scripts/research.js poll "RESEARCH_ID_HERE" '{"pollInterval":2000,"timeoutMs":300000}'
+tsx scripts/research.ts create "Research quantum computing startups"
+tsx scripts/research.ts get "RESEARCH_ID_HERE"
+tsx scripts/research.ts poll "RESEARCH_ID_HERE" '{"pollInterval":2000,"timeoutMs":300000}'
 
 # List past research tasks
-node scripts/research.js list '{"limit":10}'
+tsx scripts/research.ts list '{"limit":10}'
 ```
 
 ## Common Patterns
@@ -176,36 +176,36 @@ node scripts/research.js list '{"limit":10}'
 
 ```bash
 # Search official docs
-node scripts/search.js "drizzle ORM configuration" '{"includeDomains":["orm.drizzle.team"],"text":true,"numResults":3}'
+tsx scripts/search.ts "drizzle ORM configuration" '{"includeDomains":["orm.drizzle.team"],"text":true,"numResults":3}'
 
 # Or get a direct answer
-node scripts/answer.js "How do I configure drizzle ORM with PostgreSQL?"
+tsx scripts/answer.ts "How do I configure drizzle ORM with PostgreSQL?"
 ```
 
 ### Fetch a Specific Page
 
 ```bash
-node scripts/contents.js "https://nextjs.org/docs/app/building-your-application/routing" '{"text":true}'
+tsx scripts/contents.ts "https://nextjs.org/docs/app/building-your-application/routing" '{"text":true}'
 ```
 
 ### Research Before a Project
 
 ```bash
-node scripts/research.js run "Best practices for building a CLI tool in Node.js in 2025, including testing, argument parsing, and distribution"
+tsx scripts/research.ts run "Best practices for building a CLI tool in Node.js in 2025, including testing, argument parsing, and distribution"
 ```
 
 ### Find Alternatives
 
 ```bash
-node scripts/find-similar.js "https://tailwindcss.com" '{"text":true,"excludeSourceDomain":true,"numResults":5}'
+tsx scripts/find-similar.ts "https://tailwindcss.com" '{"text":true,"excludeSourceDomain":true,"numResults":5}'
 ```
 
 ## Rules
 
 - Always check `EXA_API_KEY` is set before running scripts
-- Prefer `answer.js` for direct questions — it returns citations
-- Prefer `search.js` with `text:true` for browsing/exploring
-- Use `contents.js` to fetch specific known URLs
+- Prefer `answer.ts` for direct questions — it returns citations
+- Prefer `search.ts` with `text:true` for browsing/exploring
+- Use `contents.ts` to fetch specific known URLs
 - Use `research.js run` for complex multi-step research
 - Output is always JSON — pipe through `jq` for filtering if needed
 - Be mindful of API costs — use `numResults` to limit when exploring

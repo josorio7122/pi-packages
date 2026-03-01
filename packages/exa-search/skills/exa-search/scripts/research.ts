@@ -1,14 +1,14 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 /**
  * Exa research — create and manage deep research tasks.
  *
  * Usage:
- *   node scripts/research.js create <instructions> [options-json]
- *   node scripts/research.js get <research-id> [options-json]
- *   node scripts/research.js poll <research-id> [options-json]
- *   node scripts/research.js list [options-json]
- *   node scripts/research.js run <instructions> [options-json]
- *   node scripts/research.js --help
+ *   tsx scripts/research.ts create <instructions> [options-json]
+ *   tsx scripts/research.ts get <research-id> [options-json]
+ *   tsx scripts/research.ts poll <research-id> [options-json]
+ *   tsx scripts/research.ts list [options-json]
+ *   tsx scripts/research.ts run <instructions> [options-json]
+ *   tsx scripts/research.ts --help
  *
  * Subcommands:
  *   create   — Start a new research task (returns immediately with researchId)
@@ -46,19 +46,20 @@
  *   EXA_API_KEY — required
  *
  * Examples:
- *   node scripts/research.js create "Research the latest AI developments"
- *   node scripts/research.js get "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
- *   node scripts/research.js run "What is SpaceX's latest valuation?" '{"model":"exa-research-pro"}'
- *   node scripts/research.js list '{"limit":5}'
+ *   tsx scripts/research.ts create "Research the latest AI developments"
+ *   tsx scripts/research.ts get "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+ *   tsx scripts/research.ts run "What is SpaceX's latest valuation?" '{"model":"exa-research-pro"}'
+ *   tsx scripts/research.ts list '{"limit":5}'
  */
 
-import Exa from "exa-js";
+import { Exa } from "exa-js";
+import { readFileSync } from "fs";
 
 const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.length === 0) {
-  const lines = [];
-  const src = await import("fs").then((fs) => fs.readFileSync(new URL(import.meta.url), "utf8"));
+  const lines: string[] = [];
+  const src = readFileSync(new URL(import.meta.url), "utf8");
   for (const line of src.split("\n")) {
     if (line.startsWith(" * ") || line.startsWith(" */")) {
       if (line.startsWith(" */")) break;
@@ -87,11 +88,14 @@ try {
         console.error("Error: instructions required.");
         process.exit(1);
       }
-      const opts = args[2] ? JSON.parse(args[2]) : {};
+      const opts: Record<string, unknown> = args[2]
+        ? (JSON.parse(args[2]) as Record<string, unknown>)
+        : {};
       const result = await exa.research.create({
         instructions: arg1,
-        ...(opts.model && { model: opts.model }),
-        ...(opts.outputSchema && { outputSchema: opts.outputSchema }),
+        model:
+          (opts.model as "exa-research-fast" | "exa-research" | "exa-research-pro") ?? undefined,
+        outputSchema: (opts.outputSchema as Record<string, unknown>) ?? undefined,
       });
       console.log(JSON.stringify(result, null, 2));
       break;
@@ -102,9 +106,12 @@ try {
         console.error("Error: research-id required.");
         process.exit(1);
       }
-      const opts = args[2] ? JSON.parse(args[2]) : {};
+      const opts: Record<string, unknown> = args[2]
+        ? (JSON.parse(args[2]) as Record<string, unknown>)
+        : {};
       if (opts.stream) {
-        for await (const event of exa.research.get(arg1, { stream: true, ...opts })) {
+        const streamResult = await exa.research.get(arg1, { stream: true, ...opts });
+        for await (const event of streamResult) {
           console.log(JSON.stringify(event));
         }
       } else {
@@ -119,7 +126,9 @@ try {
         console.error("Error: research-id required.");
         process.exit(1);
       }
-      const opts = args[2] ? JSON.parse(args[2]) : {};
+      const opts: Record<string, unknown> = args[2]
+        ? (JSON.parse(args[2]) as Record<string, unknown>)
+        : {};
       const result = await exa.research.pollUntilFinished(arg1, opts);
       console.log(JSON.stringify(result, null, 2));
       break;
@@ -130,24 +139,30 @@ try {
         console.error("Error: instructions required.");
         process.exit(1);
       }
-      const opts = args[2] ? JSON.parse(args[2]) : {};
+      const opts: Record<string, unknown> = args[2]
+        ? (JSON.parse(args[2]) as Record<string, unknown>)
+        : {};
       const created = await exa.research.create({
         instructions: arg1,
-        ...(opts.model && { model: opts.model }),
-        ...(opts.outputSchema && { outputSchema: opts.outputSchema }),
+        model:
+          (opts.model as "exa-research-fast" | "exa-research" | "exa-research-pro") ?? undefined,
+        outputSchema: (opts.outputSchema as Record<string, unknown>) ?? undefined,
       });
-      console.error(`Research task created: ${created.researchId} — polling...`);
-      const result = await exa.research.pollUntilFinished(created.researchId, {
-        pollInterval: opts.pollInterval || 2000,
-        timeoutMs: opts.timeoutMs || 600000,
-        events: opts.events,
+      const createdTyped = created as { researchId: string };
+      console.error(`Research task created: ${createdTyped.researchId} — polling...`);
+      const result = await exa.research.pollUntilFinished(createdTyped.researchId, {
+        pollInterval: (opts.pollInterval as number) || 2000,
+        timeoutMs: (opts.timeoutMs as number) || 600000,
+        events: opts.events as boolean | undefined,
       });
       console.log(JSON.stringify(result, null, 2));
       break;
     }
 
     case "list": {
-      const opts = arg1 ? JSON.parse(arg1) : {};
+      const opts: Record<string, unknown> = arg1
+        ? (JSON.parse(arg1) as Record<string, unknown>)
+        : {};
       const result = await exa.research.list(opts);
       console.log(JSON.stringify(result, null, 2));
       break;
@@ -159,6 +174,6 @@ try {
       process.exit(1);
   }
 } catch (err) {
-  console.error(`Error: ${err.message}`);
+  console.error(`Error: ${(err as Error).message}`);
   process.exit(1);
 }
