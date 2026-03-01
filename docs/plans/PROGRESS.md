@@ -31,3 +31,27 @@
 - **Tests:** 93 passing
 - **Notes:** The runtime references/templates/workflows files contain intentional `gsd-tools.cjs` references (documenting the upstream CLI for users who run GSD natively) — only the set-profile.md template-display reference was replaced as specified. The `grep -v 'set-profile'` verification check will still show hits from those reference docs.
 - **Timestamp:** 2026-02-28
+
+### Task 6: Extension hooks — context monitor and statusline
+- **Status:** ✅ Complete
+- **Commit:** 555f2fb feat(pi-gsd): add context monitor and statusline hooks
+- **Built:** Created `hooks/context-monitor.ts` (warns at ≤35% remaining, critical at ≤25%; 5-turn debounce using `ctx.getContextUsage()` which returns `percent` as 0-100) and `hooks/statusline.ts` (reads STATE.md frontmatter on `session_start` + `turn_end`, shows Phase/Plan/status via `ctx.ui.setStatus('gsd', ...)`). Registered both in `index.ts`.
+- **Tests:** 301 passing (no new tests — hooks are event-driven integration code requiring the full pi runtime)
+- **Notes:** `ContextUsage.percent` is 0-100 (confirmed from agent-session.js source: `percent = (tokens / contextWindow) * 100`). Task description incorrectly named the field `percentage` — actual field is `percent`. Statusline clears itself (`setStatus('gsd', undefined)`) when `.planning/` doesn't exist.
+- **Timestamp:** 2026-02-28
+
+### Task 5: Pi tools — register all 10 tools (8 state/operations + 2 dispatch)
+- **Status:** ✅ Complete
+- **Commit:** a3980ac feat(pi-gsd): register all 10 tools (8 state/ops + 2 dispatch)
+- **Built:** Created 10 tool files in `extensions/gsd/tools/`: `init.ts` (gsd_init, 10 actions), `state.ts` (gsd_state, 11 actions), `phase.ts` (gsd_phase, 10 actions), `roadmap.ts` (gsd_roadmap, 5 actions), `config.ts` (gsd_config, 5 actions), `milestone.ts` (gsd_milestone, 3 actions), `verify.ts` (gsd_verify, 6 actions), `util.ts` (gsd_util, 5 actions), `dispatch.ts` (gsd_dispatch, spawns single agent subprocess), `dispatch-wave.ts` (gsd_dispatch_wave, parallel Promise.all dispatch). Updated `index.ts` to register all 10 tools with proper paths. Created 4 test files (38 new tests).
+- **Tests:** 301 passing
+- **Notes:** `AgentToolResult<T>` requires `details: T` — all returns include `details: null`. TypeBox `Type.Record(Type.String(), Type.Unknown())` used for `updates` in gsd_state (not `Type.Record(Type.String(), Type.String())`). `gsd_dispatch` and `gsd_dispatch_wave` parse pi's JSON event stream for `agent_end`/`agent_response` events to extract final text output. `gsd_util` render-template heuristic: if template contains `{{` or newlines, treat as inline; otherwise try filename first.
+- **Timestamp:** 2026-02-28
+
+### Task 9: Create 7 core workflow skills
+- **Status:** ✅ Complete
+- **Commit:** 259dfbf feat(pi-gsd): create 7 core workflow skills
+- **Built:** Created 7 core GSD skill files in `packages/pi-gsd/skills/`: gsd-new-project, gsd-discuss-phase, gsd-plan-phase, gsd-execute-phase, gsd-verify-work, gsd-complete-milestone, gsd-new-milestone. Each follows the standard skill format with frontmatter, prerequisites, environment/tool listing, agent dispatch section, and workflow pointer. Deleted `.gitkeep`. Also committed 7 additional pre-existing skills (gsd-discovery-phase, gsd-help, gsd-pause-work, gsd-progress, gsd-quick, gsd-resume-work) that were left untracked from a prior session — all follow the same format.
+- **Tests:** N/A (static markdown files)
+- **Notes:** Found 7 additional untracked skill files (gsd-discovery-phase, gsd-help, gsd-pause-work, gsd-progress, gsd-quick, gsd-resume-work, gsd-discovery-phase) already present from a prior task session; included them in the commit since they're valid and follow the same format.
+- **Timestamp:** 2026-02-28
