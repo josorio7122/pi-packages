@@ -15,6 +15,30 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/pi-gsd:
+    devDependencies:
+      '@mariozechner/pi-ai':
+        specifier: '*'
+        version: 0.55.3(ws@8.19.0)(zod@3.25.76)
+      '@mariozechner/pi-coding-agent':
+        specifier: '*'
+        version: 0.55.1(ws@8.19.0)(zod@3.25.76)
+      '@mariozechner/pi-tui':
+        specifier: '*'
+        version: 0.55.1
+      '@sinclair/typebox':
+        specifier: '*'
+        version: 0.34.48
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.10.14
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@24.10.14)(yaml@2.8.2)
+
   packages/pi-index:
     dependencies:
       '@lancedb/lancedb':
