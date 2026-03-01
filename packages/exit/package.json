@@ -1,0 +1,17 @@
+{
+  "name": "@josorio/exit",
+  "version": "1.0.0",
+  "description": "Pi extension that adds /exit as an alias for /quit",
+  "scripts": {},
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  }
+}

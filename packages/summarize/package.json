@@ -1,0 +1,17 @@
+{
+  "name": "@josorio/summarize",
+  "version": "1.0.0",
+  "description": "Pi extension that adds /summarize as an alias for /compact",
+  "scripts": {},
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  }
+}
