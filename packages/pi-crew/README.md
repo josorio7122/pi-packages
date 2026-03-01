@@ -24,7 +24,7 @@ Pi loads the crew skills automatically when the task matches — no manual `/ski
 
 ## How It Works
 
-Pi-crew adds a `dispatch_crew` tool and 6 phase skills. The tool spawns isolated pi subprocesses with preset configurations. Each phase skill tells the orchestrator what agents to dispatch and what artifacts to produce.
+Pi-crew adds a `dispatch_crew` tool and 6 phase skills. The tool spawns isolated pi subprocesses with preset configurations. The extension reads `.crew/state.md` and automatically injects the current phase's skill instructions into the system prompt — the LLM never needs to load skills manually.
 
 ### The Workflow
 
@@ -41,12 +41,24 @@ explore → design → plan → build → review → ship
 | **Review** | `crew-review` | Three-gate verification: spec compliance → code quality → security |
 | **Ship** | `crew-ship` | Squash commits, push branch, open PR/MR with generated description |
 
-**Not every task needs every phase.** The orchestrator scales effort to complexity:
+**Not every task needs every phase.** Choose a workflow when starting:
 
-- **Trivial** (typo fix): skip to build with a single executor
-- **Small** (add an endpoint): quick explore → build
-- **Medium** (new feature): explore → design → plan → build → review → ship
-- **Large** (architectural change): all phases, thorough exploration, detailed design
+| Scope | Workflow | When |
+|-------|----------|------|
+| Full | explore,design,plan,build,review,ship | New features, architectural changes |
+| Standard | explore,plan,build,review,ship | Clear scope, no design debate needed |
+| Quick | explore,build,ship | Small feature, obvious implementation |
+| Minimal | build,ship | Bug fix, config change, documentation |
+
+For simple tasks, dispatch agents directly without a workflow.
+
+### Workflow Enforcement
+
+Once a workflow starts, pi-crew enforces completion through three mechanisms:
+
+1. **State-driven skill injection** — The extension reads `.crew/state.md`, loads the current phase's SKILL.md from disk, and injects it into every system prompt. The LLM always has the right instructions.
+2. **Workflow commitment** — `state.md` includes a `workflow` field declaring which phases this feature will go through. Once committed, the plan is locked.
+3. **Agent-end nudge** — After each LLM turn, if the workflow is incomplete, the extension sends a `triggerTurn` message forcing the LLM to continue. It can't stop until the workflow reaches the last phase.
 
 ## Agent Presets
 
@@ -166,22 +178,18 @@ Pi-crew stores workflow state in a `.crew/` directory at the project root. This 
         └── summary.md       # Final feature summary
 ```
 
-`state.md` uses YAML frontmatter for machine-parseable fields with a full markdown body for the LLM:
+`state.md` uses YAML frontmatter with a `workflow` field that commits to a phase plan:
 
-```markdown
+```yaml
 ---
 feature: user-authentication
 phase: build
+workflow: explore,design,plan,build,review,ship
+progress: 3/7
 ---
-
-## Progress
-- [x] explore
-- [x] design
-- [x] plan
-- [ ] build (3/7 tasks complete)
-- [ ] review
-- [ ] ship
 ```
+
+The `workflow` field is set once when the workflow starts and never changes. The `phase` field advances as each phase completes. The extension reads this file on every turn and injects the current phase's skill content into the system prompt.
 
 ## Commands
 
