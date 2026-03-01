@@ -1,0 +1,32 @@
+{
+  "name": "@josorio/pi-crew",
+  "version": "1.0.0",
+  "description": "Agentic coding workflow — dispatch specialized agents through structured phases",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint extensions/ skills/"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "devDependencies": {
+    "@mariozechner/pi-ai": "^0.55.3",
+    "@mariozechner/pi-coding-agent": "^0.55.3",
+    "@mariozechner/pi-tui": "^0.55.3",
+    "@sinclair/typebox": "^0.34.48",
+    "@types/node": "^25.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
