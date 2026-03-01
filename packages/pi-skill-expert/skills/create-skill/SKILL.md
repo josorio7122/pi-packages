@@ -12,7 +12,7 @@ Create skills that follow the [Agent Skills specification](https://agentskills.i
 
 ## Specification Reference
 
-The canonical spec lives at [agentskills.io/specification](https://agentskills.io/specification). Read it before creating any skill. Key points summarized below.
+The canonical spec is bundled at [references/specification.md](references/specification.md). Read it before creating any skill. Key points summarized below.
 
 ### Directory Structure
 
@@ -134,7 +134,7 @@ When a task matches, the agent uses `read` to load the full SKILL.md. Users can 
 
 ## Using Scripts in Skills
 
-Read the full guide at [agentskills.io — Using Scripts](https://agentskills.io/skill-creation/using-scripts) before creating script-based skills.
+Read the full guide at [references/using-scripts.md](references/using-scripts.md) before creating script-based skills.
 
 Key points:
 
