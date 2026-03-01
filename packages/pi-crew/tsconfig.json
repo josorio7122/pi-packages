@@ -5,5 +5,5 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["extensions/**/*.ts", "skills/**/*.ts"]
+  "include": ["extensions/**/*.ts", "skills/**/*.ts", "extensions/**/*.test.ts"]
 }

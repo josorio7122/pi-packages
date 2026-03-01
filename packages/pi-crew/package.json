@@ -4,7 +4,8 @@
   "description": "Agentic coding workflow — dispatch specialized agents through structured phases",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint extensions/ skills/"
+    "lint": "eslint extensions/ skills/",
+    "test": "vitest run"
   },
   "keywords": [
     "pi-package"
@@ -27,6 +28,7 @@
     "@sinclair/typebox": "^0.34.48",
     "@types/node": "^25.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

@@ -124,7 +124,7 @@ export function readState(cwd: string): CrewState | null {
  * Simple YAML frontmatter parser.
  * Splits on --- delimiters and parses key: value pairs.
  */
-function parseFrontmatter(content: string): CrewState {
+export function parseFrontmatter(content: string): CrewState {
 	const state: CrewState = { feature: null, phase: null, progress: null };
 
 	// Match content between --- delimiters

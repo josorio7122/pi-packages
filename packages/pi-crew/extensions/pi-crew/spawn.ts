@@ -51,14 +51,14 @@ export function emptyUsage(): UsageStats {
 	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 };
 }
 
-function writePromptToTempFile(prompt: string): { dir: string; filePath: string } {
+export function writePromptToTempFile(prompt: string): { dir: string; filePath: string } {
 	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-"));
 	const filePath = path.join(tmpDir, "prompt.md");
 	fs.writeFileSync(filePath, prompt, { encoding: "utf-8", mode: 0o600 });
 	return { dir: tmpDir, filePath };
 }
 
-function cleanupTempFile(dir: string | null, filePath: string | null) {
+export function cleanupTempFile(dir: string | null, filePath: string | null) {
 	if (filePath)
 		try {
 			fs.unlinkSync(filePath);
