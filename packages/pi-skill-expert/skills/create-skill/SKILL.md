@@ -1,5 +1,5 @@
 ---
-name: skill-expert
+name: create-skill
 description: Expert at creating pi skills. Use when the user wants to create, scaffold, or design a new pi skill — including SKILL.md frontmatter, directory structure, helper scripts, references, and templates. Follows the Agent Skills specification (agentskills.io) and the user's AGENTS.md standards.
 metadata:
   author: josorio7122
