@@ -80,7 +80,18 @@ export default function (pi: ExtensionAPI): void {
     },
   });
 
-  // 2. Intercept edit/write results for auto-diagnostics
+  // 2. Pre-heat LSP on read (non-blocking, no diagnostics)
+  pi.on('tool_result', async (event) => {
+    if (event.toolName !== 'read') return;
+    const filePath = (event.input as any)?.path;
+    if (!filePath || event.isError) return;
+    const abs = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(projectRoot, filePath);
+    manager.touchFile(abs, false).catch(() => {}); // fire-and-forget
+  });
+
+  // 3. Intercept edit/write results for auto-diagnostics
   if (config.diagnosticsEnabled) {
     pi.on('tool_result', async (event) => {
       if (event.toolName !== 'edit' && event.toolName !== 'write') return;
@@ -124,12 +135,12 @@ export default function (pi: ExtensionAPI): void {
     });
   }
 
-  // 3. Shutdown on session end
+  // 4. Shutdown on session end
   pi.on('session_shutdown', async () => {
     await manager.shutdownAll();
   });
 
-  // 4. Register /lsp-status command
+  // 5. Register /lsp-status command
   pi.registerCommand('lsp-status', {
     description: 'Show LSP server status',
     handler: async (_args, ctx) => {

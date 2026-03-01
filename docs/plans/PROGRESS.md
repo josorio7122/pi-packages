@@ -13,6 +13,22 @@
 - **Tests:** 268 passing (267 → 268; 1 new test added)
 - **Notes:** The provided test spec omitted `vi.mocked(db.insertChunks).mockClear()` before the second run — without it `insertChunks` (called during run 1) caused a false failure. Added the clear to match the intent and the pattern used by the existing "skips unchanged files" test.
 - **Timestamp:** 2026-02-27
+### Task 1: Remove gopls, add rubocop server
+- **Status:** ✅ Complete
+- **Commit:** a6661d6
+- **Built:** Removed gopls server entry, `goPackage` field, and `walkUp` import from server-registry.ts; added `gemPackage` field and a ruby server entry (rubocop --lsp). Updated installer.ts to use `installGemServer` instead of `installGoServer`. Updated tests accordingly.
+- **Tests:** 13 passing
+- **Notes:** Pre-existing TypeScript error in config.ts (`maxCrossFileDiagnostics` missing) is unrelated to this task and existed before these changes.
+- **Timestamp:** 2026-02-28
+
+### Task 4: TypeScript first-publish skip
+- **Status:** ✅ Complete
+- **Commit:** 64d518d
+- **Built:** Added a guard in `client.ts` `publishDiagnostics` handler: when `serverID === 'typescript'`, the first publish for a file stores diagnostics but skips notifying listeners. All other servers notify on every publish including the first.
+- **Tests:** 16 passing (client.test.ts); 4 new tests covering: TS first-publish suppression, TS second-publish resolution, pyright immediate resolution, diagnostics stored despite suppression.
+- **Notes:** Pre-existing failures in index.test.ts (LSPClient is not a constructor — 6 tests) exist before this task and are unrelated.
+- **Timestamp:** 2026-02-28
+
 ### Task: Fix 2 code bugs in pi-index
 - **Status:** ✅ Complete
 - **Commit:** d273eca fix(pi-index): index-clear concurrency guard + formatSummary Removed line
