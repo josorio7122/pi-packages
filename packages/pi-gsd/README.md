@@ -18,7 +18,7 @@ pi install /path/to/pi-packages/packages/pi-gsd
 
 ## What You Get
 
-### 10 Tools (auto-registered)
+### 11 Tools (auto-registered)
 
 | Tool | Description |
 |------|-------------|
@@ -30,8 +30,18 @@ pi install /path/to/pi-packages/packages/pi-gsd
 | `gsd_milestone` | Milestone completion and archival |
 | `gsd_verify` | Health checks and validation |
 | `gsd_util` | Timestamps, slugs, templates, frontmatter |
-| `gsd_dispatch` | Spawn a single GSD agent |
-| `gsd_dispatch_wave` | Spawn multiple agents in parallel |
+| `gsd_dispatch` | Spawn a single GSD agent (sync, with live widget) |
+| `gsd_dispatch_wave` | Spawn multiple agents in parallel (with grid widget) |
+| `gsd_dispatch_async` | Fire-and-forget agent dispatch (results via follow-up) |
+
+### 4 Hooks (auto-registered)
+
+| Hook | Description |
+|------|-------------|
+| **Context monitor** | Warns at ≤35%/≤25% context remaining (5-turn debounce) |
+| **Statusline** | Shows GSD state in footer (phase, plan, profile) |
+| **System prompt injection** | Injects current GSD state into every agent turn |
+| **Tool gating** | Blocks dispatch without a plan, phase advance without verification |
 
 ### 31 Skills (commands)
 
@@ -74,6 +84,20 @@ Agents run in isolated pi processes with fresh 200K context windows. Model selec
 | `codebase-mapper` | Map existing codebases |
 | `debugger` | Systematic debugging |
 | `integration-checker` | Cross-plan integration checks |
+
+### Dispatch Features
+
+**Live widgets** — When agents run, a live-updating card widget shows status, elapsed time, tool count, and streaming output preview. `gsd_dispatch_wave` shows a multi-agent grid.
+
+**Async dispatch** — `gsd_dispatch_async` spawns agents in the background and returns immediately. Results are delivered as follow-up messages when the agent finishes, so the orchestrating LLM can continue working.
+
+**Session persistence** — Both `gsd_dispatch` and `gsd_dispatch_async` accept `session` and `continue_session` params to maintain agent context across calls (e.g., resume after crash).
+
+**Tool gating** — Enforces workflow discipline:
+- Cannot dispatch agents without a plan for the current phase
+- Cannot advance/complete a phase without verification
+
+**System prompt injection** — Current GSD state (phase, plan, milestone, profile, status) is automatically injected into every agent turn, so the LLM always knows the project context.
 
 ## Quick Start
 
