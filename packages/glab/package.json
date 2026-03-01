@@ -1,0 +1,16 @@
+{
+  "name": "@josorio/glab",
+  "version": "2.0.0",
+  "description": "Pi skill for the GitLab CLI (glab) — merge requests, issues, CI/CD, variables, schedules, tokens, releases, repos, stacked diffs, and API",
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}

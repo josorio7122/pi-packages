@@ -1,0 +1,16 @@
+{
+  "name": "@josorio/gh",
+  "version": "1.0.0",
+  "description": "Pi skill for the GitHub CLI (gh) — pull requests, issues, releases, Actions, repos, and API",
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}
