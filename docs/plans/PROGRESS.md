@@ -8,6 +8,14 @@
 - **Notes:** `@mariozechner/pi-ai` added as peer + dev dependency per task spec. `pnpm-lock.yaml` updated but not committed (not in `git add packages/pi-gsd/` scope — can be committed separately if needed). dist/ output excluded via .gitignore.
 - **Timestamp:** 2026-02-28
 
+### Task 3: Core library — state, template, roadmap
+- **Status:** ✅ Complete
+- **Commit:** 0f7f3be feat(pi-gsd): core library — state, template, roadmap
+- **Built:** Ported 3 library modules from CJS source: `state.ts` (14 functions: loadState, writeState, patchState, getStateField, advancePlan, addDecision, addBlocker, resolveBlocker, recordSession, snapshotState, stateToJson + internal helpers); `template.ts` (renderTemplate with {{var}}/{{TIMESTAMP}}/{{DATE}} substitution, loadTemplate, renderTemplateFile); `roadmap.ts` (parseRoadmap, getRoadmapPhase, listRoadmapPhases, getRequirements, analyzeRoadmap). All with full TDD test suites.
+- **Tests:** 165 passing (72 new tests across 3 new test files, original 93 untouched)
+- **Notes:** `RoadmapPhase` uses `phase_number`/`phase_name` field names (matching CJS convention) while `ParsedRoadmap.phases` entries use `number`/`name` (internal type). Success criteria regex handles both `**Success Criteria:**` (colon inside) and `**Success Criteria**:` (colon outside) patterns. `snapshotState` creates a timestamped file copy in `.planning/snapshots/` (CJS `cmdStateSnapshot` only returned JSON — this is a behavioral improvement). `writeState` merges caller-provided FM with auto-built FM derived from body patterns.
+- **Timestamp:** 2026-02-28
+
 ### Task: Fix Wave 2 Remaining Issues
 - **Status:** ✅ Complete
 - **Commit:** 7323ccf (3 commits: 9aa6a09, 3f2734f, 7323ccf)
