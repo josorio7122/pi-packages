@@ -21,12 +21,36 @@
 - **Notes:** Pre-existing TypeScript error in config.ts (`maxCrossFileDiagnostics` missing) is unrelated to this task and existed before these changes.
 - **Timestamp:** 2026-02-28
 
+### Task 2: Add `gem install` to installer, remove `go install`
+- **Status:** ✅ Complete
+- **Commit:** e4b7573
+- **Built:** Updated `installer.ts`: fixed `findBinary` comments ("Go-installed binaries" → "gem-installed binaries"), fixed error message ("gem is not installed" → "Ruby gem is not installed"), and changed `installGemServer` fallback to call `findBinary` instead of returning `undefined`. Updated `installer.test.ts`: renamed "finds go binary" → "finds gem-installed binary", added 3 new `installServer` tests (no-package, gem dispatch, gem-unavailable), and added `vi.mock('node:child_process')` at module level.
+- **Tests:** 8 passing (installer.test.ts); 112 passing (full suite)
+- **Notes:** The installer.ts already had `installGemServer` and `gemPackage` dispatch from Task 1 — this task fixed the error message, fallback behavior, and comments, and added the test coverage.
+- **Timestamp:** 2026-02-28
+
 ### Task 4: TypeScript first-publish skip
 - **Status:** ✅ Complete
 - **Commit:** 64d518d
 - **Built:** Added a guard in `client.ts` `publishDiagnostics` handler: when `serverID === 'typescript'`, the first publish for a file stores diagnostics but skips notifying listeners. All other servers notify on every publish including the first.
 - **Tests:** 16 passing (client.test.ts); 4 new tests covering: TS first-publish suppression, TS second-publish resolution, pyright immediate resolution, diagnostics stored despite suppression.
 - **Notes:** Pre-existing failures in index.test.ts (LSPClient is not a constructor — 6 tests) exist before this task and are unrelated.
+- **Timestamp:** 2026-02-28
+
+### Task 5: Warm LSP on `read` (pre-heating)
+- **Status:** ✅ Complete
+- **Commit:** e032b33
+- **Built:** Added `tool_result` handler in `index.ts` that fires `manager.touchFile(abs, false)` (fire-and-forget) when a successful `read` tool result comes in, pre-heating the LSP server without modifying the read result. Handler is outside `diagnosticsEnabled` guard so warmup works regardless of diagnostics config.
+- **Tests:** 109 passing (103 existing + 6 new in index.test.ts)
+- **Notes:** none
+- **Timestamp:** 2026-02-28
+
+### Task 3: Cross-file diagnostics on `write`
+- **Status:** ✅ Complete
+- **Commit:** d659dd7
+- **Built:** Added `maxCrossFileDiagnostics` config field (env: `PI_LSP_MAX_CROSS_FILE_DIAGNOSTICS`, default 5, 0 disables). Updated `tool_result` handler in `index.ts` to append cross-file diagnostics (up to `maxCrossFileDiagnostics` other files) after own-file diagnostics — only for `write`, not `edit`, matching OpenCode's deliberate asymmetry.
+- **Tests:** 109 passing (6 new in index.test.ts, 5 new in config.test.ts)
+- **Notes:** Handler was restructured to check cross-file even when own-file has zero errors. The "LSP errors detected in this file" phrase is replaced with "LSP errors detected in other files" for cross-file sections via string replace on formatDiagnosticsXml output.
 - **Timestamp:** 2026-02-28
 
 ### Task: Fix 2 code bugs in pi-index

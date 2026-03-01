@@ -14,7 +14,7 @@ export function getInstallDir(serversDir: string, serverId: string): string {
  * Look for a binary in these locations (in order):
  * 1. System PATH (via which)
  * 2. serversDir/serverId/node_modules/.bin/<command> (for npm-installed servers)
- * 3. serversDir/<command> (for Go-installed binaries)
+ * 3. serversDir/<command> (for gem-installed binaries)
  */
 export async function findBinary(
   command: string,
@@ -39,7 +39,7 @@ export async function findBinary(
     // not there
   }
 
-  // Check serversDir/<command> directly (Go binaries)
+  // Check serversDir/<command> directly (gem-installed binaries)
   const directBin = path.join(serversDir, command);
   try {
     await fs.access(directBin, fs.constants.X_OK);
@@ -111,7 +111,7 @@ async function installGemServer(
   try {
     await execFileAsync('which', ['gem']);
   } catch {
-    onProgress?.('gem is not installed, cannot install ' + server.id);
+    onProgress?.('Ruby gem is not installed, cannot install ' + server.id);
     return undefined;
   }
 
@@ -127,7 +127,8 @@ async function installGemServer(
       await fs.access(binPath, fs.constants.X_OK);
       return binPath;
     } catch {
-      return undefined;
+      // Might be on system PATH after gem install
+      return findBinary(server.command, serversDir, server.id);
     }
   } catch (err) {
     onProgress?.(`Failed to install ${server.id}: ${err}`);
