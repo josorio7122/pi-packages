@@ -59,17 +59,27 @@ vi.mock('./config.js', () => ({
 // Import the extension factory ONCE (mocks are already in place)
 const { default: extensionFactory } = await import('./index.js');
 
-// Build a minimal fake ExtensionAPI and extract the tool_result handler
-function buildHandler(cfg: typeof mockConfig) {
+// Build a minimal fake ExtensionAPI and extract ALL tool_result handlers
+function buildHandlers(cfg: typeof mockConfig) {
   mockConfig = cfg;
-  const handlers: Record<string, (event: any, ctx: any) => Promise<any>> = {};
+  const handlers: Record<string, Array<(event: any, ctx: any) => Promise<any>>> = {};
   const pi = {
-    on: vi.fn((event: string, handler: any) => { handlers[event] = handler; }),
+    on: vi.fn((event: string, handler: any) => {
+      handlers[event] = [...(handlers[event] ?? []), handler];
+    }),
     registerTool: vi.fn(),
     registerCommand: vi.fn(),
   };
   extensionFactory(pi as any);
-  return handlers['tool_result'];
+  return handlers;
+}
+
+// Legacy helper — returns the diagnostics handler (last tool_result handler)
+function buildHandler(cfg: typeof mockConfig) {
+  const handlers = buildHandlers(cfg);
+  const toolResultHandlers = handlers['tool_result'] ?? [];
+  // The diagnostics handler is registered second (after the read pre-heat handler)
+  return toolResultHandlers[toolResultHandlers.length - 1];
 }
 
 describe('index.ts tool_result handler — cross-file diagnostics', () => {
@@ -222,5 +232,75 @@ describe('index.ts tool_result handler — cross-file diagnostics', () => {
     expect(text).toContain('Own error');
     expect(text).toContain('LSP errors detected in other files');
     expect(text).toContain('Other error');
+  });
+});
+
+describe('index.ts tool_result handler — read pre-heating', () => {
+  beforeEach(() => {
+    mockManager.hasClients.mockResolvedValue(true);
+    mockManager.touchFile.mockResolvedValue(undefined);
+    mockManager.getDiagnostics.mockReturnValue([]);
+    mockManager.getAllDiagnostics.mockReturnValue(new Map());
+    vi.clearAllMocks();
+  });
+
+  it('calls touchFile(path, false) on read', async () => {
+    const allHandlers = buildHandlers(mockConfig);
+    const readHandler = allHandlers['tool_result']![0]; // first handler = read pre-heat
+    const event = {
+      toolName: 'read',
+      input: { path: '/project/foo.ts' },
+      isError: false,
+      content: [{ type: 'text', text: 'file content' }],
+    };
+
+    const result = await readHandler(event, {} as any);
+    expect(result).toBeUndefined(); // should NOT modify the read result
+    expect(mockManager.touchFile).toHaveBeenCalledWith('/project/foo.ts', false);
+  });
+
+  it('does not call touchFile on read with error', async () => {
+    const allHandlers = buildHandlers(mockConfig);
+    const readHandler = allHandlers['tool_result']![0];
+    const event = {
+      toolName: 'read',
+      input: { path: '/project/foo.ts' },
+      isError: true,
+      content: [{ type: 'text', text: 'error' }],
+    };
+
+    await readHandler(event, {} as any);
+    expect(mockManager.touchFile).not.toHaveBeenCalled();
+  });
+
+  it('does not call touchFile on read with missing path', async () => {
+    const allHandlers = buildHandlers(mockConfig);
+    const readHandler = allHandlers['tool_result']![0];
+    const event = {
+      toolName: 'read',
+      input: {},
+      isError: false,
+      content: [{ type: 'text', text: 'content' }],
+    };
+
+    await readHandler(event, {} as any);
+    expect(mockManager.touchFile).not.toHaveBeenCalled();
+  });
+
+  it('read handler is registered even when diagnostics are disabled', async () => {
+    const allHandlers = buildHandlers({ ...mockConfig, diagnosticsEnabled: false });
+    const toolResultHandlers = allHandlers['tool_result'] ?? [];
+    // Should still have the read pre-heat handler
+    expect(toolResultHandlers.length).toBeGreaterThanOrEqual(1);
+    const readHandler = toolResultHandlers[0];
+    const event = {
+      toolName: 'read',
+      input: { path: '/project/foo.ts' },
+      isError: false,
+      content: [{ type: 'text', text: 'content' }],
+    };
+
+    await readHandler(event, {} as any);
+    expect(mockManager.touchFile).toHaveBeenCalledWith('/project/foo.ts', false);
   });
 });

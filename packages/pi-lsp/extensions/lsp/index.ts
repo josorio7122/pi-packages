@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { ServerManager } from './server-manager.js';
 import { lspToolDefinition, type LSPOperation } from './tools.js';
-import { filterErrors, formatDiagnosticsXml } from './diagnostics.js';
+import { filterErrors, formatDiagnosticsXml, DIAGNOSTICS_LABEL_OTHER_FILE } from './diagnostics.js';
 
 export default function (pi: ExtensionAPI): void {
   const config = loadConfig();
@@ -134,8 +134,7 @@ export default function (pi: ExtensionAPI): void {
           if (fileErrors.length === 0) continue;
           if (crossFileCount >= config.maxCrossFileDiagnostics) break;
           crossFileCount++;
-          const crossFileXml = formatDiagnosticsXml(file, fileErrors, config.maxDiagnosticsPerFile)
-            .replace('LSP errors detected in this file', 'LSP errors detected in other files');
+          const crossFileXml = formatDiagnosticsXml(file, fileErrors, config.maxDiagnosticsPerFile, DIAGNOSTICS_LABEL_OTHER_FILE);
           diagnosticsText += (diagnosticsText ? '\n\n' : '') + crossFileXml;
         }
       }

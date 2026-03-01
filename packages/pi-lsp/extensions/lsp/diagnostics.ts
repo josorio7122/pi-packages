@@ -9,6 +9,9 @@ const SEVERITY_MAP: Record<number, string> = {
 
 const DEFAULT_MAX_PER_FILE = 20;
 
+export const DIAGNOSTICS_LABEL_THIS_FILE = 'LSP errors detected in this file, please fix:';
+export const DIAGNOSTICS_LABEL_OTHER_FILE = 'LSP errors detected in other files, please fix:';
+
 export function formatDiagnostic(d: Diagnostic): string {
   const severity = SEVERITY_MAP[d.severity ?? 1] ?? 'ERROR';
   const line = d.range.start.line + 1;
@@ -24,6 +27,7 @@ export function formatDiagnosticsXml(
   filePath: string,
   diagnostics: Diagnostic[],
   maxPerFile: number = DEFAULT_MAX_PER_FILE,
+  label: string = DIAGNOSTICS_LABEL_THIS_FILE,
 ): string {
   if (diagnostics.length === 0) return '';
   const limited = diagnostics.slice(0, maxPerFile);
@@ -32,5 +36,5 @@ export function formatDiagnosticsXml(
     ? `\n... and ${diagnostics.length - maxPerFile} more`
     : '';
   const escapedPath = filePath.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return `LSP errors detected in this file, please fix:\n<diagnostics file="${escapedPath}">\n${formatted}${suffix}\n</diagnostics>`;
+  return `${label}\n<diagnostics file="${escapedPath}">\n${formatted}${suffix}\n</diagnostics>`;
 }
