@@ -121,7 +121,16 @@ Show the wave structure and ask for approval. Highlight:
 
 ### 7. Update State
 
-Update `.crew/state.md` with phase: plan, task count, wave count.
+Update `.crew/state.md` — advance `phase` to the next phase in your workflow.
+Keep the `workflow` field unchanged.
+
+```yaml
+---
+feature: {feature-name}
+phase: {next phase from workflow}
+workflow: {keep the same workflow from before}
+---
+```
 
 ## Evaluation Gate
 
@@ -135,4 +144,4 @@ Before moving to build:
 
 ## Next Phase
 
-Proceed to **build** (`/skill:crew-build`) to execute the plan with agents.
+Advance `phase` in `.crew/state.md` to the next phase in your workflow. The system will automatically load the next phase's instructions.

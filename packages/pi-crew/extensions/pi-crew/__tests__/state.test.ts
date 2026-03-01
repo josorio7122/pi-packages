@@ -11,6 +11,9 @@ import {
 	readStateRaw,
 	readState,
 	parseFrontmatter,
+	isWorkflowComplete,
+	getWorkflowProgress,
+	readPhaseSkill,
 } from "../state.js";
 
 describe("state", () => {
@@ -226,6 +229,132 @@ describe("state", () => {
 			expect(state.feature).toBe("auth");
 			expect(state.phase).toBeNull();
 			expect(state.progress).toBeNull();
+		});
+
+		it("parses workflow field as string array", () => {
+			const state = parseFrontmatter("---\nfeature: auth\nphase: explore\nworkflow: explore,design,plan,build,review,ship\n---");
+			expect(state.workflow).toEqual(["explore", "design", "plan", "build", "review", "ship"]);
+		});
+
+		it("parses single-phase workflow", () => {
+			const state = parseFrontmatter("---\nfeature: fix\nphase: build\nworkflow: build\n---");
+			expect(state.workflow).toEqual(["build"]);
+		});
+
+		it("returns null workflow when field missing", () => {
+			const state = parseFrontmatter("---\nfeature: auth\nphase: build\n---");
+			expect(state.workflow).toBeNull();
+		});
+
+		it("returns null workflow for empty value", () => {
+			const state = parseFrontmatter("---\nworkflow:\n---");
+			expect(state.workflow).toBeNull();
+		});
+
+		it("trims whitespace in workflow phases", () => {
+			const state = parseFrontmatter("---\nworkflow: explore , build , ship\n---");
+			expect(state.workflow).toEqual(["explore", "build", "ship"]);
+		});
+	});
+
+	describe("isWorkflowComplete", () => {
+		it("returns true when phase matches last workflow item", () => {
+			expect(isWorkflowComplete({ feature: "x", phase: "ship", progress: null, workflow: ["build", "review", "ship"] })).toBe(true);
+		});
+
+		it("returns false when phase is mid-workflow", () => {
+			expect(isWorkflowComplete({ feature: "x", phase: "build", progress: null, workflow: ["build", "review", "ship"] })).toBe(false);
+		});
+
+		it("returns true when no workflow field (no enforcement)", () => {
+			expect(isWorkflowComplete({ feature: "x", phase: "build", progress: null, workflow: null })).toBe(true);
+		});
+
+		it("returns true when workflow is empty", () => {
+			expect(isWorkflowComplete({ feature: "x", phase: "build", progress: null, workflow: [] })).toBe(true);
+		});
+
+		it("returns false when phase is null but workflow exists", () => {
+			expect(isWorkflowComplete({ feature: "x", phase: null, progress: null, workflow: ["explore", "build"] })).toBe(false);
+		});
+
+		it("returns true for single-phase workflow when on that phase", () => {
+			expect(isWorkflowComplete({ feature: "x", phase: "build", progress: null, workflow: ["build"] })).toBe(true);
+		});
+	});
+
+	describe("getWorkflowProgress", () => {
+		it("marks completed phases with ✓ and current with bold", () => {
+			const result = getWorkflowProgress({
+				feature: "auth", phase: "plan", progress: null,
+				workflow: ["explore", "design", "plan", "build", "review", "ship"],
+			});
+			expect(result).toContain("explore ✓");
+			expect(result).toContain("design ✓");
+			expect(result).toContain("**plan**");
+			expect(result).toContain("build");
+			expect(result).not.toContain("build ✓");
+		});
+
+		it("returns empty string when no workflow", () => {
+			expect(getWorkflowProgress({ feature: "x", phase: "build", progress: null, workflow: null })).toBe("");
+		});
+
+		it("handles first phase (nothing completed)", () => {
+			const result = getWorkflowProgress({
+				feature: "x", phase: "explore", progress: null,
+				workflow: ["explore", "build", "ship"],
+			});
+			expect(result).toContain("**explore**");
+			expect(result).not.toContain("✓");
+		});
+
+		it("handles last phase (all previous completed)", () => {
+			const result = getWorkflowProgress({
+				feature: "x", phase: "ship", progress: null,
+				workflow: ["explore", "build", "ship"],
+			});
+			expect(result).toContain("explore ✓");
+			expect(result).toContain("build ✓");
+			expect(result).toContain("**ship**");
+		});
+
+		it("uses arrow separator between phases", () => {
+			const result = getWorkflowProgress({
+				feature: "x", phase: "build", progress: null,
+				workflow: ["explore", "build"],
+			});
+			expect(result).toContain("→");
+		});
+	});
+
+	describe("readPhaseSkill", () => {
+		it("reads skill content for valid phase from real package root", () => {
+			// Use the actual pi-crew package root
+			const packageRoot = path.resolve(__dirname, "../../..");
+			const content = readPhaseSkill(packageRoot, "explore");
+			expect(content).not.toBeNull();
+			expect(content).toContain("Explore Phase");
+			expect(content).toContain("Dispatch scouts");
+		});
+
+		it("strips YAML frontmatter from skill content", () => {
+			const packageRoot = path.resolve(__dirname, "../../..");
+			const content = readPhaseSkill(packageRoot, "explore");
+			expect(content).not.toBeNull();
+			// Should NOT contain frontmatter delimiters at the start
+			expect(content!.startsWith("---")).toBe(false);
+			// Should NOT contain the name/description metadata
+			expect(content).not.toContain("name: crew-explore");
+		});
+
+		it("returns null for unknown phase", () => {
+			const packageRoot = path.resolve(__dirname, "../../..");
+			expect(readPhaseSkill(packageRoot, "nonexistent")).toBeNull();
+		});
+
+		it("returns null when package root is invalid", () => {
+			expect(readPhaseSkill("/nonexistent/path", "explore")).toBeNull();
 		});
 	});
 });

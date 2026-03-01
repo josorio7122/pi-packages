@@ -135,7 +135,17 @@ After all waves complete, write `.crew/phases/<feature>/build/summary.md`:
 
 ### 4. Update State
 
-Update `.crew/state.md` with phase: build, progress (N/M tasks), completion status.
+Update `.crew/state.md` — advance `phase` to the next phase in your workflow when all tasks are complete.
+Keep the `workflow` field unchanged. While building, update `progress` to track task completion.
+
+```yaml
+---
+feature: {feature-name}
+phase: {next phase from workflow when done, or keep "build" while in progress}
+progress: {N/M tasks}
+workflow: {keep the same workflow from before}
+---
+```
 
 ## Evaluation Gate
 
@@ -157,4 +167,4 @@ If a wave fails and can't be fixed after retries:
 
 ## Next Phase
 
-Proceed to **review** (`/skill:crew-review`) to verify implementation quality.
+Advance `phase` in `.crew/state.md` to the next phase in your workflow. The system will automatically load the next phase's instructions.

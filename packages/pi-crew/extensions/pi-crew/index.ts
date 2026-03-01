@@ -8,11 +8,12 @@ import type { Message } from "@mariozechner/pi-ai";
 
 import { resolvePreset, formatPresetsForLLM, getPreset, getPresetNames } from "./presets.js";
 import { isValidProfile, PROFILE_NAMES, PROFILE_DESCRIPTIONS } from "./profiles.js";
-import { readConfig, writeConfig, readState, readStateRaw } from "./state.js";
+import { readConfig, writeConfig, readState, readStateRaw, readPhaseSkill, isWorkflowComplete } from "./state.js";
 import { runSingleAgent, mapWithConcurrencyLimit, emptyUsage } from "./spawn.js";
 import type { UsageStats, SpawnParams } from "./spawn.js";
 import { Text } from "@mariozechner/pi-tui";
 import { buildRenderResult, buildRenderCall, getFinalOutput, type AgentRenderState, type CrewDispatchDetails } from "./rendering.js";
+import { buildCrewPrompt, buildNudgeMessage } from "./prompt.js";
 
 // ── Package Root ────────────────────────────────────────────────────
 
@@ -62,106 +63,47 @@ const DispatchCrewParams = Type.Object({
 	chain: Type.Optional(Type.Array(ChainItem, { description: "Array of {preset, task} for sequential execution with {previous} placeholder" })),
 });
 
-// ── System Prompt Builder ───────────────────────────────────────────
-
-function buildCrewPrompt(presetDocs: string, stateRaw: string | null): string {
-	const currentState = stateRaw
-		? `### Current State\n\n\`\`\`\n${stateRaw}\n\`\`\``
-		: "No active feature. `.crew/state.md` does not exist yet.";
-
-	return `## Crew — Agentic Workflow Orchestration
-
-You have access to the \`dispatch_crew\` tool which spawns isolated pi agents with preset configurations. You orchestrate work by dispatching the right preset for the right task.
-
-### Available Agent Presets
-
-${presetDocs}
-
-Each preset has a built-in system prompt, tool set, and model. Just pass the preset name and task:
-
-\`\`\`
-dispatch_crew({ preset: "scout", task: "Your task instructions here", cwd: "<project dir>" })
-\`\`\`
-
-For parallel dispatch:
-
-\`\`\`
-dispatch_crew({
-  tasks: [
-    { preset: "scout", task: "Map project structure", cwd: "<project dir>" },
-    { preset: "scout", task: "Find auth-related code", cwd: "<project dir>" }
-  ]
-})
-\`\`\`
-
-For sequential chain (each agent gets the previous agent's output via \`{previous}\`):
-
-\`\`\`
-dispatch_crew({
-  chain: [
-    { preset: "scout", task: "Investigate the auth module", cwd: "<project dir>" },
-    { preset: "architect", task: "Design a solution based on: {previous}", cwd: "<project dir>" }
-  ]
-})
-\`\`\`
-
-You can override a preset's model if needed: \`dispatch_crew({ preset: "executor", model: "claude-opus-4", task: "..." })\`
-
-### Workflow Phases
-
-When the user asks you to build something, follow this workflow. Each phase has a focused skill with detailed protocols — load it when entering that phase.
-
-| Phase | When | Skill to load |
-|-------|------|---------------|
-| explore | Starting work on existing code — need to understand what's there | \`/skill:crew-explore\` |
-| design | Before implementation — explore approaches, get user approval on design decisions | \`/skill:crew-design\` |
-| plan | After design approved — break into executable tasks with waves | \`/skill:crew-plan\` |
-| build | Execute the plan wave by wave with executor agents | \`/skill:crew-build\` |
-| review | After build — three-gate verification (spec, code quality, security) | \`/skill:crew-review\` |
-| ship | After review passes — squash, push, PR | \`/skill:crew-ship\` |
-
-**Phase selection is YOUR judgment.** Scale effort to complexity:
-- **Trivial** (typo fix, add a field): Skip to build with a single executor. No skill needed.
-- **Small** (add an endpoint, create a component): Quick explore → build. Skip design/plan if scope is obvious.
-- **Medium** (new feature, 3-5 files): explore → design → plan → build → review → ship.
-- **Large** (multi-component, architectural change): All phases, thorough exploration, detailed design.
-
-### State Files
-
-All workflow state lives in \`.crew/\` directory:
-- \`.crew/config.json\` — model profile, agent overrides
-- \`.crew/state.md\` — current phase, feature, progress, decisions, history
-- \`.crew/phases/<feature>/\` — per-feature artifacts (explore.md, design.md, plan.md, build/, review.md, summary.md)
-
-Read \`.crew/state.md\` at the start of each session to resume where you left off. Update it after each phase transition.
-
-${currentState}
-
-### Rules
-
-1. **Seamless orchestration** — The user describes what they want. You figure out the phase, agents, and flow. Don't ask "should I dispatch a scout?" — just do it.
-2. **Load phase skills** — When entering a phase, read the phase skill for detailed instructions. The skill tells you exactly what agents to dispatch and what artifacts to produce.
-3. **Full task context** — Always pass complete context to dispatched agents. They have NO access to your conversation history. Include: what to do, relevant code context, design decisions, constraints.
-4. **One agent = one concern** — Don't ask a scout to also write code. Don't ask an executor to also review.
-5. **Update state** — Write \`.crew/state.md\` after each phase transition. Write phase artifacts to \`.crew/phases/<feature>/\`.
-6. **Ask humans for design decisions** — During design phase, present options and ask. During build phase, agents should auto-fix (rules 1-3) and escalate architectural changes (rule 4).`;
-}
-
 // ── Extension Entry Point ───────────────────────────────────────────
 
 export default function piCrew(pi: any) {
+	let nudgedThisCycle = false;
+
+	// ── Reset nudge guard on user input ──────────────────────────────
+	pi.on("user_message", async () => {
+		nudgedThisCycle = false;
+	});
 
 	// ── Before agent start: inject crew system prompt ────────────────
 	pi.on("before_agent_start", async (event: any, ctx: any) => {
-		const stateRaw = readStateRaw(ctx.cwd);
 		const config = readConfig(ctx.cwd);
 		const profile = config.profile || "balanced";
 		const overrides = config.overrides || {};
 		const presetDocs = formatPresetsForLLM(profile, overrides);
 
+		const state = readState(ctx.cwd);
+		const skillContent = state?.phase ? readPhaseSkill(packageRoot, state.phase) : null;
+
 		return {
-			systemPrompt: event.systemPrompt + "\n\n" + buildCrewPrompt(presetDocs, stateRaw),
+			systemPrompt: event.systemPrompt + "\n\n" + buildCrewPrompt(presetDocs, state, skillContent),
 		};
+	});
+
+	// ── Agent end: nudge if workflow incomplete ──────────────────────
+	pi.on("agent_end", async (_event: any, ctx: any) => {
+		const state = readState(ctx.cwd);
+		if (!state || !state.workflow || state.workflow.length === 0) return;
+		if (isWorkflowComplete(state)) return;
+		if (nudgedThisCycle) return;
+
+		nudgedThisCycle = true;
+		pi.sendMessage(
+			{
+				customType: "crew-nudge",
+				content: buildNudgeMessage(state),
+				display: true,
+			},
+			{ triggerTurn: true, deliverAs: "followUp" },
+		);
 	});
 
 	// ── Register dispatch_crew tool ──────────────────────────────────

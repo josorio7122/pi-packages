@@ -113,7 +113,17 @@ Write `.crew/phases/<feature>/summary.md`:
 
 ### 7. Update State
 
-Update `.crew/state.md` with phase: shipped, PR URL.
+Update `.crew/state.md` — set `phase` to the last phase in your workflow (this phase) to mark the workflow as complete.
+
+```yaml
+---
+feature: {feature-name}
+phase: ship
+workflow: {keep the same workflow from before}
+---
+```
+
+The workflow is now complete.
 
 ## Evaluation Gate
 

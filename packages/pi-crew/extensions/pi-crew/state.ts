@@ -15,6 +15,7 @@ export interface CrewState {
 	feature: string | null;
 	phase: string | null; // explore | design | plan | build | review | ship
 	progress: string | null; // e.g. "2/5"
+	workflow: string[] | null; // e.g. ["explore", "design", "plan", "build", "review", "ship"]
 }
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ export function readState(cwd: string): CrewState | null {
  * Splits on --- delimiters and parses key: value pairs.
  */
 export function parseFrontmatter(content: string): CrewState {
-	const state: CrewState = { feature: null, phase: null, progress: null };
+	const state: CrewState = { feature: null, phase: null, progress: null, workflow: null };
 
 	// Match content between --- delimiters
 	const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
@@ -149,8 +150,58 @@ export function parseFrontmatter(content: string): CrewState {
 			case "progress":
 				state.progress = value || null;
 				break;
+			case "workflow":
+				if (value) {
+					state.workflow = value.split(",").map((s) => s.trim()).filter(Boolean);
+					if (state.workflow.length === 0) state.workflow = null;
+				}
+				break;
 		}
 	}
 
 	return state;
+}
+
+/**
+ * Check if the workflow is complete (current phase = last phase in workflow).
+ * Returns true if there's no workflow (no enforcement).
+ */
+export function isWorkflowComplete(state: CrewState): boolean {
+	if (!state.workflow || state.workflow.length === 0) return true;
+	if (!state.phase) return false;
+	return state.phase === state.workflow[state.workflow.length - 1];
+}
+
+/**
+ * Render workflow progress: "explore ✓ → design ✓ → **plan** → build → review → ship"
+ */
+export function getWorkflowProgress(state: CrewState): string {
+	if (!state.workflow || state.workflow.length === 0) return "";
+
+	const currentIdx = state.phase ? state.workflow.indexOf(state.phase) : -1;
+
+	return state.workflow
+		.map((phase, idx) => {
+			if (idx < currentIdx) return `${phase} ✓`;
+			if (idx === currentIdx) return `**${phase}**`;
+			return phase;
+		})
+		.join(" → ");
+}
+
+/**
+ * Read a phase skill's SKILL.md content, stripping YAML frontmatter.
+ * Returns null if the skill file doesn't exist.
+ */
+export function readPhaseSkill(packageRoot: string, phase: string): string | null {
+	const skillPath = path.join(packageRoot, "skills", `crew-${phase}`, "SKILL.md");
+
+	try {
+		const raw = fs.readFileSync(skillPath, "utf-8");
+		// Strip YAML frontmatter
+		const stripped = raw.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
+		return stripped.trim() || null;
+	} catch {
+		return null;
+	}
 }

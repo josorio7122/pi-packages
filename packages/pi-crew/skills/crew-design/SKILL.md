@@ -90,7 +90,16 @@ After the user approves, write `.crew/phases/<feature>/design.md`:
 
 ### 6. Update State
 
-Update `.crew/state.md` with phase: design, locked decisions summary.
+Update `.crew/state.md` — advance `phase` to the next phase in your workflow.
+Keep the `workflow` field unchanged.
+
+```yaml
+---
+feature: {feature-name}
+phase: {next phase from workflow}
+workflow: {keep the same workflow from before}
+---
+```
 
 ## Evaluation Gate
 
@@ -102,4 +111,4 @@ Before moving to the next phase:
 
 ## Next Phase
 
-Proceed to **plan** (`/skill:crew-plan`) to break the design into executable tasks.
+Advance `phase` in `.crew/state.md` to the next phase in your workflow. The system will automatically load the next phase's instructions.

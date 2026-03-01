@@ -74,7 +74,18 @@ Show a compressed summary of findings. Highlight:
 
 ### 5. Update State
 
-Write `.crew/state.md` with phase: explore, feature name, and exploration summary.
+Update `.crew/state.md` — advance `phase` to the next phase in your workflow.
+Keep the `workflow` field unchanged.
+
+```yaml
+---
+feature: {feature-name}
+phase: {next phase from workflow}
+workflow: {keep the same workflow from before}
+---
+```
+
+If `.crew/state.md` doesn't exist yet, create it now with your chosen workflow.
 
 ## Evaluation Gate
 
@@ -85,4 +96,4 @@ Before moving to the next phase:
 
 ## Next Phase
 
-Proceed to **design** (`/skill:crew-design`) to discuss approach with the user.
+Advance `phase` in `.crew/state.md` to the next phase in your workflow. The system will automatically load the next phase's instructions.

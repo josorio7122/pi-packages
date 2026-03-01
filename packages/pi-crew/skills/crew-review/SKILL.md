@@ -98,7 +98,16 @@ If any gate has critical findings that need fixing:
 
 ### 5. Update State
 
-Update `.crew/state.md` with phase: review, gate results.
+Update `.crew/state.md` — advance `phase` to the next phase in your workflow.
+Keep the `workflow` field unchanged.
+
+```yaml
+---
+feature: {feature-name}
+phase: {next phase from workflow}
+workflow: {keep the same workflow from before}
+---
+```
 
 ## Evaluation Gate
 
@@ -109,4 +118,4 @@ Before moving to ship:
 
 ## Next Phase
 
-Proceed to **ship** (`/skill:crew-ship`) to push and open PR.
+Advance `phase` in `.crew/state.md` to the next phase in your workflow. The system will automatically load the next phase's instructions.
