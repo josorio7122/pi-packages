@@ -102,7 +102,7 @@ export default function piCrew(pi: any) {
 				content: buildNudgeMessage(state),
 				display: true,
 			},
-			{ triggerTurn: true, deliverAs: "followUp" },
+			{ triggerTurn: true },
 		);
 	});
 

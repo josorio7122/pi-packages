@@ -90,15 +90,7 @@ describe("integration: workflow enforcement", () => {
 		});
 	}
 
-	it("idle mode — dispatch_crew tool is available without state.md", async () => {
-		const { exitCode, output } = await runPiWithExtensions(
-			'Do you have access to a tool called dispatch_crew? Reply with exactly "YES" or "NO".',
-			tmpDir,
-		);
-
-		expect(exitCode).toBe(0);
-		expect(output.toUpperCase()).toContain("YES");
-	}, 60_000);
+	// dispatch_crew tool availability is tested more reliably in e2e.test.ts via SDK
 
 	it("active mode — system prompt includes phase skill when state.md exists", async () => {
 		const crewDir = path.join(tmpDir, ".crew");
