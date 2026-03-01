@@ -63,8 +63,8 @@ export async function installServer(
   if (server.npmPackage) {
     return installNpmServer(server, serversDir, onProgress);
   }
-  if (server.goPackage) {
-    return installGoServer(server, serversDir, onProgress);
+  if (server.gemPackage) {
+    return installGemServer(server, serversDir, onProgress);
   }
   return undefined;
 }
@@ -102,24 +102,24 @@ async function installNpmServer(
   }
 }
 
-async function installGoServer(
+async function installGemServer(
   server: ServerInfo,
   serversDir: string,
   onProgress?: (msg: string) => void,
 ): Promise<string | undefined> {
-  // Check if Go is available
+  // Check if gem is available
   try {
-    await execFileAsync('which', ['go']);
+    await execFileAsync('which', ['gem']);
   } catch {
-    onProgress?.('Go is not installed, cannot install ' + server.id);
+    onProgress?.('gem is not installed, cannot install ' + server.id);
     return undefined;
   }
 
-  onProgress?.(`Installing ${server.goPackage}...`);
+  onProgress?.(`Installing ${server.gemPackage}...`);
   try {
-    await execFileAsync('go', ['install', server.goPackage!], {
+    await execFileAsync('gem', ['install', server.gemPackage!, '--bindir', serversDir], {
       timeout: 120_000,
-      env: { ...process.env, GOBIN: serversDir },
+      env: { ...process.env },
     });
     onProgress?.(`Installed ${server.id}`);
     const binPath = path.join(serversDir, server.command);

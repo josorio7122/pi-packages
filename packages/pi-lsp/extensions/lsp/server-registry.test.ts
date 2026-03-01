@@ -16,10 +16,20 @@ describe('SERVERS', () => {
     expect(py!.extensions).toContain('.py');
   });
 
-  it('has a gopls server', () => {
-    const go = SERVERS.find(s => s.id === 'gopls');
-    expect(go).toBeDefined();
-    expect(go!.extensions).toContain('.go');
+  it('has a ruby server with correct id and extensions', () => {
+    const ruby = SERVERS.find(s => s.id === 'ruby');
+    expect(ruby).toBeDefined();
+    expect(ruby!.extensions).toContain('.rb');
+    expect(ruby!.extensions).toContain('.rake');
+    expect(ruby!.extensions).toContain('.gemspec');
+    expect(ruby!.extensions).toContain('.ru');
+  });
+
+  it('ruby server has correct command and args', () => {
+    const ruby = SERVERS.find(s => s.id === 'ruby');
+    expect(ruby).toBeDefined();
+    expect(ruby!.command).toBe('rubocop');
+    expect(ruby!.args).toEqual(['--lsp']);
   });
 });
 
@@ -34,9 +44,18 @@ describe('getServersForExtension', () => {
     expect(servers.some(s => s.id === 'pyright')).toBe(true);
   });
 
-  it('returns gopls server for .go', () => {
-    const servers = getServersForExtension('.go');
-    expect(servers.some(s => s.id === 'gopls')).toBe(true);
+  it('returns ruby server for .rb', () => {
+    const servers = getServersForExtension('.rb');
+    expect(servers.some(s => s.id === 'ruby')).toBe(true);
+  });
+
+  it('returns ruby server for .rake', () => {
+    const servers = getServersForExtension('.rake');
+    expect(servers.some(s => s.id === 'ruby')).toBe(true);
+  });
+
+  it('returns empty for .go', () => {
+    expect(getServersForExtension('.go')).toEqual([]);
   });
 
   it('returns empty for .txt', () => {
