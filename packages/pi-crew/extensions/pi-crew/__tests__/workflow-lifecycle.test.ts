@@ -12,13 +12,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { readState, readConfig, readPhaseSkill, isWorkflowComplete } from "../state.js";
+import { readState, readConfig, isWorkflowComplete } from "../state.js";
 import { buildCrewPrompt, buildIdlePrompt, buildActivePrompt, buildNudgeMessage } from "../prompt.js";
 import { formatPresetsForLLM } from "../presets.js";
 
 // ── Test Helpers ────────────────────────────────────────────────────
-
-const packageRoot = path.resolve(__dirname, "../../..");
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "crew-lifecycle-"));
@@ -42,9 +40,8 @@ function simulateBeforeAgentStart(cwd: string): string {
   const presetDocs = formatPresetsForLLM(profile, overrides);
 
   const state = readState(cwd);
-  const skillContent = state?.phase ? readPhaseSkill(packageRoot, state.phase) : null;
 
-  return buildCrewPrompt(presetDocs, state, skillContent);
+  return buildCrewPrompt(presetDocs, state);
 }
 
 // Simulate what agent_end does — returns nudge message or null

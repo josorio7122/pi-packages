@@ -185,26 +185,6 @@ export function parseFrontmatter(content: string): CrewState {
 }
 
 /**
- * Read a phase skill's SKILL.md content, stripping YAML frontmatter.
- * Reads from {packageRoot}/skills/crew-{phase}/SKILL.md.
- * @param packageRoot - Package root directory
- * @param phase - Phase name (explore, design, plan, build, review, ship)
- * @returns Skill content without frontmatter, or null if file doesn't exist
- */
-export function readPhaseSkill(packageRoot: string, phase: string): string | null {
-  const skillPath = path.join(packageRoot, "skills", `crew-${phase}`, "SKILL.md");
-
-  try {
-    const raw = fs.readFileSync(skillPath, "utf-8");
-    // Strip YAML frontmatter
-    const stripped = raw.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
-    return stripped.trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Check if the workflow is complete (current phase = last phase in workflow).
  * Returns true if there's no workflow defined (no enforcement).
  * @param state - CrewState object

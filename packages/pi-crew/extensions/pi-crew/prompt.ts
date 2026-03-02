@@ -3,6 +3,7 @@
 
 import type { CrewState } from "./state.js";
 import { getWorkflowProgress } from "./state.js";
+import { getPhaseContent } from "./phases.js";
 
 /**
  * Build the system prompt for idle mode — no active workflow.
@@ -101,17 +102,16 @@ Not every task needs all 6 phases. Choose the right subset when starting:
 
 /**
  * Build the system prompt for active mode — workflow in progress.
- * Injects enforcement header, progress bar, presets, and full current phase skill content.
+ * Injects enforcement header, progress bar, presets, and full current phase content.
  * @param presetDocs - Formatted preset table (from formatPresetsForLLM)
  * @param state - Current CrewState (feature, phase, workflow)
- * @param skillContent - Current phase's SKILL.md content (without frontmatter)
  * @returns System prompt markdown content
  */
 export function buildActivePrompt(
   presetDocs: string,
   state: CrewState,
-  skillContent: string,
 ): string {
+  const phaseContent = getPhaseContent(state.phase) ?? `Unknown phase: ${state.phase}`;
   const progress = getWorkflowProgress(state);
 
   return `## ⚠️ ACTIVE WORKFLOW: "${state.feature}"
@@ -127,7 +127,7 @@ ${presetDocs}
 
 ### Current Phase: ${state.phase}
 
-${skillContent}`;
+${phaseContent}`;
 }
 
 /**
@@ -135,16 +135,14 @@ ${skillContent}`;
  * If workflow is active, injects phase instructions. Otherwise shows dispatch guide.
  * @param presetDocs - Formatted preset table (from formatPresetsForLLM)
  * @param state - Current CrewState or null if no state.md exists
- * @param skillContent - Current phase's SKILL.md content or null
  * @returns System prompt markdown content
  */
 export function buildCrewPrompt(
   presetDocs: string,
   state: CrewState | null,
-  skillContent: string | null,
 ): string {
-  if (state?.workflow && state.workflow.length > 0 && skillContent) {
-    return buildActivePrompt(presetDocs, state, skillContent);
+  if (state?.workflow && state.workflow.length > 0) {
+    return buildActivePrompt(presetDocs, state);
   }
   return buildIdlePrompt(presetDocs);
 }

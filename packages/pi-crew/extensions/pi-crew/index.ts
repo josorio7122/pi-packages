@@ -11,7 +11,6 @@ import {
   writeConfig,
   readState,
   readStateRaw,
-  readPhaseSkill,
   isWorkflowComplete,
 } from "./state.js";
 import { runSingleAgent, mapWithConcurrencyLimit, emptyUsage } from "./spawn.js";
@@ -547,10 +546,9 @@ export default function piCrew(pi: ExtensionAPI) {
     const presetDocs = formatPresetsForLLM(profile, overrides);
 
     const state = readState(ctx.cwd);
-    const skillContent = state?.phase ? readPhaseSkill(packageRoot, state.phase) : null;
 
     return {
-      systemPrompt: event.systemPrompt + "\n\n" + buildCrewPrompt(presetDocs, state, skillContent),
+      systemPrompt: event.systemPrompt + "\n\n" + buildCrewPrompt(presetDocs, state),
     };
   });
 

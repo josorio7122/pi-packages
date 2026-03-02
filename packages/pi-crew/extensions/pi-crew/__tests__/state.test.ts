@@ -13,7 +13,6 @@ import {
   parseFrontmatter,
   isWorkflowComplete,
   getWorkflowProgress,
-  readPhaseSkill,
 } from "../state.js";
 
 describe("state", () => {
@@ -372,33 +371,4 @@ describe("state", () => {
     });
   });
 
-  describe("readPhaseSkill", () => {
-    it("reads skill content for valid phase from real package root", () => {
-      // Use the actual pi-crew package root
-      const packageRoot = path.resolve(__dirname, "../../..");
-      const content = readPhaseSkill(packageRoot, "explore");
-      expect(content).not.toBeNull();
-      expect(content).toContain("Explore Phase");
-      expect(content).toContain("Dispatch scouts");
-    });
-
-    it("strips YAML frontmatter from skill content", () => {
-      const packageRoot = path.resolve(__dirname, "../../..");
-      const content = readPhaseSkill(packageRoot, "explore");
-      expect(content).not.toBeNull();
-      // Should NOT contain frontmatter delimiters at the start
-      expect(content!.startsWith("---")).toBe(false);
-      // Should NOT contain the name/description metadata
-      expect(content).not.toContain("name: crew-explore");
-    });
-
-    it("returns null for unknown phase", () => {
-      const packageRoot = path.resolve(__dirname, "../../..");
-      expect(readPhaseSkill(packageRoot, "nonexistent")).toBeNull();
-    });
-
-    it("returns null when package root is invalid", () => {
-      expect(readPhaseSkill("/nonexistent/path", "explore")).toBeNull();
-    });
-  });
 });

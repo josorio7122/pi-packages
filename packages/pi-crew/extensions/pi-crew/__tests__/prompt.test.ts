@@ -69,48 +69,54 @@ describe("prompt", () => {
       progress: null,
       workflow: ["explore", "design", "plan", "build", "review", "ship"],
     };
-    const skillContent = "# Plan Phase\n\nBreak the design into task waves.";
 
     it("includes enforcement header with feature name", () => {
-      const result = buildActivePrompt(mockPresetDocs, state, skillContent);
+      const result = buildActivePrompt(mockPresetDocs, state);
       expect(result).toContain("user-auth");
       expect(result).toContain("ACTIVE WORKFLOW");
     });
 
     it("includes progress bar", () => {
-      const result = buildActivePrompt(mockPresetDocs, state, skillContent);
+      const result = buildActivePrompt(mockPresetDocs, state);
       expect(result).toContain("explore ✓");
       expect(result).toContain("design ✓");
       expect(result).toContain("**plan**");
       expect(result).toContain("build");
     });
 
-    it("includes full skill content", () => {
-      const result = buildActivePrompt(mockPresetDocs, state, skillContent);
+    it("resolves phase content from phases.ts", () => {
+      const result = buildActivePrompt(mockPresetDocs, state);
       expect(result).toContain("# Plan Phase");
-      expect(result).toContain("Break the design into task waves.");
+      expect(result).toContain("Task Breakdown");
+      expect(result).toContain("Wave");
     });
 
     it("includes MUST complete language", () => {
-      const result = buildActivePrompt(mockPresetDocs, state, skillContent);
+      const result = buildActivePrompt(mockPresetDocs, state);
       expect(result).toContain("MUST complete");
       expect(result).toContain("Do NOT skip phases");
     });
 
     it("includes presets table", () => {
-      const result = buildActivePrompt(mockPresetDocs, state, skillContent);
+      const result = buildActivePrompt(mockPresetDocs, state);
       expect(result).toContain(mockPresetDocs);
     });
 
     it("includes current phase name", () => {
-      const result = buildActivePrompt(mockPresetDocs, state, skillContent);
+      const result = buildActivePrompt(mockPresetDocs, state);
       expect(result).toContain("Current Phase: plan");
+    });
+
+    it("handles unknown phase gracefully", () => {
+      const badState: CrewState = { ...state, phase: "nonexistent" };
+      const result = buildActivePrompt(mockPresetDocs, badState);
+      expect(result).toContain("Unknown phase: nonexistent");
     });
   });
 
   describe("buildCrewPrompt", () => {
     it("routes to idle when state is null", () => {
-      const result = buildCrewPrompt(mockPresetDocs, null, null);
+      const result = buildCrewPrompt(mockPresetDocs, null);
       expect(result).not.toContain("ACTIVE WORKFLOW");
       expect(result).toContain("dispatch_crew");
     });
@@ -122,10 +128,10 @@ describe("prompt", () => {
         progress: null,
         workflow: ["explore", "build", "ship"],
       };
-      const result = buildCrewPrompt(mockPresetDocs, state, "# Explore skill content");
+      const result = buildCrewPrompt(mockPresetDocs, state);
       expect(result).toContain("ACTIVE WORKFLOW");
       expect(result).toContain("auth");
-      expect(result).toContain("# Explore skill content");
+      expect(result).toContain("# Explore Phase");
     });
 
     it("routes to idle when state has no workflow field (backwards compat)", () => {
@@ -135,18 +141,19 @@ describe("prompt", () => {
         progress: null,
         workflow: null,
       };
-      const result = buildCrewPrompt(mockPresetDocs, state, null);
+      const result = buildCrewPrompt(mockPresetDocs, state);
       expect(result).not.toContain("ACTIVE WORKFLOW");
     });
 
-    it("routes to idle when skill content is null", () => {
+    it("routes to active even for empty workflow array (requires workflow)", () => {
       const state: CrewState = {
         feature: "auth",
         phase: "build",
         progress: null,
-        workflow: ["build", "ship"],
+        workflow: [],
       };
-      const result = buildCrewPrompt(mockPresetDocs, state, null);
+      const result = buildCrewPrompt(mockPresetDocs, state);
+      // Empty workflow array means no active workflow
       expect(result).not.toContain("ACTIVE WORKFLOW");
     });
   });
