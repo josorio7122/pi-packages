@@ -1,0 +1,20 @@
+{
+  "name": "@josorio/frontend-design",
+  "version": "1.0.0",
+  "description": "Frontend design skill for pi. Create distinctive, production-grade frontend interfaces with high design quality.",
+  "keywords": [
+    "pi-package",
+    "pi-skill",
+    "design",
+    "frontend-design",
+    "ui"
+  ],
+  "license": "MIT",
+  "private": true,
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "type": "module"
+}

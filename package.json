@@ -34,7 +34,8 @@
       "./packages/gh/skills",
       "./packages/glab/skills",
       "./packages/create-skill/skills",
-      "./packages/interface-design/skills"
+      "./packages/interface-design/skills",
+      "./packages/frontend-design/skills"
     ],
     "extensions": [
       "./packages/pi-crew/extensions",
