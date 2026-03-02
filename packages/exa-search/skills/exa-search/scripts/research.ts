@@ -52,8 +52,13 @@
  *   tsx scripts/research.ts list '{"limit":5}'
  */
 
-import { Exa } from "exa-js";
-import { showHelp, requireApiKey, handleError } from "./lib/common.js";
+import {
+  showHelp,
+  requireApiKey,
+  handleError,
+  requireArg,
+  createClient,
+} from "./lib/common.js";
 
 const args = process.argv.slice(2);
 
@@ -66,20 +71,17 @@ const arg1 = args[1];
 
 requireApiKey();
 
-const exa = new Exa();
+const exa = createClient();
 
 try {
   switch (subcommand) {
     case "create": {
-      if (!arg1) {
-        console.error("Error: instructions required.");
-        process.exit(1);
-      }
+      const instructions = requireArg(arg1, "instructions");
       const opts: Record<string, unknown> = args[2]
         ? (JSON.parse(args[2]) as Record<string, unknown>)
         : {};
       const result = await exa.research.create({
-        instructions: arg1,
+        instructions,
         model:
           (opts.model as "exa-research-fast" | "exa-research" | "exa-research-pro") ?? undefined,
         outputSchema: (opts.outputSchema as Record<string, unknown>) ?? undefined,
@@ -89,48 +91,39 @@ try {
     }
 
     case "get": {
-      if (!arg1) {
-        console.error("Error: research-id required.");
-        process.exit(1);
-      }
+      const researchId = requireArg(arg1, "research-id");
       const opts: Record<string, unknown> = args[2]
         ? (JSON.parse(args[2]) as Record<string, unknown>)
         : {};
       if (opts.stream) {
-        const streamResult = await exa.research.get(arg1, { stream: true, ...opts });
+        const streamResult = await exa.research.get(researchId, { stream: true, ...opts });
         for await (const event of streamResult) {
           console.log(JSON.stringify(event));
         }
       } else {
-        const result = await exa.research.get(arg1, opts);
+        const result = await exa.research.get(researchId, opts);
         console.log(JSON.stringify(result, null, 2));
       }
       break;
     }
 
     case "poll": {
-      if (!arg1) {
-        console.error("Error: research-id required.");
-        process.exit(1);
-      }
+      const researchId = requireArg(arg1, "research-id");
       const opts: Record<string, unknown> = args[2]
         ? (JSON.parse(args[2]) as Record<string, unknown>)
         : {};
-      const result = await exa.research.pollUntilFinished(arg1, opts);
+      const result = await exa.research.pollUntilFinished(researchId, opts);
       console.log(JSON.stringify(result, null, 2));
       break;
     }
 
     case "run": {
-      if (!arg1) {
-        console.error("Error: instructions required.");
-        process.exit(1);
-      }
+      const instructions = requireArg(arg1, "instructions");
       const opts: Record<string, unknown> = args[2]
         ? (JSON.parse(args[2]) as Record<string, unknown>)
         : {};
       const created = await exa.research.create({
-        instructions: arg1,
+        instructions,
         model:
           (opts.model as "exa-research-fast" | "exa-research" | "exa-research-pro") ?? undefined,
         outputSchema: (opts.outputSchema as Record<string, unknown>) ?? undefined,

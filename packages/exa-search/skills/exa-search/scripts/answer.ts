@@ -26,13 +26,18 @@
  *   tsx scripts/answer.ts "List top 3 ORMs" '{"outputSchema":{"type":"object","properties":{"items":{"type":"array","items":{"type":"string"}}}}}'
  */
 
-import { Exa } from "exa-js";
-import { parseArgs, requireApiKey, handleError, filterOptions } from "./lib/common.js";
+import {
+  parseArgs,
+  requireApiKey,
+  handleError,
+  filterOptions,
+  createClient,
+} from "./lib/common.js";
 
 const { query, opts } = parseArgs(import.meta.url);
 requireApiKey();
 
-const exa = new Exa();
+const exa = createClient();
 
 const answerOpts = filterOptions(opts, [
   "text",

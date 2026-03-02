@@ -42,19 +42,19 @@
  *   tsx scripts/search.ts "React best practices" '{"text":true,"highlights":true,"includeDomains":["react.dev"]}'
  */
 
-import { Exa } from "exa-js";
 import {
   parseArgs,
   requireApiKey,
-  handleError,
   filterOptions,
   buildContentsOptions,
+  createClient,
+  executeAndPrint,
 } from "./lib/common.js";
 
 const { query, opts } = parseArgs(import.meta.url);
 requireApiKey();
 
-const exa = new Exa();
+const exa = createClient();
 
 // Determine if we need contents
 const wantContents = opts.contents || opts.text || opts.highlights || opts.summary;
@@ -88,14 +88,10 @@ const searchKeys = [
 
 const searchOpts = filterOptions(opts, searchKeys);
 
-try {
-  let result;
+await executeAndPrint(async () => {
   if (wantContents) {
-    result = await exa.searchAndContents(query, { ...searchOpts, ...contentsOpts });
+    return await exa.searchAndContents(query, { ...searchOpts, ...contentsOpts });
   } else {
-    result = await exa.search(query, searchOpts);
+    return await exa.search(query, searchOpts);
   }
-  console.log(JSON.stringify(result, null, 2));
-} catch (err) {
-  handleError(err);
-}
+});

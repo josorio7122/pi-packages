@@ -1,4 +1,29 @@
 import { readFileSync } from "node:fs";
+import { Exa } from "exa-js";
+
+/** Create an Exa client instance. Requires EXA_API_KEY env var. */
+export function createClient(): Exa {
+  return new Exa();
+}
+
+/** Require a CLI argument, exit with error if missing. */
+export function requireArg(value: string | undefined, name: string): string {
+  if (!value) {
+    console.error(`Error: ${name} is required`);
+    process.exit(1);
+  }
+  return value;
+}
+
+/** Execute an async API call, print JSON result, exit on error. */
+export async function executeAndPrint<T>(apiCall: () => Promise<T>): Promise<void> {
+  try {
+    const result = await apiCall();
+    console.log(JSON.stringify(result, null, 2));
+  } catch (err) {
+    handleError(err);
+  }
+}
 
 /**
  * Show help text extracted from the JSDoc comment at the top of a script file.

@@ -28,8 +28,13 @@
  *   tsx scripts/contents.ts '["https://a.com","https://b.com"]' '{"text":true,"highlights":true}'
  */
 
-import { Exa } from "exa-js";
-import { showHelp, requireApiKey, handleError, filterOptions } from "./lib/common.js";
+import {
+  showHelp,
+  requireApiKey,
+  filterOptions,
+  createClient,
+  executeAndPrint,
+} from "./lib/common.js";
 
 const args = process.argv.slice(2);
 
@@ -50,7 +55,7 @@ const opts: Record<string, unknown> = args[1]
 
 requireApiKey();
 
-const exa = new Exa();
+const exa = createClient();
 
 const contentsOpts = filterOptions(opts, [
   "text",
@@ -62,9 +67,6 @@ const contentsOpts = filterOptions(opts, [
   "subpageTarget",
 ]);
 
-try {
-  const result = await exa.getContents(urls, contentsOpts);
-  console.log(JSON.stringify(result, null, 2));
-} catch (err) {
-  handleError(err);
-}
+await executeAndPrint(async () => {
+  return await exa.getContents(urls, contentsOpts);
+});

@@ -33,19 +33,19 @@
  *   tsx scripts/find-similar.ts "https://react.dev" '{"numResults":5,"text":true,"excludeSourceDomain":true}'
  */
 
-import { Exa } from "exa-js";
 import {
   parseArgs,
   requireApiKey,
-  handleError,
   filterOptions,
   buildContentsOptions,
+  createClient,
+  executeAndPrint,
 } from "./lib/common.js";
 
 const { query: url, opts } = parseArgs(import.meta.url);
 requireApiKey();
 
-const exa = new Exa();
+const exa = createClient();
 
 const wantContents = opts.contents || opts.text || opts.highlights || opts.summary;
 
@@ -67,14 +67,10 @@ const findSimilarKeys = [
 
 const searchOpts = filterOptions(opts, findSimilarKeys);
 
-try {
-  let result;
+await executeAndPrint(async () => {
   if (wantContents) {
-    result = await exa.findSimilarAndContents(url, { ...searchOpts, ...contentsOpts });
+    return await exa.findSimilarAndContents(url, { ...searchOpts, ...contentsOpts });
   } else {
-    result = await exa.findSimilar(url, searchOpts);
+    return await exa.findSimilar(url, searchOpts);
   }
-  console.log(JSON.stringify(result, null, 2));
-} catch (err) {
-  handleError(err);
-}
+});
