@@ -495,10 +495,16 @@ export default function piCrew(pi: ExtensionAPI) {
           }),
         );
 
+        // In chain mode, all agents start as "queued" — they run sequentially
+        for (const agent of agents) {
+          agent.status = "queued";
+        }
+
         let previousOutput = "";
 
         for (let i = 0; i < params.chain!.length; i++) {
           const step = params.chain![i];
+          agents[i].status = "running";
 
           // Replace {previous} with prior agent output
           const task = step.task.replace(/\{previous\}/g, previousOutput);

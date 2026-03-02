@@ -26,7 +26,7 @@ export interface AgentRenderState {
   preset: string; // "scout", "executor", etc.
   instance: number; // 1, 2, ... (per-preset counter)
   task: string; // Task description (original task text)
-  status: "running" | "done" | "error";
+  status: "queued" | "running" | "done" | "error";
   elapsedMs: number;
   exitCode: number; // -1 while running, 0 = success, >0 = error
   messages: Message[];
@@ -206,13 +206,16 @@ function buildAgentCard(
   const borderFn = (s: string) => theme.fg("dim", s);
 
   // Status icon
+  const isQueued = agent.status === "queued";
   const isRunning = agent.status === "running";
   const isError = agent.status === "error";
-  const icon = isRunning
-    ? theme.fg("warning", "●")
-    : isError
-      ? theme.fg("error", "✗")
-      : theme.fg("success", "✓");
+  const icon = isQueued
+    ? theme.fg("dim", "○")
+    : isRunning
+      ? theme.fg("warning", "●")
+      : isError
+        ? theme.fg("error", "✗")
+        : theme.fg("success", "✓");
 
   // Name with optional instance number
   const name =
@@ -243,7 +246,9 @@ function buildAgentCard(
     }
   }
 
-  if (isRunning) {
+  if (isQueued) {
+    card.addChild(new Text(theme.fg("dim", "  (waiting...)"), 0, 0));
+  } else if (isRunning) {
     // Show only last tool call while running
     const lastTool = displayItems.filter((i) => i.type === "toolCall").pop();
     if (lastTool) {
