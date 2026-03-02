@@ -38,8 +38,13 @@ export const PROFILE_DESCRIPTIONS: Record<ProfileName, string> = {
 };
 
 /**
- * Resolve a tier to a concrete model string.
- * Priority: per-agent override > profile mapping
+ * Resolve model ID for a preset + profile combination.
+ * Priority: per-agent override > profile tier mapping.
+ * @param profile - Active model profile (quality/balanced/budget)
+ * @param tier - Agent tier (budget/balanced/quality)
+ * @param agentName - Agent preset name (for checking overrides)
+ * @param overrides - Per-agent model overrides
+ * @returns Resolved model ID string
  */
 export function resolveModel(
   profile: string,
@@ -61,6 +66,8 @@ export function resolveModel(
 
 /**
  * Check if a profile name is valid.
+ * @param name - Profile name to validate
+ * @returns True if the name is a valid ProfileName
  */
 export function isValidProfile(name: string): name is ProfileName {
   return PROFILE_NAMES.includes(name as ProfileName);

@@ -44,6 +44,11 @@ const packageRoot = path.resolve(__dirname, "../.."); // extensions/pi-crew/ →
 
 // ── Constants ───────────────────────────────────────────────────────
 
+/**
+ * Maximum concurrent agents for parallel dispatch.
+ * Default: 4. Hard ceiling: 8 (empirically tested on M-series Macs).
+ * Override via DISPATCH_CREW_MAX_CONCURRENT environment variable.
+ */
 const MAX_CONCURRENT = Math.min(
   Math.max(1, parseInt(process.env.DISPATCH_CREW_MAX_CONCURRENT || "4", 10)),
   8,
@@ -712,3 +717,8 @@ export default function piCrew(pi: ExtensionAPI) {
     },
   });
 }
+
+// ── Public Type Exports ─────────────────────────────────────────────
+export type { SpawnParams, SpawnResult, UsageStats, OnAgentUpdate } from "./spawn.js";
+export type { CrewConfig, CrewState } from "./state.js";
+export type { AgentRenderState, CrewDispatchDetails } from "./rendering.js";

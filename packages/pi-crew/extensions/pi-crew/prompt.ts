@@ -6,7 +6,9 @@ import { getWorkflowProgress } from "./state.js";
 
 /**
  * Build the system prompt for idle mode — no active workflow.
- * Shows presets, dispatch syntax, and how to start a workflow.
+ * Shows presets, dispatch syntax, workflow shortcuts, and how to start a workflow.
+ * @param presetDocs - Formatted preset table (from formatPresetsForLLM)
+ * @returns System prompt markdown content
  */
 export function buildIdlePrompt(presetDocs: string): string {
   return `## Crew — Agentic Workflow Orchestration
@@ -99,7 +101,11 @@ Not every task needs all 6 phases. Choose the right subset when starting:
 
 /**
  * Build the system prompt for active mode — workflow in progress.
- * Injects enforcement header, progress bar, presets, and full skill content.
+ * Injects enforcement header, progress bar, presets, and full current phase skill content.
+ * @param presetDocs - Formatted preset table (from formatPresetsForLLM)
+ * @param state - Current CrewState (feature, phase, workflow)
+ * @param skillContent - Current phase's SKILL.md content (without frontmatter)
+ * @returns System prompt markdown content
  */
 export function buildActivePrompt(
   presetDocs: string,
@@ -125,7 +131,12 @@ ${skillContent}`;
 }
 
 /**
- * Route to idle or active prompt based on state.
+ * Build the crew system prompt (routes to idle or active based on state).
+ * If workflow is active, injects phase instructions. Otherwise shows dispatch guide.
+ * @param presetDocs - Formatted preset table (from formatPresetsForLLM)
+ * @param state - Current CrewState or null if no state.md exists
+ * @param skillContent - Current phase's SKILL.md content or null
+ * @returns System prompt markdown content
  */
 export function buildCrewPrompt(
   presetDocs: string,
@@ -140,6 +151,9 @@ export function buildCrewPrompt(
 
 /**
  * Build the nudge message sent on agent_end when workflow is incomplete.
+ * Reminds the LLM to continue with the current phase.
+ * @param state - Current CrewState
+ * @returns Nudge message markdown content
  */
 export function buildNudgeMessage(state: CrewState): string {
   const progress = getWorkflowProgress(state);

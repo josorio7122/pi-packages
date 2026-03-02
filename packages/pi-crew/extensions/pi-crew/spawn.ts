@@ -39,7 +39,7 @@ export interface SpawnResult {
   stderr: string;
 }
 
-export type AgentUpdateCallback = (update: {
+export type OnAgentUpdate = (update: {
   messages: Message[];
   usage: UsageStats;
   exitCode: number;
@@ -47,10 +47,20 @@ export type AgentUpdateCallback = (update: {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Create a zeroed UsageStats object.
+ * @returns UsageStats with all fields set to 0
+ */
 export function emptyUsage(): UsageStats {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 };
 }
 
+/**
+ * Write prompt to a secure temp file.
+ * Creates a temp directory with restricted permissions (0o600) and writes the prompt.
+ * @param prompt - Prompt content to write
+ * @returns Object with `dir` and `filePath` for cleanup
+ */
 export function writePromptToTempFile(prompt: string): { dir: string; filePath: string } {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-crew-"));
   const filePath = path.join(tmpDir, "prompt.md");
@@ -58,6 +68,12 @@ export function writePromptToTempFile(prompt: string): { dir: string; filePath: 
   return { dir: tmpDir, filePath };
 }
 
+/**
+ * Remove temp file and directory.
+ * Silently ignores errors (file may already be deleted).
+ * @param dir - Temp directory to remove
+ * @param filePath - Temp file to remove
+ */
 export function cleanupTempFile(dir: string | null, filePath: string | null) {
   if (filePath)
     try {
@@ -82,6 +98,10 @@ export function cleanupTempFile(dir: string | null, filePath: string | null) {
  * - Staggers initial launches by STAGGER_MS to avoid lock file contention
  *   when multiple pi subprocesses race for ~/.pi/agent/settings.json
  * - Rejects on first error (remaining in-flight items continue but results are discarded)
+ * @param items - Array of work items
+ * @param concurrency - Maximum concurrent workers
+ * @param fn - Async function to run for each item
+ * @returns Promise resolving to array of results in input order
  */
 const STAGGER_MS = 150;
 
@@ -119,12 +139,17 @@ export async function mapWithConcurrencyLimit<T, R>(
  * Spawn a single pi subprocess with resolved preset params.
  * Reports progress via onAgentUpdate callback on each NDJSON event.
  * Returns final SpawnResult after process exits.
+ * @param params - Resolved spawn parameters (task, systemPrompt, tools, model, cwd, thinking)
+ * @param defaultCwd - Default working directory if params.cwd is not set
+ * @param signal - AbortSignal for cancellation support
+ * @param onAgentUpdate - Optional callback for progress updates
+ * @returns Promise resolving to SpawnResult with exitCode, messages, usage, model, stopReason, errorMessage, stderr
  */
 export async function runSingleAgent(
   params: SpawnParams,
   defaultCwd: string,
   signal: AbortSignal | undefined,
-  onAgentUpdate?: AgentUpdateCallback,
+  onAgentUpdate?: OnAgentUpdate,
 ): Promise<SpawnResult> {
   const result: SpawnResult = {
     exitCode: 0,

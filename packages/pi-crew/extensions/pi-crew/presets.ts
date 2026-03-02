@@ -63,22 +63,30 @@ const PRESETS: AgentPreset[] = [
 const PRESET_MAP = new Map(PRESETS.map((p) => [p.name, p]));
 
 /**
- * Get a preset by name, or undefined if not found.
+ * Retrieve a preset definition by name.
+ * @param name - Preset name (scout, researcher, architect, executor, reviewer, debugger)
+ * @returns Preset definition with name, description, promptFile, tools, and tier, or undefined if not found
  */
 export function getPreset(name: string): AgentPreset | undefined {
   return PRESET_MAP.get(name);
 }
 
 /**
- * Get all preset names.
+ * List all available preset names.
+ * @returns Array of preset names
  */
 export function getPresetNames(): string[] {
   return PRESETS.map((p) => p.name);
 }
 
 /**
- * Resolve a preset to concrete spawn parameters.
- * Reads the prompt file from disk and resolves the model via profiles.
+ * Resolve a preset into concrete SpawnParams.
+ * Reads the system prompt from disk and resolves the model via profile + tier mapping.
+ * @param name - Preset name
+ * @param profile - Active model profile (quality/balanced/budget)
+ * @param overrides - Per-agent model overrides
+ * @param packageRoot - Package root directory (for reading prompt files)
+ * @returns Resolved spawn parameters (systemPrompt, tools, model) or undefined if preset not found
  */
 export function resolvePreset(
   name: string,
@@ -97,8 +105,11 @@ export function resolvePreset(
 }
 
 /**
- * Generate a markdown table of presets for LLM system prompt injection.
- * Shows each preset with its resolved model and purpose.
+ * Format preset table for LLM system prompt injection.
+ * Generates a markdown table showing each preset with its resolved model and purpose.
+ * @param profile - Active model profile
+ * @param overrides - Per-agent model overrides
+ * @returns Markdown table string
  */
 export function formatPresetsForLLM(profile: string, overrides: Record<string, string>): string {
   const lines = ["| Preset | Model | Purpose |", "|--------|-------|---------|"];

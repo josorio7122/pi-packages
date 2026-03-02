@@ -38,6 +38,7 @@ function crewDir(cwd: string): string {
 
 /**
  * Ensure .crew/ directory exists.
+ * @param cwd - Working directory
  */
 export function ensureCrewDir(cwd: string): void {
   const dir = crewDir(cwd);
@@ -46,6 +47,9 @@ export function ensureCrewDir(cwd: string): void {
 
 /**
  * Get the phase directory for a feature.
+ * @param cwd - Working directory
+ * @param feature - Feature name
+ * @returns Path to .crew/phases/{feature}
  */
 export function getPhaseDir(cwd: string, feature: string): string {
   return path.join(crewDir(cwd), PHASES_DIR, feature);
@@ -53,6 +57,8 @@ export function getPhaseDir(cwd: string, feature: string): string {
 
 /**
  * List all feature directories.
+ * @param cwd - Working directory
+ * @returns Array of feature names
  */
 export function listFeatures(cwd: string): string[] {
   const dir = path.join(crewDir(cwd), PHASES_DIR);
@@ -66,7 +72,10 @@ export function listFeatures(cwd: string): string[] {
 // ── Config ──────────────────────────────────────────────────────────
 
 /**
- * Read .crew/config.json. Returns default config if file doesn't exist.
+ * Read .crew/config.json.
+ * Returns default config (profile: balanced, overrides: {}) if file doesn't exist.
+ * @param cwd - Working directory
+ * @returns CrewConfig object
  */
 export function readConfig(cwd: string): CrewConfig {
   const configPath = path.join(crewDir(cwd), CONFIG_FILE);
@@ -86,6 +95,9 @@ export function readConfig(cwd: string): CrewConfig {
 
 /**
  * Write .crew/config.json.
+ * Creates .crew/ directory if it doesn't exist.
+ * @param cwd - Working directory
+ * @param config - Config object to write
  */
 export function writeConfig(cwd: string, config: CrewConfig): void {
   ensureCrewDir(cwd);
@@ -97,7 +109,8 @@ export function writeConfig(cwd: string, config: CrewConfig): void {
 
 /**
  * Read .crew/state.md as raw string (for LLM injection).
- * Returns null if file doesn't exist.
+ * @param cwd - Working directory
+ * @returns State markdown content or null if file doesn't exist
  */
 export function readStateRaw(cwd: string): string | null {
   const statePath = path.join(crewDir(cwd), STATE_FILE);
@@ -111,8 +124,10 @@ export function readStateRaw(cwd: string): string | null {
 }
 
 /**
- * Parse .crew/state.md YAML frontmatter for extension use (status bar).
- * Only parses the frontmatter fields, not the markdown body.
+ * Read .crew/state.md and parse YAML frontmatter.
+ * Returns parsed CrewState object with feature, phase, progress, workflow fields.
+ * @param cwd - Working directory
+ * @returns Parsed CrewState or null if file doesn't exist
  */
 export function readState(cwd: string): CrewState | null {
   const raw = readStateRaw(cwd);
@@ -122,8 +137,10 @@ export function readState(cwd: string): CrewState | null {
 }
 
 /**
- * Simple YAML frontmatter parser.
- * Splits on --- delimiters and parses key: value pairs.
+ * Parse YAML frontmatter from state.md content.
+ * Extracts feature, phase, progress, and workflow fields from --- delimited YAML block.
+ * @param content - Raw state.md content
+ * @returns Parsed CrewState object
  */
 export function parseFrontmatter(content: string): CrewState {
   const state: CrewState = { feature: null, phase: null, progress: null, workflow: null };
@@ -166,8 +183,30 @@ export function parseFrontmatter(content: string): CrewState {
 }
 
 /**
+ * Read a phase skill's SKILL.md content, stripping YAML frontmatter.
+ * Reads from {packageRoot}/skills/crew-{phase}/SKILL.md.
+ * @param packageRoot - Package root directory
+ * @param phase - Phase name (explore, design, plan, build, review, ship)
+ * @returns Skill content without frontmatter, or null if file doesn't exist
+ */
+export function readPhaseSkill(packageRoot: string, phase: string): string | null {
+  const skillPath = path.join(packageRoot, "skills", `crew-${phase}`, "SKILL.md");
+
+  try {
+    const raw = fs.readFileSync(skillPath, "utf-8");
+    // Strip YAML frontmatter
+    const stripped = raw.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
+    return stripped.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if the workflow is complete (current phase = last phase in workflow).
- * Returns true if there's no workflow (no enforcement).
+ * Returns true if there's no workflow defined (no enforcement).
+ * @param state - CrewState object
+ * @returns True if workflow is complete or no workflow exists
  */
 export function isWorkflowComplete(state: CrewState): boolean {
   if (!state.workflow || state.workflow.length === 0) return true;
@@ -176,7 +215,10 @@ export function isWorkflowComplete(state: CrewState): boolean {
 }
 
 /**
- * Render workflow progress: "explore ✓ → design ✓ → **plan** → build → review → ship"
+ * Render workflow progress with checkmarks and current phase highlighted.
+ * Example: "explore ✓ → design ✓ → **plan** → build → review → ship"
+ * @param state - CrewState object
+ * @returns Formatted progress string (empty if no workflow)
  */
 export function getWorkflowProgress(state: CrewState): string {
   if (!state.workflow || state.workflow.length === 0) return "";
@@ -190,21 +232,4 @@ export function getWorkflowProgress(state: CrewState): string {
       return phase;
     })
     .join(" → ");
-}
-
-/**
- * Read a phase skill's SKILL.md content, stripping YAML frontmatter.
- * Returns null if the skill file doesn't exist.
- */
-export function readPhaseSkill(packageRoot: string, phase: string): string | null {
-  const skillPath = path.join(packageRoot, "skills", `crew-${phase}`, "SKILL.md");
-
-  try {
-    const raw = fs.readFileSync(skillPath, "utf-8");
-    // Strip YAML frontmatter
-    const stripped = raw.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
-    return stripped.trim() || null;
-  } catch {
-    return null;
-  }
 }
