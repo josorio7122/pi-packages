@@ -161,7 +161,7 @@ describe("e2e: workflow enforcement via SDK", () => {
     );
 
     const text = getAssistantText(session);
-    // The explore SKILL.md says 3-4 scouts for large projects
+    // The explore phase content says 3-4 scouts for large projects
     expect(text).toMatch(/3.?4/);
 
     session.dispose();

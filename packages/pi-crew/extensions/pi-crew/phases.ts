@@ -496,20 +496,6 @@ Document what was built:
 };
 
 /**
- * Phase dependency map — each phase depends on the phase immediately before it
- * in the canonical order. When a workflow skips phases, only the phases
- * actually in the workflow are considered.
- */
-const PHASE_DEPENDENCIES: Record<PhaseId, PhaseId | null> = {
-  explore: null,      // First phase — no deps
-  design: "explore",
-  plan: "design",
-  build: "plan",
-  review: "build",
-  ship: "review",
-};
-
-/**
  * Get the content for a workflow phase.
  * @param phase - Phase identifier (explore, design, plan, build, review, ship)
  * @returns Phase content string, or null if phase is invalid

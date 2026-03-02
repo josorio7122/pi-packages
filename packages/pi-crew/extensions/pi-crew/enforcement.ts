@@ -14,8 +14,8 @@ import { getRequiredHandoffs, type PhaseId } from "./phases.js";
  */
 const EXPLORATORY_PRESETS = new Set(["scout", "researcher", "reviewer"]);
 
-/** Presets that write code or make design decisions. */
-const WRITE_PRESETS = new Set(["executor", "architect"]);
+/** Presets that write code or make design decisions. Debugger uses edit/write tools. */
+const WRITE_PRESETS = new Set(["executor", "architect", "debugger"]);
 
 /**
  * Determine if a dispatch_crew call should require an active workflow.

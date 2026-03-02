@@ -120,7 +120,7 @@ describe("integration: workflow enforcement", () => {
     );
 
     expect(exitCode).toBe(0);
-    // The explore SKILL.md says "3-4" scouts for 500+ files
+    // The explore phase content says "3-4" scouts for 500+ files
     expect(output).toMatch(/3.?4/);
   }, 60_000);
 
