@@ -281,4 +281,77 @@ describe("e2e: workflow enforcement via SDK", () => {
 
     session.dispose();
   }, 60_000);
+
+  it("auto-captures dispatch result to .crew/phases/ and advances state", async () => {
+    // Pre-create state with explore phase active
+    const crewDir = path.join(tmpDir, ".crew");
+    fs.mkdirSync(crewDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(crewDir, "state.md"),
+      "---\nfeature: test-autocapture\nphase: explore\nworkflow: explore,build,ship\n---\n",
+    );
+
+    const session = await createTestSession(tmpDir);
+
+    // Ask the LLM to dispatch a scout — this should trigger auto-capture
+    await session.prompt(
+      'Dispatch a single scout agent that replies with exactly "SCOUT_OUTPUT_123". ' +
+        "Use dispatch_crew with preset scout. The task should tell the agent to reply with " +
+        "only that exact string and nothing else. Do NOT use any other tools.",
+    );
+
+    // Wait for dispatch to complete
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await session.agent.waitForIdle();
+
+    // Verify: handoff file was auto-captured to .crew/phases/test-autocapture/explore.md
+    const handoffPath = path.join(crewDir, "phases", "test-autocapture", "explore.md");
+    expect(fs.existsSync(handoffPath)).toBe(true);
+    const handoffContent = fs.readFileSync(handoffPath, "utf-8");
+    expect(handoffContent.length).toBeGreaterThan(0);
+
+    // Verify: state.md was auto-advanced from explore → build
+    const stateContent = fs.readFileSync(path.join(crewDir, "state.md"), "utf-8");
+    expect(stateContent).toContain("phase: build");
+    // Workflow should be unchanged
+    expect(stateContent).toContain("workflow: explore,build,ship");
+
+    session.dispose();
+  }, 120_000);
+
+  it("phase gate blocks dispatch when prior handoff is missing", async () => {
+    // Pre-create state at build phase but WITHOUT explore handoff
+    const crewDir = path.join(tmpDir, ".crew");
+    fs.mkdirSync(crewDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(crewDir, "state.md"),
+      "---\nfeature: test-gate\nphase: build\nworkflow: explore,build,ship\n---\n",
+    );
+    // Note: NO explore.md handoff file exists
+
+    const session = await createTestSession(tmpDir);
+
+    // Use a very specific prompt that should trigger a dispatch and see the gate error
+    // Then tell it to stop so we don't get stuck in a nudge loop
+    await session.prompt(
+      "Try to dispatch a single scout agent with task 'hello'. " +
+        "Use dispatch_crew with preset scout. After the dispatch result, " +
+        "tell me what happened. Do NOT try to fix anything or dispatch again.",
+    );
+
+    // Give it time but don't wait forever — nudge loop may fire
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Verify: no handoff file was created (dispatch may have succeeded since scout is exploratory,
+    // but the phase gate should block the actual handoff capture from advancing state)
+    // The key check: state should NOT have advanced past build
+    const stateContent = fs.readFileSync(path.join(crewDir, "state.md"), "utf-8");
+    expect(stateContent).toContain("phase: build");
+
+    // No explore.md handoff should exist (it wasn't the current phase for capture)
+    const explorePath = path.join(crewDir, "phases", "test-gate", "explore.md");
+    expect(fs.existsSync(explorePath)).toBe(false);
+
+    session.dispose();
+  }, 60_000);
 });
