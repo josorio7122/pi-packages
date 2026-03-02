@@ -8,17 +8,17 @@
  * The fix: detect this specific error in stderr and retry the subprocess.
  */
 import { describe, it, expect } from "vitest";
-import { isLockFileError, runSingleAgent, mapWithConcurrencyLimit } from "../spawn.js";
+import { isTransientSpawnError, runSingleAgent, mapWithConcurrencyLimit } from "../spawn.js";
 
-describe("lock file retry", () => {
-  describe("isLockFileError detection", () => {
+describe("transient spawn error retry", () => {
+  describe("isTransientSpawnError detection", () => {
     it("detects lock file error in stderr", () => {
-      expect(isLockFileError("Error: Lock file is already being held")).toBe(true);
+      expect(isTransientSpawnError("Error: Lock file is already being held")).toBe(true);
     });
 
     it("detects lock file error with warning prefix", () => {
       expect(
-        isLockFileError(
+        isTransientSpawnError(
           "Warning (startup, global settings): Lock file is already being held\n" +
             "Error: Lock file is already being held\n" +
             "    at /some/path/lockfile.js:68:47",
@@ -26,10 +26,24 @@ describe("lock file retry", () => {
       ).toBe(true);
     });
 
-    it("returns false for other errors", () => {
-      expect(isLockFileError("Error: No API key found")).toBe(false);
-      expect(isLockFileError("")).toBe(false);
-      expect(isLockFileError("some random error")).toBe(false);
+    it("detects API key not found error", () => {
+      expect(
+        isTransientSpawnError(
+          "Error: No API key found for anthropic.\n\n" +
+            "Run `pi auth` to configure your API key.",
+        ),
+      ).toBe(true);
+    });
+
+    it("detects API key error for any provider", () => {
+      expect(isTransientSpawnError("No API key found for openai")).toBe(true);
+      expect(isTransientSpawnError("No API key found for google")).toBe(true);
+    });
+
+    it("returns false for non-transient errors", () => {
+      expect(isTransientSpawnError("")).toBe(false);
+      expect(isTransientSpawnError("some random error")).toBe(false);
+      expect(isTransientSpawnError("TypeError: Cannot read property")).toBe(false);
     });
   });
 
