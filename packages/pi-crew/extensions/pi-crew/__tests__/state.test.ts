@@ -4,15 +4,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   ensureCrewDir,
-  getPhaseDir,
-  listFeatures,
   readConfig,
   writeConfig,
   readStateRaw,
   readState,
   parseFrontmatter,
   isWorkflowComplete,
-  getWorkflowProgress,
 } from "../state.js";
 
 describe("state", () => {
@@ -35,42 +32,6 @@ describe("state", () => {
     it("does not throw if directory already exists", () => {
       ensureCrewDir(tmpDir);
       expect(() => ensureCrewDir(tmpDir)).not.toThrow();
-    });
-  });
-
-  describe("getPhaseDir", () => {
-    it("returns correct path", () => {
-      const result = getPhaseDir(tmpDir, "auth-feature");
-      expect(result).toBe(path.join(tmpDir, ".crew", "phases", "auth-feature"));
-    });
-
-    it("does not create the directory", () => {
-      const result = getPhaseDir(tmpDir, "auth-feature");
-      expect(fs.existsSync(result)).toBe(false);
-    });
-  });
-
-  describe("listFeatures", () => {
-    it("returns empty array when .crew/phases does not exist", () => {
-      expect(listFeatures(tmpDir)).toEqual([]);
-    });
-
-    it("returns empty array when phases dir is empty", () => {
-      fs.mkdirSync(path.join(tmpDir, ".crew", "phases"), { recursive: true });
-      expect(listFeatures(tmpDir)).toEqual([]);
-    });
-
-    it("returns feature directory names", () => {
-      const phasesDir = path.join(tmpDir, ".crew", "phases");
-      fs.mkdirSync(path.join(phasesDir, "auth"), { recursive: true });
-      fs.mkdirSync(path.join(phasesDir, "billing"), { recursive: true });
-      // Create a file (should be excluded — only directories)
-      fs.writeFileSync(path.join(phasesDir, "notes.txt"), "not a feature");
-
-      const features = listFeatures(tmpDir);
-      expect(features).toHaveLength(2);
-      expect(features).toContain("auth");
-      expect(features).toContain("billing");
     });
   });
 
@@ -313,61 +274,6 @@ describe("state", () => {
       expect(
         isWorkflowComplete({ feature: "x", phase: "build", progress: null, workflow: ["build"] }),
       ).toBe(true);
-    });
-  });
-
-  describe("getWorkflowProgress", () => {
-    it("marks completed phases with ✓ and current with bold", () => {
-      const result = getWorkflowProgress({
-        feature: "auth",
-        phase: "plan",
-        progress: null,
-        workflow: ["explore", "design", "plan", "build", "review", "ship"],
-      });
-      expect(result).toContain("explore ✓");
-      expect(result).toContain("design ✓");
-      expect(result).toContain("**plan**");
-      expect(result).toContain("build");
-      expect(result).not.toContain("build ✓");
-    });
-
-    it("returns empty string when no workflow", () => {
-      expect(
-        getWorkflowProgress({ feature: "x", phase: "build", progress: null, workflow: null }),
-      ).toBe("");
-    });
-
-    it("handles first phase (nothing completed)", () => {
-      const result = getWorkflowProgress({
-        feature: "x",
-        phase: "explore",
-        progress: null,
-        workflow: ["explore", "build", "ship"],
-      });
-      expect(result).toContain("**explore**");
-      expect(result).not.toContain("✓");
-    });
-
-    it("handles last phase (all previous completed)", () => {
-      const result = getWorkflowProgress({
-        feature: "x",
-        phase: "ship",
-        progress: null,
-        workflow: ["explore", "build", "ship"],
-      });
-      expect(result).toContain("explore ✓");
-      expect(result).toContain("build ✓");
-      expect(result).toContain("**ship**");
-    });
-
-    it("uses arrow separator between phases", () => {
-      const result = getWorkflowProgress({
-        feature: "x",
-        phase: "build",
-        progress: null,
-        workflow: ["explore", "build"],
-      });
-      expect(result).toContain("→");
     });
   });
 

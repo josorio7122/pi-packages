@@ -26,14 +26,13 @@ import {
 } from "./rendering.js";
 import { buildCrewPrompt, buildNudgeMessage } from "./prompt.js";
 import {
-  shouldRequireWorkflow,
-  buildWorkflowGateMessage,
   shouldBlockForMissingHandoff,
   buildMissingHandoffMessage,
   shouldBlockForInvalidPreset,
   buildInvalidPresetMessage,
 } from "./enforcement.js";
 import { getPhaseAllowedPresets, isPhaseAutoAdvance } from "./phases.js";
+import { shouldBlockToolCall } from "./tool-blocking.js";
 import { writeHandoff, writeDispatchLog } from "./handoff.js";
 import type {
   ExtensionAPI,
@@ -540,6 +539,11 @@ export default function piCrew(pi: ExtensionAPI) {
     nudgedThisCycle = false;
   });
 
+  // ── Tool call hook: block write/edit outside .crew/ ──────────────
+  pi.on("tool_call", async (event: { toolName: string; input: Record<string, unknown> }) => {
+    return shouldBlockToolCall(event.toolName, event.input);
+  });
+
   // ── Before agent start: inject crew system prompt ────────────────
   pi.on("before_agent_start", async (event: BeforeAgentStartEvent, ctx: ExtensionContext) => {
     const config = readConfig(ctx.cwd);
@@ -642,39 +646,19 @@ export default function piCrew(pi: ExtensionAPI) {
         };
       }
 
-      // ── Workflow gate: require state.md for multi-agent work ──
+      // ── Check workflow state ──────────────────────────────────
       const state = readState(ctx.cwd);
       const hasActiveWorkflow = Boolean(state?.workflow && state.workflow.length > 0);
 
-      if (hasSingle || hasTasks || hasChain) {
-        const mode = hasSingle ? "single" : hasTasks ? "parallel" : "chain";
-        const agentList = hasSingle
-          ? [{ preset: params.preset! }]
-          : hasTasks
-            ? params.tasks!.map((t) => ({ preset: t.preset }))
-            : params.chain!.map((c) => ({ preset: c.preset }));
-
-        if (shouldRequireWorkflow(mode, agentList, hasActiveWorkflow)) {
+      // ── Phase gate: check handoff files exist ───────────────
+      if (hasActiveWorkflow && state) {
+        const handoffCheck = shouldBlockForMissingHandoff(ctx.cwd, state);
+        if (handoffCheck.blocked) {
           return {
-            content: [{ type: "text", text: buildWorkflowGateMessage() }],
+            content: [{ type: "text", text: buildMissingHandoffMessage(state, handoffCheck.missing) }],
             details: undefined,
             isError: true,
           };
-        }
-      }
-
-      // ── Phase gate: check handoff files exist ───────────────
-      if (hasActiveWorkflow) {
-        const state = readState(ctx.cwd);
-        if (state) {
-          const handoffCheck = shouldBlockForMissingHandoff(ctx.cwd, state);
-          if (handoffCheck.blocked) {
-            return {
-              content: [{ type: "text", text: buildMissingHandoffMessage(state, handoffCheck.missing) }],
-              details: undefined,
-              isError: true,
-            };
-          }
         }
       }
 

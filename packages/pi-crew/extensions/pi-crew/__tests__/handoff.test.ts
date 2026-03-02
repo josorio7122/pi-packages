@@ -9,11 +9,12 @@ import {
   writeHandoff,
   readHandoff,
   handoffExists,
-  writeTaskFile,
   getHandoffPath,
-  getTaskFilePath,
   writeDispatchLog,
   listDispatchLogs,
+  writeFinding,
+  readFinding,
+  listFindings,
 } from "../handoff.js";
 
 describe("handoff", () => {
@@ -88,32 +89,10 @@ describe("handoff", () => {
     });
   });
 
-  describe("writeTaskFile", () => {
-    it("writes task file to .crew/phases/<feature>/build/task-<id>.md", () => {
-      writeTaskFile(tmpDir, "auth", "01", "# Task 01\n\nDo the thing.");
-      const filePath = path.join(tmpDir, ".crew", "phases", "auth", "build", "task-01.md");
-      expect(fs.existsSync(filePath)).toBe(true);
-      expect(fs.readFileSync(filePath, "utf-8")).toBe("# Task 01\n\nDo the thing.");
-    });
-
-    it("creates build subdirectory", () => {
-      writeTaskFile(tmpDir, "auth", "02", "content");
-      const buildDir = path.join(tmpDir, ".crew", "phases", "auth", "build");
-      expect(fs.existsSync(buildDir)).toBe(true);
-    });
-  });
-
   describe("getHandoffPath", () => {
     it("returns correct path for phase handoff", () => {
       const result = getHandoffPath(tmpDir, "auth", "explore");
       expect(result).toBe(path.join(tmpDir, ".crew", "phases", "auth", "explore.md"));
-    });
-  });
-
-  describe("getTaskFilePath", () => {
-    it("returns correct path for task file", () => {
-      const result = getTaskFilePath(tmpDir, "auth", "03");
-      expect(result).toBe(path.join(tmpDir, ".crew", "phases", "auth", "build", "task-03.md"));
     });
   });
 
@@ -208,6 +187,72 @@ describe("handoff", () => {
         const logs = listDispatchLogs(tmpDir);
         expect(logs.length).toBe(1);
         expect(logs[0]).toMatch(/\.md$/);
+      });
+    });
+  });
+
+  describe("findings", () => {
+    describe("writeFinding", () => {
+      it("writes to .crew/findings/<topic>.md", () => {
+        writeFinding(tmpDir, "payment-system", "# Payment System\n\nFound 3 core files.");
+        const filePath = path.join(tmpDir, ".crew", "findings", "payment-system.md");
+        expect(fs.existsSync(filePath)).toBe(true);
+        expect(fs.readFileSync(filePath, "utf-8")).toBe("# Payment System\n\nFound 3 core files.");
+      });
+
+      it("creates findings directory recursively", () => {
+        writeFinding(tmpDir, "auth", "Auth findings");
+        expect(fs.existsSync(path.join(tmpDir, ".crew", "findings"))).toBe(true);
+      });
+
+      it("overwrites existing finding", () => {
+        writeFinding(tmpDir, "auth", "first");
+        writeFinding(tmpDir, "auth", "second");
+        expect(readFinding(tmpDir, "auth")).toBe("second");
+      });
+    });
+
+    describe("readFinding", () => {
+      it("reads existing finding", () => {
+        writeFinding(tmpDir, "auth", "# Auth Findings");
+        expect(readFinding(tmpDir, "auth")).toBe("# Auth Findings");
+      });
+
+      it("returns null for missing finding", () => {
+        expect(readFinding(tmpDir, "nonexistent")).toBeNull();
+      });
+
+      it("returns null when findings dir does not exist", () => {
+        expect(readFinding(tmpDir, "auth")).toBeNull();
+      });
+    });
+
+    describe("listFindings", () => {
+      it("returns empty array when no findings dir", () => {
+        expect(listFindings(tmpDir)).toEqual([]);
+      });
+
+      it("returns topic names without .md extension", () => {
+        writeFinding(tmpDir, "payment-system", "content");
+        writeFinding(tmpDir, "auth-module", "content");
+        const findings = listFindings(tmpDir);
+        expect(findings).toContain("payment-system");
+        expect(findings).toContain("auth-module");
+        expect(findings.length).toBe(2);
+      });
+
+      it("returns sorted topic names", () => {
+        writeFinding(tmpDir, "zebra", "content");
+        writeFinding(tmpDir, "alpha", "content");
+        const findings = listFindings(tmpDir);
+        expect(findings).toEqual(["alpha", "zebra"]);
+      });
+
+      it("filters to only .md files", () => {
+        writeFinding(tmpDir, "auth", "content");
+        const findingsDir = path.join(tmpDir, ".crew", "findings");
+        fs.writeFileSync(path.join(findingsDir, ".gitkeep"), "");
+        expect(listFindings(tmpDir)).toEqual(["auth"]);
       });
     });
   });

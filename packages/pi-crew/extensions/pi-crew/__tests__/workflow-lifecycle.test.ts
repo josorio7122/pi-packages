@@ -5,15 +5,17 @@
  * They verify that the extension hooks (before_agent_start, agent_end) behave
  * correctly at each stage of the workflow.
  *
- * Key finding: The current enforcement is purely advisory — the LLM is told to
- * write state.md but nothing mechanically prevents it from ignoring the instruction.
+ * Enforcement is now mechanical:
+ * - tool_call hook blocks write/edit outside .crew/
+ * - Phase-preset validation blocks wrong presets
+ * - Phase gate blocks missing handoffs
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { readState, readConfig, isWorkflowComplete } from "../state.js";
-import { buildCrewPrompt, buildIdlePrompt, buildActivePrompt, buildNudgeMessage } from "../prompt.js";
+import { buildCrewPrompt, buildNudgeMessage } from "../prompt.js";
 import { formatPresetsForLLM } from "../presets.js";
 
 // ── Test Helpers ────────────────────────────────────────────────────
@@ -32,19 +34,15 @@ function writeStateMd(cwd: string, content: string): void {
   fs.writeFileSync(path.join(crewDir, "state.md"), content, "utf-8");
 }
 
-// Simulate what before_agent_start does
 function simulateBeforeAgentStart(cwd: string): string {
   const config = readConfig(cwd);
   const profile = config.profile || "balanced";
   const overrides = config.overrides || {};
   const presetDocs = formatPresetsForLLM(profile, overrides);
-
   const state = readState(cwd);
-
   return buildCrewPrompt(presetDocs, state);
 }
 
-// Simulate what agent_end does — returns nudge message or null
 function simulateAgentEnd(cwd: string): string | null {
   const state = readState(cwd);
   if (!state || !state.workflow || state.workflow.length === 0) return null;
@@ -65,214 +63,149 @@ describe("workflow lifecycle", () => {
     cleanupDir(tmpDir);
   });
 
-  describe("Stage 1: No state.md (idle mode)", () => {
-    it("injects idle prompt with workflow instructions", () => {
+  describe("Stage 1: No state.md (coordinator idle)", () => {
+    it("injects coordinator prompt with 3 modes", () => {
       const prompt = simulateBeforeAgentStart(tmpDir);
-
-      expect(prompt).toContain("Crew — Agentic Workflow Orchestration");
-      expect(prompt).toContain("dispatch_crew");
-      expect(prompt).toContain("Starting a Workflow");
+      expect(prompt).toContain("Coordinator");
+      expect(prompt).toContain("Just Answer");
+      expect(prompt).toContain("Understand");
+      expect(prompt).toContain("Implement");
     });
 
-    it("idle prompt tells LLM to write .crew/state.md", () => {
+    it("mentions .crew/ workspace", () => {
       const prompt = simulateBeforeAgentStart(tmpDir);
-
       expect(prompt).toContain(".crew/state.md");
-      expect(prompt).toContain("workflow:");
-      expect(prompt).toContain("feature:");
-      expect(prompt).toContain("phase:");
+      expect(prompt).toContain(".crew/findings/");
+      expect(prompt).toContain(".crew/phases/");
     });
 
-    it("idle prompt includes workflow shortcuts", () => {
+    it("mentions dispatch_crew and write/edit blocking", () => {
       const prompt = simulateBeforeAgentStart(tmpDir);
-
-      expect(prompt).toContain("explore,design,plan,build,review,ship");
-      expect(prompt).toContain("explore,plan,build,review,ship");
-      expect(prompt).toContain("explore,build,ship");
-      expect(prompt).toContain("build,ship");
+      expect(prompt).toContain("dispatch_crew");
+      expect(prompt).toContain("write");
+      expect(prompt).toContain("edit");
+      expect(prompt).toContain("blocked");
     });
 
-    it("agent_end does NOT nudge when no state.md exists", () => {
-      const nudge = simulateAgentEnd(tmpDir);
-      expect(nudge).toBeNull();
+    it("includes preset table", () => {
+      const prompt = simulateBeforeAgentStart(tmpDir);
+      expect(prompt).toContain("scout");
+      expect(prompt).toContain("executor");
+    });
+
+    it("does NOT include active workflow section", () => {
+      const prompt = simulateBeforeAgentStart(tmpDir);
+      expect(prompt).not.toContain("Active Workflow");
+    });
+
+    it("agent_end does NOT nudge", () => {
+      expect(simulateAgentEnd(tmpDir)).toBeNull();
     });
   });
 
-  describe("Stage 2: LLM writes state.md (transition to active)", () => {
+  describe("Stage 2: state.md written (transition to active)", () => {
     it("state.md with workflow field activates the workflow", () => {
       writeStateMd(
         tmpDir,
-        "---\nfeature: my-feature\nphase: explore\nworkflow: explore,plan,build,ship\n---\n",
+        "---\nfeature: payments\nphase: explore\nworkflow: explore,plan,build,ship\n---\n",
       );
-
       const state = readState(tmpDir);
       expect(state).not.toBeNull();
-      expect(state!.feature).toBe("my-feature");
+      expect(state!.feature).toBe("payments");
       expect(state!.phase).toBe("explore");
       expect(state!.workflow).toEqual(["explore", "plan", "build", "ship"]);
     });
 
-    it("active prompt includes phase skill content", () => {
+    it("active prompt includes workflow context", () => {
       writeStateMd(
         tmpDir,
-        "---\nfeature: my-feature\nphase: explore\nworkflow: explore,plan,build,ship\n---\n",
+        "---\nfeature: payments\nphase: explore\nworkflow: explore,plan,build,ship\n---\n",
       );
-
       const prompt = simulateBeforeAgentStart(tmpDir);
-
-      // Should be active prompt, not idle
-      expect(prompt).toContain("ACTIVE WORKFLOW");
-      expect(prompt).toContain("my-feature");
-      expect(prompt).toContain("Current Phase: explore");
-      // Should include the explore skill content
-      expect(prompt).toContain("Dispatch scouts");
+      expect(prompt).toContain("Active Workflow");
+      expect(prompt).toContain("payments");
+      expect(prompt).toContain("explore");
     });
 
-    it("active prompt does NOT include idle workflow instructions", () => {
+    it("active prompt shows phase description and allowed presets", () => {
       writeStateMd(
         tmpDir,
-        "---\nfeature: test\nphase: explore\nworkflow: explore,build,ship\n---\n",
+        "---\nfeature: payments\nphase: build\nworkflow: explore,build,ship\n---\n",
       );
-
       const prompt = simulateBeforeAgentStart(tmpDir);
-
-      // Active prompt should NOT have the idle mode content
-      expect(prompt).not.toContain("Mandatory Workflow Gate");
-      expect(prompt).not.toContain("Workflow Shortcuts");
+      expect(prompt).toContain("executor");
+      expect(prompt).toContain("debugger");
     });
 
-    it("active prompt includes progress bar", () => {
+    it("still includes coordinator identity in active mode", () => {
       writeStateMd(
         tmpDir,
-        "---\nfeature: test\nphase: plan\nworkflow: explore,plan,build,ship\n---\n",
+        "---\nfeature: payments\nphase: explore\nworkflow: explore,build,ship\n---\n",
       );
-
       const prompt = simulateBeforeAgentStart(tmpDir);
-
-      // Should show progress: explore ✓ → **plan** → build → ship
-      expect(prompt).toContain("explore ✓");
-      expect(prompt).toContain("**plan**");
+      expect(prompt).toContain("Coordinator");
     });
   });
 
   describe("Stage 3: Nudge on agent_end", () => {
-    it("nudges when workflow is active and NOT on last phase", () => {
+    it("nudges when workflow active and not on last phase", () => {
       writeStateMd(
         tmpDir,
-        "---\nfeature: test\nphase: explore\nworkflow: explore,plan,build,ship\n---\n",
+        "---\nfeature: auth\nphase: explore\nworkflow: explore,build,ship\n---\n",
       );
-
       const nudge = simulateAgentEnd(tmpDir);
       expect(nudge).not.toBeNull();
-      expect(nudge).toContain("Workflow in progress");
+      expect(nudge).toContain("auth");
       expect(nudge).toContain("explore");
+      expect(nudge).toContain("state.md");
     });
 
-    it("does NOT nudge when on the last phase (workflow complete)", () => {
+    it("does NOT nudge on last phase (workflow complete)", () => {
       writeStateMd(
         tmpDir,
-        "---\nfeature: test\nphase: ship\nworkflow: explore,plan,build,ship\n---\n",
+        "---\nfeature: auth\nphase: ship\nworkflow: explore,build,ship\n---\n",
       );
-
-      const nudge = simulateAgentEnd(tmpDir);
-      expect(nudge).toBeNull();
+      expect(simulateAgentEnd(tmpDir)).toBeNull();
     });
 
-    it("does NOT nudge when state.md has no workflow field", () => {
-      writeStateMd(
-        tmpDir,
-        "---\nfeature: test\nphase: explore\n---\n",
-      );
-
-      const nudge = simulateAgentEnd(tmpDir);
-      expect(nudge).toBeNull();
+    it("does NOT nudge without workflow field", () => {
+      writeStateMd(tmpDir, "---\nfeature: auth\nphase: explore\n---\n");
+      expect(simulateAgentEnd(tmpDir)).toBeNull();
     });
   });
 
   describe("Stage 4: Phase transitions", () => {
-    it("updating phase in state.md changes the injected skill", () => {
-      // Start at explore
+    it("changing phase in state.md changes prompt context", () => {
       writeStateMd(
         tmpDir,
-        "---\nfeature: test\nphase: explore\nworkflow: explore,plan,build,ship\n---\n",
+        "---\nfeature: auth\nphase: explore\nworkflow: explore,build,ship\n---\n",
       );
       const prompt1 = simulateBeforeAgentStart(tmpDir);
-      expect(prompt1).toContain("Current Phase: explore");
-      expect(prompt1).toContain("Dispatch scouts");
+      expect(prompt1).toContain("explore");
 
-      // LLM advances to plan
       writeStateMd(
         tmpDir,
-        "---\nfeature: test\nphase: plan\nworkflow: explore,plan,build,ship\n---\n",
+        "---\nfeature: auth\nphase: build\nworkflow: explore,build,ship\n---\n",
       );
       const prompt2 = simulateBeforeAgentStart(tmpDir);
-      expect(prompt2).toContain("Current Phase: plan");
-      // Should NOT contain explore content anymore
-      expect(prompt2).not.toContain("Dispatch scouts");
+      expect(prompt2).toContain("build");
+      expect(prompt2).toContain("executor");
     });
 
     it("isWorkflowComplete reflects phase progression", () => {
-      const phases = ["explore", "plan", "build", "ship"];
-
+      const phases = ["explore", "build", "ship"];
       for (let i = 0; i < phases.length; i++) {
         writeStateMd(
           tmpDir,
-          `---\nfeature: test\nphase: ${phases[i]}\nworkflow: explore,plan,build,ship\n---\n`,
+          `---\nfeature: auth\nphase: ${phases[i]}\nworkflow: explore,build,ship\n---\n`,
         );
         const state = readState(tmpDir)!;
-
         if (i < phases.length - 1) {
           expect(isWorkflowComplete(state)).toBe(false);
         } else {
           expect(isWorkflowComplete(state)).toBe(true);
         }
       }
-    });
-  });
-
-  describe("ENFORCEMENT GAP: LLM ignores state.md instruction", () => {
-    it("if LLM never writes state.md, system stays in idle mode forever", () => {
-      // Simulate 5 turns where LLM never writes state.md
-      for (let turn = 0; turn < 5; turn++) {
-        const prompt = simulateBeforeAgentStart(tmpDir);
-        // Always gets idle prompt — no enforcement mechanism kicks in
-        expect(prompt).toContain("Starting a Workflow");
-        expect(prompt).not.toContain("ACTIVE WORKFLOW");
-
-        const nudge = simulateAgentEnd(tmpDir);
-        // No nudge either — nothing to nudge about
-        expect(nudge).toBeNull();
-      }
-    });
-
-    it("if LLM writes PLAN.md at root instead of .crew/state.md, system sees nothing", () => {
-      // LLM writes plan at root (what actually happened)
-      fs.writeFileSync(
-        path.join(tmpDir, "PLAN.md"),
-        "# Plan\n\n## Tasks\n- Task 1\n- Task 2\n",
-        "utf-8",
-      );
-
-      // System doesn't know about it
-      const state = readState(tmpDir);
-      expect(state).toBeNull();
-
-      const prompt = simulateBeforeAgentStart(tmpDir);
-      expect(prompt).toContain("Starting a Workflow"); // Still idle
-      expect(prompt).not.toContain("ACTIVE WORKFLOW");
-    });
-
-    it("idle prompt contains .crew/state.md guidance but NOT as a tool_use block — it's just text", () => {
-      const prompt = simulateBeforeAgentStart(tmpDir);
-
-      // The instruction to create state.md is plain text in the prompt
-      // It's NOT a structured command or tool call — it's guidance
-      expect(prompt).toContain(".crew/state.md");
-
-      // However, mechanical enforcement now exists:
-      //   - dispatch_crew results always log to .crew/dispatches/
-      //   - phase-preset validation blocks wrong presets for current phase
-      //   - workflow gate blocks multi-agent work without state.md
     });
   });
 });

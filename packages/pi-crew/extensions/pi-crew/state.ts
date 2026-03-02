@@ -46,32 +46,6 @@ export function ensureCrewDir(cwd: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-/**
- * Get the phase directory for a feature.
- * @public
- * @param cwd - Working directory
- * @param feature - Feature name
- * @returns Path to .crew/phases/{feature}
- */
-export function getPhaseDir(cwd: string, feature: string): string {
-  return path.join(crewDir(cwd), PHASES_DIR, feature);
-}
-
-/**
- * List all feature directories.
- * @public
- * @param cwd - Working directory
- * @returns Array of feature names
- */
-export function listFeatures(cwd: string): string[] {
-  const dir = path.join(crewDir(cwd), PHASES_DIR);
-  if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
-}
-
 // ── Config ──────────────────────────────────────────────────────────
 
 /**
@@ -195,26 +169,6 @@ export function isWorkflowComplete(state: CrewState): boolean {
   if (!state.workflow || state.workflow.length === 0) return true;
   if (!state.phase) return false;
   return state.phase === state.workflow[state.workflow.length - 1];
-}
-
-/**
- * Render workflow progress with checkmarks and current phase highlighted.
- * Example: "explore ✓ → design ✓ → **plan** → build → review → ship"
- * @param state - CrewState object
- * @returns Formatted progress string (empty if no workflow)
- */
-export function getWorkflowProgress(state: CrewState): string {
-  if (!state.workflow || state.workflow.length === 0) return "";
-
-  const currentIdx = state.phase ? state.workflow.indexOf(state.phase) : -1;
-
-  return state.workflow
-    .map((phase, idx) => {
-      if (idx < currentIdx) return `${phase} ✓`;
-      if (idx === currentIdx) return `**${phase}**`;
-      return phase;
-    })
-    .join(" → ");
 }
 
 /**

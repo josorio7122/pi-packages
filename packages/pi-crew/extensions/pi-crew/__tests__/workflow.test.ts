@@ -1,15 +1,19 @@
+/**
+ * Workflow integration tests — raw subprocess spawning with extensions loaded.
+ *
+ * These spawn real `pi` processes WITH extensions (so pi-crew hooks fire)
+ * and verify prompt injection, active/idle mode, and phase awareness.
+ *
+ * For tool_call blocking and nudge tests, see e2e.test.ts (SDK-based).
+ * For subprocess primitives (single/parallel/chain), see integration.test.ts.
+ */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-/**
- * Integration tests for workflow enforcement.
- * Spawns real `pi` subprocesses WITH extensions loaded (not --no-extensions)
- * so the pi-crew before_agent_start hook fires and injects the prompt.
- */
-describe("integration: workflow enforcement", () => {
+describe("integration: workflow prompt injection", () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -21,7 +25,7 @@ describe("integration: workflow enforcement", () => {
   });
 
   /**
-   * Spawn pi WITH extensions (so pi-crew loads), parse NDJSON for final assistant text.
+   * Spawn pi WITH extensions, parse NDJSON for final assistant text.
    */
   function runPiWithExtensions(
     task: string,
@@ -102,29 +106,7 @@ describe("integration: workflow enforcement", () => {
     });
   }
 
-  // dispatch_crew tool availability is tested more reliably in e2e.test.ts via SDK
-
-  it("active mode — system prompt includes phase skill when state.md exists", async () => {
-    const crewDir = path.join(tmpDir, ".crew");
-    fs.mkdirSync(crewDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(crewDir, "state.md"),
-      "---\nfeature: test-feature\nphase: explore\nworkflow: explore,build,ship\n---\n",
-    );
-
-    const { exitCode, output } = await runPiWithExtensions(
-      "Your system prompt contains instructions for the explore phase. " +
-        "According to those instructions, how many scouts should you dispatch for a LARGE project (500+ files)? " +
-        'Reply with just the number range, like "3-4".',
-      tmpDir,
-    );
-
-    expect(exitCode).toBe(0);
-    // The explore phase content says "3-4" scouts for 500+ files
-    expect(output).toMatch(/3.?4/);
-  }, 90_000);
-
-  it("active mode — system prompt shows enforcement header with feature name", async () => {
+  it("active mode — prompt includes feature name and current phase", async () => {
     const crewDir = path.join(tmpDir, ".crew");
     fs.mkdirSync(crewDir, { recursive: true });
     fs.writeFileSync(
@@ -133,22 +115,43 @@ describe("integration: workflow enforcement", () => {
     );
 
     const { exitCode, output } = await runPiWithExtensions(
-      "Your system prompt contains an active workflow notice with a feature name. " +
-        "What is the feature name? Reply with just the feature name.",
+      "Your system prompt mentions an active workflow. " +
+        'What is the feature name and current phase? Reply in format "feature: X, phase: Y".',
       tmpDir,
     );
 
     expect(exitCode).toBe(0);
     expect(output).toContain("my-cool-feature");
+    expect(output.toLowerCase()).toContain("build");
   }, 60_000);
 
-  it("idle mode — no enforcement when state.md has no workflow field", async () => {
+  it("active mode — prompt shows allowed presets for current phase", async () => {
+    const crewDir = path.join(tmpDir, ".crew");
+    fs.mkdirSync(crewDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(crewDir, "state.md"),
+      "---\nfeature: auth\nphase: review\nworkflow: build,review,ship\n---\n",
+    );
+
+    const { exitCode, output } = await runPiWithExtensions(
+      "Your system prompt lists the allowed presets for the current review phase. " +
+        "What presets are allowed? Reply with just the preset names separated by commas.",
+      tmpDir,
+    );
+
+    expect(exitCode).toBe(0);
+    const lower = output.toLowerCase();
+    expect(lower).toContain("reviewer");
+    expect(lower).toContain("scout");
+  }, 60_000);
+
+  it("idle mode — no active workflow section when state.md has no workflow field", async () => {
     const crewDir = path.join(tmpDir, ".crew");
     fs.mkdirSync(crewDir, { recursive: true });
     fs.writeFileSync(path.join(crewDir, "state.md"), "---\nfeature: legacy\nphase: build\n---\n");
 
     const { exitCode, output } = await runPiWithExtensions(
-      'Does your system prompt contain the exact text "ACTIVE WORKFLOW"? Reply with exactly "YES" or "NO".',
+      'Does your system prompt contain the text "Active Workflow"? Reply with exactly "YES" or "NO".',
       tmpDir,
     );
 
@@ -156,24 +159,14 @@ describe("integration: workflow enforcement", () => {
     expect(output.toUpperCase()).toContain("NO");
   }, 60_000);
 
-  it("active mode — progress bar shows completed phases", async () => {
-    const crewDir = path.join(tmpDir, ".crew");
-    fs.mkdirSync(crewDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(crewDir, "state.md"),
-      "---\nfeature: auth\nphase: build\nworkflow: explore,design,build,ship\n---\n",
-    );
-
+  it("idle mode — coordinator prompt mentions .crew/ workspace", async () => {
     const { exitCode, output } = await runPiWithExtensions(
-      "Your system prompt shows a workflow progress line. " +
-        "Which phases have a checkmark (✓) next to them? " +
-        "Reply with just the phase names separated by commas.",
+      "Your system prompt mentions a workspace directory. " +
+        'What directory is it? Reply with just the directory path (e.g. ".crew/").',
       tmpDir,
     );
 
     expect(exitCode).toBe(0);
-    const lower = output.toLowerCase();
-    expect(lower).toContain("explore");
-    expect(lower).toContain("design");
+    expect(output).toContain(".crew");
   }, 60_000);
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveModel, isValidProfile, PROFILE_NAMES, PROFILE_DESCRIPTIONS } from "../profiles.js";
+import { resolveModel, isValidProfile, PROFILE_NAMES } from "../profiles.js";
 import type { Tier, ProfileName } from "../profiles.js";
 
 describe("profiles", () => {
@@ -96,12 +96,4 @@ describe("profiles", () => {
     });
   });
 
-  describe("PROFILE_DESCRIPTIONS", () => {
-    it("has a description for each profile", () => {
-      for (const name of PROFILE_NAMES) {
-        expect(PROFILE_DESCRIPTIONS[name]).toBeDefined();
-        expect(PROFILE_DESCRIPTIONS[name].length).toBeGreaterThan(0);
-      }
-    });
-  });
 });

@@ -1,11 +1,13 @@
 /**
- * Tests for phases.ts — phase content constants replacing SKILL.md files.
+ * Tests for phases.ts — phase metadata (allowed presets, auto-advance, handoffs).
+ * Phase content (PHASE_CONTENT) was removed — phases now only carry metadata.
  */
 import { describe, it, expect } from "vitest";
 import {
-  getPhaseContent,
   getPhaseAllowedPresets,
+  getPhaseDescription,
   isPhaseAutoAdvance,
+  getRequiredHandoffs,
   VALID_PHASES,
   type PhaseId,
 } from "../phases.js";
@@ -17,125 +19,55 @@ describe("phases", () => {
     });
 
     it("is readonly", () => {
-      // TypeScript enforces this at compile time, but verify at runtime
       expect(Object.isFrozen(VALID_PHASES)).toBe(true);
     });
   });
 
-  describe("getPhaseContent", () => {
-    it("returns content for explore phase", () => {
-      const content = getPhaseContent("explore");
-      expect(content).not.toBeNull();
-      expect(content).toContain("Explore Phase");
-      expect(content).toContain("Dispatch scouts");
-      expect(content).toContain("Assess Project Size");
-    });
-
-    it("returns content for design phase", () => {
-      const content = getPhaseContent("design");
-      expect(content).not.toBeNull();
-      expect(content).toContain("Design Phase");
-      expect(content).toContain("Lock Decisions");
-      expect(content).toContain("architect");
-    });
-
-    it("returns content for plan phase", () => {
-      const content = getPhaseContent("plan");
-      expect(content).not.toBeNull();
-      expect(content).toContain("Plan Phase");
-      expect(content).toContain("Task Breakdown");
-      expect(content).toContain("Wave");
-    });
-
-    it("returns content for build phase", () => {
-      const content = getPhaseContent("build");
-      expect(content).not.toBeNull();
-      expect(content).toContain("Build Phase");
-      expect(content).toContain("Execute Waves");
-      expect(content).toContain("executor");
-    });
-
-    it("returns content for review phase", () => {
-      const content = getPhaseContent("review");
-      expect(content).not.toBeNull();
-      expect(content).toContain("Review Phase");
-      expect(content).toContain("Three Review Gates");
-      expect(content).toContain("Spec Compliance");
-    });
-
-    it("returns content for ship phase", () => {
-      const content = getPhaseContent("ship");
-      expect(content).not.toBeNull();
-      expect(content).toContain("Ship Phase");
-      expect(content).toContain("PR/MR");
-      expect(content).toContain("Feature Summary");
+  describe("getPhaseDescription", () => {
+    it("returns a short description for each phase", () => {
+      for (const phase of VALID_PHASES) {
+        const desc = getPhaseDescription(phase);
+        expect(desc).not.toBeNull();
+        expect(typeof desc).toBe("string");
+        expect(desc!.length).toBeLessThan(200);
+        expect(desc!.length).toBeGreaterThan(10);
+      }
     });
 
     it("returns null for invalid phase", () => {
-      expect(getPhaseContent("nonexistent")).toBeNull();
-      expect(getPhaseContent("")).toBeNull();
-      expect(getPhaseContent("EXPLORE")).toBeNull();
-    });
-
-    it("content does not contain YAML frontmatter", () => {
-      for (const phase of VALID_PHASES) {
-        const content = getPhaseContent(phase);
-        expect(content).not.toBeNull();
-        expect(content).not.toMatch(/^---\s*\n/);
-        expect(content).not.toContain("name: crew-");
-      }
-    });
-
-    it("every phase content starts with a heading", () => {
-      for (const phase of VALID_PHASES) {
-        const content = getPhaseContent(phase)!;
-        expect(content.trimStart()).toMatch(/^# /);
-      }
-    });
-
-    it("every phase content contains evaluation gate", () => {
-      for (const phase of VALID_PHASES) {
-        const content = getPhaseContent(phase)!;
-        expect(content).toContain("Evaluation Gate");
-      }
+      expect(getPhaseDescription("nonexistent")).toBeNull();
+      expect(getPhaseDescription("")).toBeNull();
     });
   });
 
   describe("getPhaseAllowedPresets", () => {
     it("returns correct presets for explore phase", () => {
-      const presets = getPhaseAllowedPresets("explore");
-      expect(presets).toEqual(["scout", "researcher"]);
+      expect(getPhaseAllowedPresets("explore")).toEqual(["scout", "researcher"]);
     });
 
     it("returns correct presets for design phase", () => {
-      const presets = getPhaseAllowedPresets("design");
-      expect(presets).toEqual(["architect", "researcher", "scout"]);
+      expect(getPhaseAllowedPresets("design")).toEqual(["architect", "researcher", "scout"]);
     });
 
     it("returns correct presets for plan phase", () => {
-      const presets = getPhaseAllowedPresets("plan");
-      expect(presets).toEqual(["scout", "researcher"]);
+      expect(getPhaseAllowedPresets("plan")).toEqual(["scout", "researcher"]);
     });
 
     it("returns correct presets for build phase", () => {
-      const presets = getPhaseAllowedPresets("build");
-      expect(presets).toEqual(["executor", "debugger", "scout"]);
+      expect(getPhaseAllowedPresets("build")).toEqual(["executor", "debugger", "scout"]);
     });
 
     it("returns correct presets for review phase", () => {
-      const presets = getPhaseAllowedPresets("review");
-      expect(presets).toEqual(["reviewer", "scout"]);
+      expect(getPhaseAllowedPresets("review")).toEqual(["reviewer", "scout"]);
     });
 
     it("returns correct presets for ship phase", () => {
-      const presets = getPhaseAllowedPresets("ship");
-      expect(presets).toEqual(["scout", "researcher"]);
+      expect(getPhaseAllowedPresets("ship")).toEqual(["scout", "researcher"]);
     });
 
     it("returns null for invalid phase", () => {
       expect(getPhaseAllowedPresets("nonexistent")).toBeNull();
       expect(getPhaseAllowedPresets("")).toBeNull();
-      expect(getPhaseAllowedPresets("EXPLORE")).toBeNull();
     });
   });
 
@@ -167,7 +99,28 @@ describe("phases", () => {
     it("returns true for unknown phase (default)", () => {
       expect(isPhaseAutoAdvance("nonexistent")).toBe(true);
       expect(isPhaseAutoAdvance("")).toBe(true);
-      expect(isPhaseAutoAdvance("EXPLORE")).toBe(true);
+    });
+  });
+
+  describe("getRequiredHandoffs", () => {
+    it("explore has no dependencies", () => {
+      expect(getRequiredHandoffs("explore", ["explore", "design", "plan", "build", "review", "ship"])).toEqual([]);
+    });
+
+    it("design requires explore", () => {
+      expect(getRequiredHandoffs("design", ["explore", "design", "plan", "build", "review", "ship"])).toEqual(["explore"]);
+    });
+
+    it("build requires plan in full workflow", () => {
+      expect(getRequiredHandoffs("build", ["explore", "design", "plan", "build", "review", "ship"])).toEqual(["plan"]);
+    });
+
+    it("quick workflow: build only requires explore", () => {
+      expect(getRequiredHandoffs("build", ["explore", "build", "ship"])).toEqual(["explore"]);
+    });
+
+    it("minimal workflow: build has no deps (first phase)", () => {
+      expect(getRequiredHandoffs("build", ["build", "ship"])).toEqual([]);
     });
   });
 });

@@ -16,13 +16,7 @@ export function getHandoffPath(cwd: string, feature: string, phase: string): str
   return path.join(cwd, ".crew", "phases", feature, `${phase}.md`);
 }
 
-/**
- * Get the path for a build task file.
- * @returns `.crew/phases/<feature>/build/task-<taskId>.md`
- */
-export function getTaskFilePath(cwd: string, feature: string, taskId: string): string {
-  return path.join(cwd, ".crew", "phases", feature, "build", `task-${taskId}.md`);
-}
+
 
 /**
  * Write a phase handoff file.
@@ -53,16 +47,6 @@ export function readHandoff(cwd: string, feature: string, phase: string): string
  */
 export function handoffExists(cwd: string, feature: string, phase: string): boolean {
   return fs.existsSync(getHandoffPath(cwd, feature, phase));
-}
-
-/**
- * Write a build task file.
- * Creates `.crew/phases/<feature>/build/task-<taskId>.md` with the given content.
- */
-export function writeTaskFile(cwd: string, feature: string, taskId: string, content: string): void {
-  const filePath = getTaskFilePath(cwd, feature, taskId);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, "utf-8");
 }
 
 /**
@@ -107,4 +91,49 @@ export function listDispatchLogs(cwd: string): string[] {
   const dir = path.join(cwd, ".crew", "dispatches");
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort();
+}
+
+// ── Findings ────────────────────────────────────────────────────────
+// Mode 2 (understand) research handoffs — persisted context for reuse.
+
+/**
+ * Write a finding file.
+ * Creates `.crew/findings/<topic>.md` with the given content.
+ * Overwrites if file already exists.
+ *
+ * @param cwd - Working directory
+ * @param topic - Topic slug (used as filename)
+ * @param content - Finding content (markdown)
+ */
+export function writeFinding(cwd: string, topic: string, content: string): void {
+  const dir = path.join(cwd, ".crew", "findings");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${topic}.md`), content, "utf-8");
+}
+
+/**
+ * Read a finding file.
+ * @returns File content, or null if file doesn't exist.
+ */
+export function readFinding(cwd: string, topic: string): string | null {
+  const filePath = path.join(cwd, ".crew", "findings", `${topic}.md`);
+  try {
+    return fs.readFileSync(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * List all finding topics.
+ * @returns Array of topic names (without .md extension), sorted alphabetically.
+ */
+export function listFindings(cwd: string): string[] {
+  const dir = path.join(cwd, ".crew", "findings");
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => f.replace(/\.md$/, ""))
+    .sort();
 }

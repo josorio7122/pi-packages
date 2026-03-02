@@ -31,12 +31,6 @@ const PROFILES: Record<ProfileName, ModelProfile> = {
 
 export const PROFILE_NAMES: ProfileName[] = ["quality", "balanced", "budget"];
 
-export const PROFILE_DESCRIPTIONS: Record<ProfileName, string> = {
-  quality: "Critical features, production code, complex architecture ($$$)",
-  balanced: "General development — default ($$)",
-  budget: "Exploration, prototyping, documentation ($)",
-};
-
 /**
  * Resolve model ID for a preset + profile combination.
  * Priority: per-agent override > profile tier mapping.
