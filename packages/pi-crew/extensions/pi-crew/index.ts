@@ -25,6 +25,7 @@ import {
 } from "./rendering.js";
 import { buildCrewPrompt, buildNudgeMessage } from "./prompt.js";
 import { shouldRequireWorkflow, buildWorkflowGateMessage } from "./enforcement.js";
+import { writeHandoff } from "./handoff.js";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -662,25 +663,43 @@ export default function piCrew(pi: ExtensionAPI) {
       }
 
       // ── Dispatch to mode handler ────────────────────────────
+      let result: {
+        content: Array<{ type: string; text?: string }>;
+        details: CrewDispatchDetails | undefined;
+        isError?: boolean;
+      };
+
       if (hasSingle) {
-        return executeSingleMode(
+        result = await executeSingleMode(
           params.preset!, params.task!, params, profile, overrides, ctx.cwd, signal, onUpdate,
         );
+      } else if (hasTasks) {
+        result = await executeParallelMode(params.tasks!, profile, overrides, ctx.cwd, signal, onUpdate);
+      } else if (hasChain) {
+        result = await executeChainMode(params.chain!, profile, overrides, ctx.cwd, signal, onUpdate);
+      } else {
+        return {
+          content: [{ type: "text", text: "Internal error: no mode matched." }],
+          details: undefined,
+          isError: true,
+        };
       }
 
-      if (hasTasks) {
-        return executeParallelMode(params.tasks!, profile, overrides, ctx.cwd, signal, onUpdate);
+      // ── Auto-capture handoff to .crew/ ──────────────────────
+      if (!result.isError && hasActiveWorkflow) {
+        const state = readState(ctx.cwd);
+        if (state?.feature && state.phase) {
+          const output = result.content
+            .filter((c): c is { type: "text"; text: string } => c.type === "text")
+            .map((c) => c.text)
+            .join("\n\n");
+          if (output.trim()) {
+            writeHandoff(ctx.cwd, state.feature, state.phase, output);
+          }
+        }
       }
 
-      if (hasChain) {
-        return executeChainMode(params.chain!, profile, overrides, ctx.cwd, signal, onUpdate);
-      }
-
-      return {
-        content: [{ type: "text", text: "Internal error: no mode matched." }],
-        details: undefined,
-        isError: true,
-      };
+      return result;
     },
 
     renderCall(args: Static<typeof DispatchCrewParams>, theme: Theme) {
