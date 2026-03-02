@@ -63,7 +63,27 @@ The enforcement patterns that work (tilldone.ts `tool_call` gate, agent-team.ts 
 
 ---
 
-## Plan: 7 Waves, 19 Tasks
+## Plan: 8 Waves, 20 Tasks
+
+### Wave 0 — Fix Subprocess Retry Logic
+
+**Task 0.1: Broaden retry to cover all transient subprocess crashes**
+- Current: `runSingleAgent()` in `spawn.ts` only retries on `isLockFileError()` (matches "Lock file is already being held")
+- Bug: "No API key found for anthropic" is a transient startup failure (race condition reading auth.json while another pi instance holds the lock) — this is NOT caught by `isLockFileError()`, so the agent silently fails with no retry
+- Fix: Rename `isLockFileError()` → `isTransientSpawnError()` and broaden to match multiple transient patterns:
+  ```typescript
+  export function isTransientSpawnError(stderr: string): boolean {
+    return (
+      stderr.includes("Lock file is already being held") ||
+      stderr.includes("No API key found for") ||
+      stderr.includes("ENOENT") // pi binary not found transiently
+    );
+  }
+  ```
+- Update `runSingleAgent()` to use `isTransientSpawnError()` instead of `isLockFileError()`
+- Update `lock-retry.test.ts`: rename tests, add test case for "No API key" pattern triggering retry
+- Verify: existing lock retry tests still pass with renamed function
+- Effort: Small
 
 ### Wave 1 — Create Phase Content Module (Replace Skills)
 
@@ -237,13 +257,14 @@ The enforcement patterns that work (tilldone.ts `tool_call` gate, agent-team.ts 
 ## Execution Order & Dependencies
 
 ```
-Wave 1 (Phase Module) ─→ Wave 2 (Auto-Capture) ─→ Wave 3 (Phase Gate) ─→ Wave 4 (State Auto-Management)
-                                                                                    ↓
-Wave 5 (Cleanup) ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ┘
+Wave 0 (Retry Fix) ─→ Wave 1 (Phase Module) ─→ Wave 2 (Auto-Capture) ─→ Wave 3 (Phase Gate) ─→ Wave 4 (State Auto-Management)
+                                                                                                          ↓
+Wave 5 (Cleanup) ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ┘
      ↓
 Wave 6 (Tests) ─→ Wave 7 (Docs & Install)
 ```
 
+Wave 0 is independent (spawn fix, no deps).
 Waves 1-4 are sequential (each builds on previous).
 Wave 5 can start after Wave 4 (cleanup depends on new code being in place).
 Wave 6 depends on Wave 5 (tests must reflect final code state).
@@ -253,6 +274,7 @@ Wave 7 is last (documentation reflects final state).
 
 | Wave | Tasks | Effort | Lines Changed |
 |------|-------|--------|---------------|
+| 0 — Retry Fix | 1 | 30 min | ~20 modified |
 | 1 — Phase Module | 3 | 1-2 hours | ~200 new, ~50 modified |
 | 2 — Auto-Capture | 2 | 2 hours | ~150 new, ~30 modified |
 | 3 — Phase Gate | 2 | 1-2 hours | ~100 new, ~20 modified |
@@ -260,7 +282,7 @@ Wave 7 is last (documentation reflects final state).
 | 5 — Cleanup | 4 | 30 min | ~850 deleted |
 | 6 — Tests | 4 | 2 hours | ~200 modified |
 | 7 — Docs | 3 | 30 min | ~50 modified |
-| **Total** | **19** | **~9-11 hours** | **~530 new, ~1020 deleted/modified** |
+| **Total** | **20** | **~9-11 hours** | **~550 new, ~1040 deleted/modified** |
 
 ## Risk Mitigation
 
