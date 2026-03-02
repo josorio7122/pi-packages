@@ -55,29 +55,431 @@ const MAX_CONCURRENT = Math.min(
 );
 const MAX_PARALLEL_TASKS = 8;
 
+/** Max characters for task preview in chain mode state. */
+const TASK_PREVIEW_LENGTH = 200;
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
 /** Extract a human-readable message from an unknown error value. */
 function extractErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/**
+ * Create a 1-second interval timer that updates agent elapsed time and emits a render update.
+ * Returns a cleanup function to clear the interval.
+ */
+function startAgentTimer(
+  agent: AgentRenderState,
+  startTime: number,
+  emitUpdate: () => void,
+): () => void {
+  const timer = setInterval(() => {
+    agent.elapsedMs = Date.now() - startTime;
+    emitUpdate();
+  }, 1000);
+  return () => clearInterval(timer);
+}
+
+/** Resolve cwd to an absolute path. */
+function resolveAbsoluteCwd(cwd: string | undefined, fallback: string): string {
+  if (!cwd) return fallback;
+  return path.isAbsolute(cwd) ? cwd : path.resolve(fallback, cwd);
+}
+
+// ── Tool Result Type ────────────────────────────────────────────────
+
+interface ToolResult {
+  content: Array<{ type: "text"; text: string }>;
+  details: CrewDispatchDetails | undefined;
+  isError?: boolean;
+}
+
+// ── Resolve One Preset ──────────────────────────────────────────────
+
+type ResolveResult =
+  | { resolved: SpawnParams; error: null }
+  | { resolved: null; error: string };
+
+function resolveOne(
+  presetName: string,
+  task: string,
+  opts: { cwd?: string; model?: string; tools?: string; thinking?: string },
+  profile: string,
+  overrides: Record<string, string>,
+  defaultCwd: string,
+): ResolveResult {
+  const resolved = resolvePreset(presetName, profile, overrides, packageRoot);
+  if (!resolved) {
+    return {
+      resolved: null,
+      error: `Unknown preset "${presetName}". Available: ${getPresetNames().join(", ")}`,
+    };
+  }
+  return {
+    error: null,
+    resolved: {
+      task,
+      systemPrompt: resolved.systemPrompt,
+      tools: opts.tools || resolved.tools,
+      model: opts.model || resolved.model,
+      cwd: resolveAbsoluteCwd(opts.cwd, defaultCwd),
+      thinking: opts.thinking,
+    },
+  };
+}
+
+// ── Build Agent States ──────────────────────────────────────────────
+
+function buildAgentStates(
+  items: Array<{ preset: string; task: string; model: string }>,
+  initialStatus: AgentRenderState["status"] = "running",
+): AgentRenderState[] {
+  const instanceCounters = new Map<string, number>();
+  return items.map((item) => {
+    const count = (instanceCounters.get(item.preset) || 0) + 1;
+    instanceCounters.set(item.preset, count);
+    return {
+      preset: item.preset,
+      instance: count,
+      task: item.task,
+      status: initialStatus,
+      elapsedMs: 0,
+      exitCode: -1,
+      messages: [],
+      stderr: undefined,
+      errorMessage: undefined,
+      usage: emptyUsage(),
+      model: item.model,
+    };
+  });
+}
+
+// ── Emit Update Helper ──────────────────────────────────────────────
+
+function createEmitUpdate(
+  mode: "single" | "parallel" | "chain",
+  agents: AgentRenderState[],
+  onUpdate: AgentToolUpdateCallback<CrewDispatchDetails> | undefined,
+): (contentText?: string) => void {
+  return (contentText = "(running...)") => {
+    if (onUpdate) {
+      onUpdate({
+        content: [{ type: "text" as const, text: contentText }],
+        details: { mode, agents } as CrewDispatchDetails,
+      });
+    }
+  };
+}
+
+// ── Update Agent From Result ────────────────────────────────────────
+
+function applyAgentResult(
+  agent: AgentRenderState,
+  result: { exitCode: number; messages: unknown[]; usage: ReturnType<typeof emptyUsage>; stderr: string; errorMessage?: string; stopReason?: string },
+  startTime: number,
+): void {
+  agent.status = result.exitCode === 0 ? "done" : "error";
+  agent.exitCode = result.exitCode;
+  agent.messages = result.messages as AgentRenderState["messages"];
+  agent.usage = result.usage;
+  agent.elapsedMs = Date.now() - startTime;
+  agent.stderr = result.stderr || undefined;
+  agent.errorMessage = result.errorMessage || undefined;
+}
+
+function isAgentError(result: { exitCode: number; stopReason?: string }): boolean {
+  return (
+    result.exitCode !== 0 ||
+    result.stopReason === "error" ||
+    result.stopReason === "aborted"
+  );
+}
+
+// ── Single Mode ─────────────────────────────────────────────────────
+
+async function executeSingleMode(
+  preset: string,
+  task: string,
+  opts: { cwd?: string; model?: string; tools?: string; thinking?: string },
+  profile: string,
+  overrides: Record<string, string>,
+  defaultCwd: string,
+  signal: AbortSignal,
+  onUpdate: AgentToolUpdateCallback<CrewDispatchDetails> | undefined,
+): Promise<ToolResult> {
+  const r = resolveOne(preset, task, opts, profile, overrides, defaultCwd);
+  if (r.error !== null) {
+    return { content: [{ type: "text", text: r.error }], details: undefined, isError: true };
+  }
+  const spawnParams = r.resolved;
+
+  const agents = buildAgentStates([{ preset, task, model: spawnParams.model }]);
+  const emitUpdate = createEmitUpdate("single", agents, onUpdate);
+  const startTime = Date.now();
+  const stopTimer = startAgentTimer(agents[0], startTime, () =>
+    emitUpdate(getFinalOutput(agents[0].messages) || "(running...)"),
+  );
+
+  try {
+    const result = await runSingleAgent(spawnParams, defaultCwd, signal, (update) => {
+      agents[0].messages = update.messages;
+      agents[0].usage = update.usage;
+      agents[0].elapsedMs = Date.now() - startTime;
+      emitUpdate(getFinalOutput(update.messages) || "(running...)");
+    });
+
+    stopTimer();
+    applyAgentResult(agents[0], result, startTime);
+
+    const output = getFinalOutput(result.messages) || "(no output)";
+    return {
+      content: [{ type: "text", text: output }],
+      details: { mode: "single", agents } as CrewDispatchDetails,
+      isError: isAgentError(result),
+    };
+  } catch (e: unknown) {
+    stopTimer();
+    agents[0].status = "error";
+    agents[0].exitCode = 1;
+    agents[0].elapsedMs = Date.now() - startTime;
+    const errorMessage = extractErrorMessage(e);
+    agents[0].errorMessage = errorMessage;
+    return {
+      content: [{ type: "text", text: `Agent aborted: ${errorMessage}` }],
+      details: { mode: "single", agents } as CrewDispatchDetails,
+      isError: true,
+    };
+  }
+}
+
+// ── Parallel Mode ───────────────────────────────────────────────────
+
+interface TaskInput {
+  preset: string;
+  task: string;
+  cwd?: string;
+  model?: string;
+  tools?: string;
+  thinking?: string;
+}
+
+async function executeParallelMode(
+  tasks: TaskInput[],
+  profile: string,
+  overrides: Record<string, string>,
+  defaultCwd: string,
+  signal: AbortSignal,
+  onUpdate: AgentToolUpdateCallback<CrewDispatchDetails> | undefined,
+): Promise<ToolResult> {
+  if (tasks.length > MAX_PARALLEL_TASKS) {
+    return {
+      content: [{ type: "text", text: `Too many parallel tasks (${tasks.length}). Max is ${MAX_PARALLEL_TASKS}.` }],
+      details: undefined,
+      isError: true,
+    };
+  }
+
+  // Resolve all presets
+  const spawnItems: Array<{ spawnParams: SpawnParams; preset: string; task: string; model: string }> = [];
+  for (const t of tasks) {
+    const r = resolveOne(t.preset, t.task, t, profile, overrides, defaultCwd);
+    if (r.error !== null) {
+      return { content: [{ type: "text", text: r.error }], details: undefined, isError: true };
+    }
+    spawnItems.push({ spawnParams: r.resolved, preset: t.preset, task: t.task, model: r.resolved.model });
+  }
+
+  const agents = buildAgentStates(spawnItems.map((s) => ({ preset: s.preset, task: s.task, model: s.model })));
+  const emitUpdate = createEmitUpdate("parallel", agents, onUpdate);
+  const startTimes = new Array<number>(agents.length).fill(0);
+
+  const stopTimer = (() => {
+    const timer = setInterval(() => {
+      for (let i = 0; i < agents.length; i++) {
+        if (agents[i].status === "running" && startTimes[i] > 0) {
+          agents[i].elapsedMs = Date.now() - startTimes[i];
+        }
+      }
+      emitUpdate();
+    }, 1000);
+    return () => clearInterval(timer);
+  })();
+
+  try {
+    await mapWithConcurrencyLimit(spawnItems, MAX_CONCURRENT, async (item, idx) => {
+      startTimes[idx] = Date.now();
+      const result = await runSingleAgent(item.spawnParams, defaultCwd, signal, (update) => {
+        agents[idx].messages = update.messages;
+        agents[idx].usage = update.usage;
+        agents[idx].elapsedMs = Date.now() - startTimes[idx];
+        emitUpdate();
+      });
+      applyAgentResult(agents[idx], result, startTimes[idx]);
+      emitUpdate();
+    });
+
+    stopTimer();
+    return buildParallelResult(agents);
+  } catch (e: unknown) {
+    stopTimer();
+    return {
+      content: [{ type: "text", text: `Parallel dispatch error: ${extractErrorMessage(e)}` }],
+      details: { mode: "parallel", agents } as CrewDispatchDetails,
+      isError: true,
+    };
+  }
+}
+
+/** Format parallel results for LLM consumption. */
+function buildParallelResult(agents: AgentRenderState[]): ToolResult {
+  const presetCounts = new Map<string, number>();
+  for (const a of agents) presetCounts.set(a.preset, (presetCounts.get(a.preset) || 0) + 1);
+
+  let outputText = "";
+  for (const agent of agents) {
+    const showNum = (presetCounts.get(agent.preset) || 0) > 1;
+    const label =
+      agent.preset.charAt(0).toUpperCase() +
+      agent.preset.slice(1) +
+      (showNum ? ` #${agent.instance}` : "");
+    const prefix = agent.status === "error" ? "[ERROR] " : "";
+    let agentOutput = getFinalOutput(agent.messages) || "(no output)";
+    if (agent.status === "error") {
+      if (agent.errorMessage) agentOutput += `\nError: ${agent.errorMessage}`;
+      if (agent.stderr) agentOutput += `\nStderr: ${agent.stderr.split("\n").slice(0, 5).join("\n")}`;
+    }
+    outputText += `## ${prefix}${label}: ${agent.task}\n${agentOutput}\n\n`;
+  }
+
+  return {
+    content: [{ type: "text", text: outputText.trim() }],
+    details: { mode: "parallel", agents } as CrewDispatchDetails,
+    isError: agents.every((a) => a.status === "error"),
+  };
+}
+
+// ── Chain Mode ──────────────────────────────────────────────────────
+
+interface ChainInput {
+  preset: string;
+  task: string;
+  cwd?: string;
+  model?: string;
+  tools?: string;
+  thinking?: string;
+}
+
+async function executeChainMode(
+  chain: ChainInput[],
+  profile: string,
+  overrides: Record<string, string>,
+  defaultCwd: string,
+  signal: AbortSignal,
+  onUpdate: AgentToolUpdateCallback<CrewDispatchDetails> | undefined,
+): Promise<ToolResult> {
+  const agents = buildAgentStates(
+    chain.map((step) => {
+      const preset = getPreset(step.preset);
+      const model = preset
+        ? step.model || resolvePreset(step.preset, profile, overrides, packageRoot)?.model || ""
+        : "";
+      return { preset: step.preset, task: step.task, model };
+    }),
+    "queued",
+  );
+
+  const emitUpdate = createEmitUpdate("chain", agents, onUpdate);
+  let previousOutput = "";
+
+  for (let i = 0; i < chain.length; i++) {
+    const step = chain[i];
+    agents[i].status = "running";
+
+    // Replace {previous} with prior agent output
+    const task = step.task.replace(/\{previous\}/g, previousOutput);
+
+    const r = resolveOne(step.preset, task, step, profile, overrides, defaultCwd);
+    if (r.error !== null) {
+      agents[i].status = "error";
+      agents[i].exitCode = 1;
+      return {
+        content: [{ type: "text", text: r.error }],
+        details: { mode: "chain", agents } as CrewDispatchDetails,
+        isError: true,
+      };
+    }
+    const spawnParams = r.resolved;
+
+    // Update task with substituted text
+    agents[i].task = task.length > TASK_PREVIEW_LENGTH ? task.slice(0, TASK_PREVIEW_LENGTH - 3) + "..." : task;
+    agents[i].model = spawnParams.model;
+
+    const startTime = Date.now();
+    const stopTimer = startAgentTimer(agents[i], startTime, emitUpdate);
+
+    try {
+      const result = await runSingleAgent(spawnParams, defaultCwd, signal, (update) => {
+        agents[i].messages = update.messages;
+        agents[i].usage = update.usage;
+        agents[i].elapsedMs = Date.now() - startTime;
+        emitUpdate();
+      });
+
+      stopTimer();
+      applyAgentResult(agents[i], result, startTime);
+
+      if (isAgentError(result)) {
+        return buildChainErrorResult(agents, i, chain.length, getFinalOutput(result.messages) || "(error — no output)", "stopped");
+      }
+
+      previousOutput = getFinalOutput(result.messages);
+    } catch (e: unknown) {
+      stopTimer();
+      agents[i].status = "error";
+      agents[i].exitCode = 1;
+      agents[i].elapsedMs = Date.now() - startTime;
+      agents[i].errorMessage = extractErrorMessage(e);
+      return buildChainErrorResult(agents, i, chain.length, extractErrorMessage(e), "aborted");
+    }
+  }
+
+  return {
+    content: [{ type: "text", text: previousOutput || "(no output)" }],
+    details: { mode: "chain", agents } as CrewDispatchDetails,
+  };
+}
+
+/** Build error result for chain mode with completed step summaries. */
+function buildChainErrorResult(
+  agents: AgentRenderState[],
+  failedIndex: number,
+  totalSteps: number,
+  errorText: string,
+  verb: "stopped" | "aborted",
+): ToolResult {
+  let errorContent = `Chain ${verb} at step ${failedIndex + 1}/${totalSteps}: ${errorText}`;
+  if (failedIndex > 0) {
+    errorContent += "\n\nCompleted steps:";
+    for (let j = 0; j < failedIndex; j++) {
+      const stepOutput = getFinalOutput(agents[j].messages);
+      const preview = stepOutput.split("\n").slice(0, 3).join("\n");
+      errorContent += `\n\n## Step ${j + 1} (${agents[j].preset}):\n${preview}`;
+      if (stepOutput.split("\n").length > 3) errorContent += "\n...";
+    }
+  }
+  return {
+    content: [{ type: "text", text: errorContent }],
+    details: { mode: "chain", agents } as CrewDispatchDetails,
+    isError: true,
+  };
+}
+
 // ── Tool Schema ─────────────────────────────────────────────────────
 
-const TaskItem = Type.Object({
+const AgentTaskSchema = Type.Object({
   preset: Type.String({ description: "Agent preset name" }),
-  task: Type.String({ description: "Task instructions" }),
-  cwd: Type.Optional(Type.String({ description: "Working directory for the agent" })),
-  model: Type.Optional(Type.String({ description: "Override the preset's model" })),
-  tools: Type.Optional(Type.String({ description: "Override the preset's tools" })),
-  thinking: Type.Optional(
-    Type.String({ description: "Thinking level: off, minimal, low, medium, high, xhigh" }),
-  ),
-});
-
-const ChainItem = Type.Object({
-  preset: Type.String({ description: "Agent preset name" }),
-  task: Type.String({
-    description: "Task instructions. Use {previous} to reference prior agent's output.",
-  }),
+  task: Type.String({ description: "Task instructions. Use {previous} in chain mode to reference prior agent's output." }),
   cwd: Type.Optional(Type.String({ description: "Working directory for the agent" })),
   model: Type.Optional(Type.String({ description: "Override the preset's model" })),
   tools: Type.Optional(Type.String({ description: "Override the preset's tools" })),
@@ -116,11 +518,11 @@ const DispatchCrewParams = Type.Object({
   ),
   // Parallel mode
   tasks: Type.Optional(
-    Type.Array(TaskItem, { description: "Array of {preset, task} for parallel execution" }),
+    Type.Array(AgentTaskSchema, { description: "Array of {preset, task} for parallel execution" }),
   ),
   // Chain mode
   chain: Type.Optional(
-    Type.Array(ChainItem, {
+    Type.Array(AgentTaskSchema, {
       description: "Array of {preset, task} for sequential execution with {previous} placeholder",
     }),
   ),
@@ -239,374 +641,21 @@ export default function piCrew(pi: ExtensionAPI) {
         };
       }
 
-      // ── Helper: resolve a single preset to SpawnParams ──────
-      const resolveOne = (
-        presetName: string,
-        task: string,
-        opts: { cwd?: string; model?: string; tools?: string; thinking?: string },
-      ): { resolved: SpawnParams; error: null } | { resolved: null; error: string } => {
-        const resolved = resolvePreset(presetName, profile, overrides, packageRoot);
-        if (!resolved) {
-          return {
-            resolved: null,
-            error: `Unknown preset "${presetName}". Available: ${getPresetNames().join(", ")}`,
-          };
-        }
-        return {
-          error: null,
-          resolved: {
-            task,
-            systemPrompt: resolved.systemPrompt,
-            tools: opts.tools || resolved.tools,
-            model: opts.model || resolved.model,
-            cwd: opts.cwd || params.cwd || ctx.cwd,
-            thinking: opts.thinking,
-          },
-        };
-      };
-
-      // ── Helper: build AgentRenderState[] ────────────────────
-      const buildAgentStates = (
-        items: Array<{ preset: string; task: string; model: string }>,
-      ): AgentRenderState[] => {
-        // Count instances per preset for numbering
-        const instanceCounters = new Map<string, number>();
-        return items.map((item) => {
-          const count = (instanceCounters.get(item.preset) || 0) + 1;
-          instanceCounters.set(item.preset, count);
-          return {
-            preset: item.preset,
-            instance: count,
-            task: item.task,
-            status: "running" as const,
-            elapsedMs: 0,
-            exitCode: -1,
-            messages: [],
-            stderr: undefined,
-            errorMessage: undefined,
-            usage: emptyUsage(),
-            model: item.model,
-          };
-        });
-      };
-
-      // ── Helper: emit update ─────────────────────────────────
-      const emitUpdate = (
-        mode: "single" | "parallel" | "chain",
-        agents: AgentRenderState[],
-        contentText: string,
-      ) => {
-        if (onUpdate) {
-          onUpdate({
-            content: [{ type: "text" as const, text: contentText }],
-            details: { mode, agents } as CrewDispatchDetails,
-          });
-        }
-      };
-
-      // ── SINGLE MODE ─────────────────────────────────────────
+      // ── Dispatch to mode handler ────────────────────────────
       if (hasSingle) {
-        const r = resolveOne(params.preset!, params.task!, params);
-        if (r.error) {
-          return { content: [{ type: "text", text: r.error }], details: undefined, isError: true };
-        }
-
-        const agents = buildAgentStates([
-          { preset: params.preset!, task: params.task!, model: r.resolved!.model },
-        ]);
-        const startTime = Date.now();
-
-        // Timer for elapsed time refresh
-        const timer = setInterval(() => {
-          agents[0].elapsedMs = Date.now() - startTime;
-          emitUpdate("single", agents, getFinalOutput(agents[0].messages) || "(running...)");
-        }, 1000);
-
-        try {
-          const result = await runSingleAgent(r.resolved!, ctx.cwd, signal, (update) => {
-            agents[0].messages = update.messages;
-            agents[0].usage = update.usage;
-            agents[0].elapsedMs = Date.now() - startTime;
-            emitUpdate("single", agents, getFinalOutput(update.messages) || "(running...)");
-          });
-
-          clearInterval(timer);
-          agents[0].status = result.exitCode === 0 ? "done" : "error";
-          agents[0].exitCode = result.exitCode;
-          agents[0].messages = result.messages;
-          agents[0].usage = result.usage;
-          agents[0].elapsedMs = Date.now() - startTime;
-          agents[0].stderr = result.stderr || undefined;
-          agents[0].errorMessage = result.errorMessage || undefined;
-
-          const output = getFinalOutput(result.messages) || "(no output)";
-          const isError =
-            result.exitCode !== 0 ||
-            result.stopReason === "error" ||
-            result.stopReason === "aborted";
-
-          return {
-            content: [{ type: "text", text: output }],
-            details: { mode: "single", agents } as CrewDispatchDetails,
-            isError,
-          };
-        } catch (e: unknown) {
-          clearInterval(timer);
-          agents[0].status = "error";
-          agents[0].exitCode = 1;
-          agents[0].elapsedMs = Date.now() - startTime;
-          const errorMessage = extractErrorMessage(e);
-          agents[0].errorMessage = errorMessage;
-          return {
-            content: [{ type: "text", text: `Agent aborted: ${errorMessage}` }],
-            details: { mode: "single", agents } as CrewDispatchDetails,
-            isError: true,
-          };
-        }
+        return executeSingleMode(
+          params.preset!, params.task!, params, profile, overrides, ctx.cwd, signal, onUpdate,
+        );
       }
 
-      // ── PARALLEL MODE ───────────────────────────────────────
       if (hasTasks) {
-        if (params.tasks!.length > MAX_PARALLEL_TASKS) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Too many parallel tasks (${params.tasks!.length}). Max is ${MAX_PARALLEL_TASKS}.`,
-              },
-            ],
-            details: undefined,
-            isError: true,
-          };
-        }
-
-        // Resolve all presets first
-        const spawnItems: Array<{
-          spawnParams: SpawnParams;
-          preset: string;
-          task: string;
-          model: string;
-        }> = [];
-        for (const t of params.tasks!) {
-          const r = resolveOne(t.preset, t.task, t);
-          if (r.error) {
-            return {
-              content: [{ type: "text", text: r.error }],
-              details: undefined,
-              isError: true,
-            };
-          }
-          spawnItems.push({
-            spawnParams: r.resolved!,
-            preset: t.preset,
-            task: t.task,
-            model: r.resolved!.model,
-          });
-        }
-
-        const agents = buildAgentStates(
-          spawnItems.map((s) => ({ preset: s.preset, task: s.task, model: s.model })),
-        );
-        const startTimes = new Array(agents.length).fill(0);
-
-        // Timer for elapsed time refresh
-        const timer = setInterval(() => {
-          for (let i = 0; i < agents.length; i++) {
-            if (agents[i].status === "running" && startTimes[i] > 0) {
-              agents[i].elapsedMs = Date.now() - startTimes[i];
-            }
-          }
-          emitUpdate("parallel", agents, "(running...)");
-        }, 1000);
-
-        try {
-          await mapWithConcurrencyLimit(spawnItems, MAX_CONCURRENT, async (item, idx) => {
-            startTimes[idx] = Date.now();
-
-            const result = await runSingleAgent(item.spawnParams, ctx.cwd, signal, (update) => {
-              agents[idx].messages = update.messages;
-              agents[idx].usage = update.usage;
-              agents[idx].elapsedMs = Date.now() - startTimes[idx];
-              emitUpdate("parallel", agents, "(running...)");
-            });
-
-            agents[idx].status = result.exitCode === 0 ? "done" : "error";
-            agents[idx].exitCode = result.exitCode;
-            agents[idx].messages = result.messages;
-            agents[idx].usage = result.usage;
-            agents[idx].elapsedMs = Date.now() - startTimes[idx];
-            agents[idx].stderr = result.stderr || undefined;
-            agents[idx].errorMessage = result.errorMessage || undefined;
-            emitUpdate("parallel", agents, "(running...)");
-          });
-
-          clearInterval(timer);
-
-          // Build formatted output for LLM
-          const presetCounts = new Map<string, number>();
-          for (const a of agents) presetCounts.set(a.preset, (presetCounts.get(a.preset) || 0) + 1);
-
-          let outputText = "";
-          for (const agent of agents) {
-            const showNum = (presetCounts.get(agent.preset) || 0) > 1;
-            const label =
-              agent.preset.charAt(0).toUpperCase() +
-              agent.preset.slice(1) +
-              (showNum ? ` #${agent.instance}` : "");
-            const prefix = agent.status === "error" ? "[ERROR] " : "";
-            let agentOutput = getFinalOutput(agent.messages) || "(no output)";
-            if (agent.status === "error") {
-              if (agent.errorMessage) agentOutput += `\nError: ${agent.errorMessage}`;
-              if (agent.stderr)
-                agentOutput += `\nStderr: ${agent.stderr.split("\n").slice(0, 5).join("\n")}`;
-            }
-            outputText += `## ${prefix}${label}: ${agent.task}\n${agentOutput}\n\n`;
-          }
-
-          const allFailed = agents.every((a) => a.status === "error");
-
-          return {
-            content: [{ type: "text", text: outputText.trim() }],
-            details: { mode: "parallel", agents } as CrewDispatchDetails,
-            isError: allFailed,
-          };
-        } catch (e: unknown) {
-          clearInterval(timer);
-          const errorMessage = extractErrorMessage(e);
-          return {
-            content: [{ type: "text", text: `Parallel dispatch error: ${errorMessage}` }],
-            details: { mode: "parallel", agents } as CrewDispatchDetails,
-            isError: true,
-          };
-        }
+        return executeParallelMode(params.tasks!, profile, overrides, ctx.cwd, signal, onUpdate);
       }
 
-      // ── CHAIN MODE ──────────────────────────────────────────
       if (hasChain) {
-        const agents = buildAgentStates(
-          params.chain!.map((step) => {
-            const preset = getPreset(step.preset);
-            const model = preset
-              ? step.model ||
-                resolvePreset(step.preset, profile, overrides, packageRoot)?.model ||
-                ""
-              : "";
-            return { preset: step.preset, task: step.task, model };
-          }),
-        );
-
-        // In chain mode, all agents start as "queued" — they run sequentially
-        for (const agent of agents) {
-          agent.status = "queued";
-        }
-
-        let previousOutput = "";
-
-        for (let i = 0; i < params.chain!.length; i++) {
-          const step = params.chain![i];
-          agents[i].status = "running";
-
-          // Replace {previous} with prior agent output
-          const task = step.task.replace(/\{previous\}/g, previousOutput);
-
-          const r = resolveOne(step.preset, task, step);
-          if (r.error) {
-            agents[i].status = "error";
-            agents[i].exitCode = 1;
-            return {
-              content: [{ type: "text", text: r.error }],
-              details: { mode: "chain", agents } as CrewDispatchDetails,
-              isError: true,
-            };
-          }
-
-          // Update task with substituted text
-          agents[i].task = task.length > 200 ? task.slice(0, 197) + "..." : task;
-          agents[i].model = r.resolved!.model;
-
-          const startTime = Date.now();
-
-          // Timer for elapsed time refresh
-          const timer = setInterval(() => {
-            agents[i].elapsedMs = Date.now() - startTime;
-            emitUpdate("chain", agents, "(running...)");
-          }, 1000);
-
-          try {
-            const result = await runSingleAgent(r.resolved!, ctx.cwd, signal, (update) => {
-              agents[i].messages = update.messages;
-              agents[i].usage = update.usage;
-              agents[i].elapsedMs = Date.now() - startTime;
-              emitUpdate("chain", agents, "(running...)");
-            });
-
-            clearInterval(timer);
-            agents[i].status = result.exitCode === 0 ? "done" : "error";
-            agents[i].exitCode = result.exitCode;
-            agents[i].messages = result.messages;
-            agents[i].usage = result.usage;
-            agents[i].elapsedMs = Date.now() - startTime;
-            agents[i].stderr = result.stderr || undefined;
-            agents[i].errorMessage = result.errorMessage || undefined;
-
-            const isError =
-              result.exitCode !== 0 ||
-              result.stopReason === "error" ||
-              result.stopReason === "aborted";
-            if (isError) {
-              // Chain stops on first error
-              const output = getFinalOutput(result.messages) || "(error — no output)";
-              let errorContent = `Chain stopped at step ${i + 1}/${params.chain!.length}: ${output}`;
-              if (i > 0) {
-                errorContent += "\n\nCompleted steps:";
-                for (let j = 0; j < i; j++) {
-                  const stepOutput = getFinalOutput(agents[j].messages);
-                  const preview = stepOutput.split('\n').slice(0, 3).join('\n');
-                  errorContent += `\n\n## Step ${j + 1} (${agents[j].preset}):\n${preview}`;
-                  if (stepOutput.split('\n').length > 3) errorContent += '\n...';
-                }
-              }
-              return {
-                content: [{ type: "text", text: errorContent }],
-                details: { mode: "chain", agents } as CrewDispatchDetails,
-                isError: true,
-              };
-            }
-
-            previousOutput = getFinalOutput(result.messages);
-          } catch (e: unknown) {
-            clearInterval(timer);
-            agents[i].status = "error";
-            agents[i].exitCode = 1;
-            agents[i].elapsedMs = Date.now() - startTime;
-            const errorMessage = extractErrorMessage(e);
-            agents[i].errorMessage = errorMessage;
-            let errorContent = `Chain aborted at step ${i + 1}/${params.chain!.length}: ${errorMessage}`;
-            if (i > 0) {
-              errorContent += "\n\nCompleted steps:";
-              for (let j = 0; j < i; j++) {
-                const stepOutput = getFinalOutput(agents[j].messages);
-                const preview = stepOutput.split('\n').slice(0, 3).join('\n');
-                errorContent += `\n\n## Step ${j + 1} (${agents[j].preset}):\n${preview}`;
-                if (stepOutput.split('\n').length > 3) errorContent += '\n...';
-              }
-            }
-            return {
-              content: [{ type: "text", text: errorContent }],
-              details: { mode: "chain", agents } as CrewDispatchDetails,
-              isError: true,
-            };
-          }
-        }
-
-        // Chain completed — return final agent's output
-        return {
-          content: [{ type: "text", text: previousOutput || "(no output)" }],
-          details: { mode: "chain", agents } as CrewDispatchDetails,
-        };
+        return executeChainMode(params.chain!, profile, overrides, ctx.cwd, signal, onUpdate);
       }
 
-      // Should never reach here
       return {
         content: [{ type: "text", text: "Internal error: no mode matched." }],
         details: undefined,
