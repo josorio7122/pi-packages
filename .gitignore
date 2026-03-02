@@ -6,3 +6,4 @@ dist/
 .turbo/
 docs/plans/
 .worktrees
+package-lock.json
