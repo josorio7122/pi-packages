@@ -59,9 +59,13 @@ importers:
 
   packages/exit: {}
 
+  packages/frontend-design: {}
+
   packages/gh: {}
 
   packages/glab: {}
+
+  packages/interface-design: {}
 
   packages/pi-crew:
     devDependencies:
