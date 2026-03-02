@@ -109,8 +109,9 @@ export function shouldBlockForMissingHandoff(
     return { blocked: false, missing: [] };
   }
 
+  const feature = state.feature; // narrowed to string by guard above
   const required = getRequiredHandoffs(state.phase as PhaseId, state.workflow);
-  const missing = required.filter((phase) => !handoffExists(cwd, state.feature, phase));
+  const missing = required.filter((phase) => !handoffExists(cwd, feature, phase));
 
   if (missing.length > 0) {
     return { blocked: true, missing };

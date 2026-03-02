@@ -111,7 +111,7 @@ export function buildActivePrompt(
   presetDocs: string,
   state: CrewState,
 ): string {
-  const phaseContent = getPhaseContent(state.phase) ?? `Unknown phase: ${state.phase}`;
+  const phaseContent = getPhaseContent(state.phase ?? "") ?? `Unknown phase: ${state.phase}`;
   const progress = getWorkflowProgress(state);
 
   return `## ⚠️ ACTIVE WORKFLOW: "${state.feature}"

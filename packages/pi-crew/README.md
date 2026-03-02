@@ -14,17 +14,15 @@ Then in any pi session:
 Use dispatch_crew to dispatch a scout that maps the project structure.
 ```
 
-Or use the phase skills directly:
-
-```
-Explore the codebase, then design a solution for adding user authentication.
-```
-
-Pi loads the crew skills automatically when the task matches — no manual `/skill:` commands needed.
-
 ## How It Works
 
-Pi-crew adds a `dispatch_crew` tool and 6 phase skills. The tool spawns isolated pi subprocesses with preset configurations. The extension reads `.crew/state.md` and automatically injects the current phase's skill instructions into the system prompt — the LLM never needs to load skills manually.
+Pi-crew adds a `dispatch_crew` tool with 6 workflow phases and mechanical enforcement. The tool spawns isolated pi subprocesses with preset configurations. The extension manages `.crew/state.md` and automatically:
+
+- **Injects phase instructions** into the system prompt based on the active phase
+- **Auto-captures dispatch results** to `.crew/phases/<feature>/<phase>.md`
+- **Gates phase transitions** — can't advance without handoff files from the previous phase
+- **Auto-advances phases** after successful dispatch and handoff capture
+- **Nudges on agent_end** — forces the LLM to continue when workflow is incomplete
 
 ### The Workflow
 
@@ -32,14 +30,14 @@ Pi-crew adds a `dispatch_crew` tool and 6 phase skills. The tool spawns isolated
 explore → design → plan → build → review → ship
 ```
 
-| Phase       | Skill          | What happens                                                                         |
-| ----------- | -------------- | ------------------------------------------------------------------------------------ |
-| **Explore** | `crew-explore` | Scouts map codebase structure, tech stack, patterns, conventions                     |
-| **Design**  | `crew-design`  | Discuss approaches with user, dispatch architect for complex designs, lock decisions |
-| **Plan**    | `crew-plan`    | Break design into task waves with dependencies and verification criteria             |
-| **Build**   | `crew-build`   | Execute tasks wave-by-wave with executors; retry failures with debuggers             |
-| **Review**  | `crew-review`  | Three-gate verification: spec compliance → code quality → security                   |
-| **Ship**    | `crew-ship`    | Squash commits, push branch, open PR/MR with generated description                   |
+| Phase       | What happens                                                                         |
+| ----------- | ------------------------------------------------------------------------------------ |
+| **Explore** | Scouts map codebase structure, tech stack, patterns, conventions                     |
+| **Design**  | Discuss approaches with user, dispatch architect for complex designs, lock decisions |
+| **Plan**    | Break design into task waves with dependencies and verification criteria             |
+| **Build**   | Execute tasks wave-by-wave with executors; retry failures with debuggers             |
+| **Review**  | Three-gate verification: spec compliance → code quality → security                   |
+| **Ship**    | Squash commits, push branch, open PR/MR with generated description                   |
 
 **Not every task needs every phase.** Choose a workflow when starting:
 
@@ -52,13 +50,15 @@ explore → design → plan → build → review → ship
 
 For simple tasks, dispatch agents directly without a workflow.
 
-### Workflow Enforcement
+### Mechanical Enforcement
 
-Once a workflow starts, pi-crew enforces completion through three mechanisms:
+Pi-crew doesn't rely on the LLM following instructions. Enforcement is in extension code:
 
-1. **State-driven skill injection** — The extension reads `.crew/state.md`, loads the current phase's SKILL.md from disk, and injects it into every system prompt. The LLM always has the right instructions.
-2. **Workflow commitment** — `state.md` includes a `workflow` field declaring which phases this feature will go through. Once committed, the plan is locked.
-3. **Agent-end nudge** — After each LLM turn, if the workflow is incomplete, the extension sends a `triggerTurn` message forcing the LLM to continue. It can't stop until the workflow reaches the last phase.
+1. **Auto-capture** — After `dispatch_crew` returns, the extension writes agent output to `.crew/phases/<feature>/<phase>.md`. Zero reliance on LLM writing handoff files.
+2. **Phase gate** — Before dispatching, the extension checks that the previous phase's handoff file exists. Missing handoffs block advancement with a descriptive error.
+3. **State auto-management** — The extension writes/updates `state.md` phase transitions. After handoff is captured, it auto-advances to the next phase.
+4. **Workflow gate** — Multi-agent implementation work (parallel with executors, chains with architects) requires `.crew/state.md` before dispatch is allowed.
+5. **Agent-end nudge** — After each LLM turn, if the workflow is incomplete, the extension sends a `triggerTurn` message forcing the LLM to continue.
 
 ## Agent Presets
 
@@ -77,8 +77,6 @@ Each preset has a dedicated system prompt, scoped tool access, and model tier. A
 
 ### Single
 
-Dispatch one agent:
-
 ```
 dispatch_crew({
   preset: "scout",
@@ -88,8 +86,6 @@ dispatch_crew({
 ```
 
 ### Parallel
-
-Dispatch multiple agents concurrently:
 
 ```
 dispatch_crew({
@@ -101,11 +97,7 @@ dispatch_crew({
 })
 ```
 
-Concurrency is limited by `DISPATCH_CREW_MAX_CONCURRENT` (default: 4, max: 8).
-
 ### Chain
-
-Dispatch agents sequentially — each gets the previous agent's output via `{previous}`:
 
 ```
 dispatch_crew({
@@ -118,8 +110,6 @@ dispatch_crew({
 
 ### Overrides
 
-Override model or thinking level per-dispatch:
-
 ```
 dispatch_crew({
   preset: "executor",
@@ -131,54 +121,39 @@ dispatch_crew({
 
 ## Model Profiles
 
-Profiles map agent tiers to concrete models. Switch profiles to trade cost for capability.
-
 | Profile                | Budget Tier       | Balanced Tier     | Quality Tier      |
 | ---------------------- | ----------------- | ----------------- | ----------------- |
 | **quality**            | claude-sonnet-4-5 | claude-sonnet-4-5 | claude-opus-4     |
 | **balanced** (default) | claude-haiku-4-5  | claude-sonnet-4-5 | claude-sonnet-4-5 |
 | **budget**             | claude-haiku-4-5  | claude-haiku-4-5  | claude-sonnet-4-5 |
 
-Change profile:
-
 ```
 /crew:profile quality
-```
-
-Override a specific agent's model:
-
-```
 /crew:override executor claude-opus-4
-```
-
-Reset all overrides:
-
-```
 /crew:reset
 ```
 
 ## State Management
 
-Pi-crew stores workflow state in a `.crew/` directory at the project root. This directory is **not gitignored** — it's project context for your team.
+Pi-crew stores workflow state in `.crew/` at the project root. This directory is **not gitignored** — it's project context for your team.
 
 ```
 .crew/
 ├── config.json              # Profile, agent overrides
-├── state.md                 # Current phase, feature, progress
+├── state.md                 # Current phase, feature, progress (auto-managed by extension)
 └── phases/
     └── <feature>/
-        ├── explore.md       # Scout findings
-        ├── design.md        # Locked decisions, must-haves
-        ├── plan.md          # Task waves with dependencies
+        ├── explore.md       # Auto-captured from scout dispatch
+        ├── design.md        # Auto-captured from architect dispatch
+        ├── plan.md          # Auto-captured or host LLM writes
         ├── build/
-        │   ├── task-01.md   # Individual task spec + status
-        │   ├── task-02.md
-        │   └── summary.md   # What was built, deviations
-        ├── review.md        # Three-gate results
-        └── summary.md       # Final feature summary
+        │   ├── task-01.md   # Task spec + status
+        │   └── summary.md   # Build summary
+        ├── review.md        # Auto-captured from reviewer dispatch
+        └── summary.md       # Feature summary (ship phase)
 ```
 
-`state.md` uses YAML frontmatter with a `workflow` field that commits to a phase plan:
+`state.md` uses YAML frontmatter:
 
 ```yaml
 ---
@@ -189,7 +164,7 @@ progress: 3/7
 ---
 ```
 
-The `workflow` field is set once when the workflow starts and never changes. The `phase` field advances as each phase completes. The extension reads this file on every turn and injects the current phase's skill content into the system prompt.
+The extension manages `state.md` transitions — the LLM doesn't need to update it manually.
 
 ## Commands
 
@@ -201,60 +176,28 @@ The `workflow` field is set once when the workflow starts and never changes. The
 | `/crew:reset`                     | Reset all overrides to profile defaults                |
 | `/crew:status`                    | Show detailed status of current feature                |
 
-## Configuration
-
-### Environment Variables
-
-| Variable                       | Default | Description                                     |
-| ------------------------------ | ------- | ----------------------------------------------- |
-| `DISPATCH_CREW_MAX_CONCURRENT` | `4`     | Max concurrent agents in parallel mode (max: 8) |
-
-### `.crew/config.json`
-
-```json
-{
-  "profile": "balanced",
-  "overrides": {
-    "executor": "claude-opus-4"
-  }
-}
-```
-
 ## Package Structure
 
 ```
 pi-crew/
-├── extensions/
-│   └── pi-crew/
-│       ├── index.ts          # Tool registration, commands, system prompt injection
-│       ├── presets.ts         # Agent preset definitions
-│       ├── profiles.ts       # Model profile resolution
-│       ├── spawn.ts          # Pi subprocess spawning + NDJSON parsing
-│       ├── state.ts          # .crew/ directory management
-│       └── rendering.ts      # Inline agent cards (DynamicBorder)
-├── skills/
-│   ├── crew-explore/SKILL.md
-│   ├── crew-design/SKILL.md
-│   ├── crew-plan/SKILL.md
-│   ├── crew-build/SKILL.md
-│   ├── crew-review/SKILL.md
-│   └── crew-ship/SKILL.md
-├── references/
-│   ├── model-profiles.md     # Profile → tier → model mapping
-│   ├── deviation-rules.md    # Auto-fix rules for executors
-│   ├── evaluation-gates.md   # Phase gate checklists
-│   └── prompts/              # System prompts for each agent preset
-│       ├── scout.md
-│       ├── researcher.md
-│       ├── architect.md
-│       ├── executor.md
-│       ├── reviewer.md
-│       └── debugger.md
-└── templates/
-    ├── plan.md               # Plan artifact template
-    ├── task.md               # Task artifact template
-    ├── spec.md               # Design spec template
-    └── summary.md            # Feature summary template
+├── extensions/pi-crew/
+│   ├── index.ts          # Tool registration, commands, hooks, auto-capture
+│   ├── phases.ts         # Phase content constants (replaces SKILL.md files)
+│   ├── handoff.ts        # Handoff file I/O (.crew/phases/ management)
+│   ├── enforcement.ts    # Workflow gate + phase gate logic
+│   ├── presets.ts        # Agent preset definitions
+│   ├── profiles.ts       # Model profile resolution
+│   ├── prompt.ts         # System prompt builders (idle/active modes)
+│   ├── spawn.ts          # Pi subprocess spawning + NDJSON parsing
+│   ├── state.ts          # .crew/ state management + phase advancement
+│   └── rendering.ts      # Inline agent cards (DynamicBorder)
+└── references/prompts/   # System prompts for each agent preset
+    ├── scout.md
+    ├── researcher.md
+    ├── architect.md
+    ├── executor.md
+    ├── reviewer.md
+    └── debugger.md
 ```
 
 ## Limitations
@@ -262,7 +205,6 @@ pi-crew/
 - **No streaming**: Agent output is collected and returned at completion, not streamed token-by-token.
 - **No cross-agent memory**: Agents in parallel mode don't share context. Use chain mode when agents need prior output.
 - **Subprocess overhead**: Each agent spawns a `pi` subprocess. Fast tasks (< 5s) may feel slower than inline execution.
-- **No automatic phase progression**: The orchestrator decides phases per-session. It won't auto-resume a half-finished build across sessions — load `.crew/state.md` to resume.
 - **Model availability**: Profiles reference Anthropic models. Other providers require manual overrides.
 
 ## License

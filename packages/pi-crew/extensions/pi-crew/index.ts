@@ -685,7 +685,7 @@ export default function piCrew(pi: ExtensionAPI) {
 
       // ── Dispatch to mode handler ────────────────────────────
       let result: {
-        content: Array<{ type: string; text?: string }>;
+        content: Array<{ type: "text"; text: string }>;
         details: CrewDispatchDetails | undefined;
         isError?: boolean;
       };
