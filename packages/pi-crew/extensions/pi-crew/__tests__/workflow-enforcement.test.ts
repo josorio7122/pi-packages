@@ -82,7 +82,7 @@ describe("workflow enforcement", () => {
       ).toBe(true);
     });
 
-    it("returns false for parallel scouts only (all read-only)", () => {
+    it("returns false for parallel scouts only (all exploratory)", () => {
       expect(
         shouldRequireWorkflow(
           "parallel",
@@ -90,6 +90,36 @@ describe("workflow enforcement", () => {
           false,
         ),
       ).toBe(false);
+    });
+
+    it("returns false for parallel researcher + reviewer (exploratory)", () => {
+      expect(
+        shouldRequireWorkflow(
+          "parallel",
+          [{ preset: "researcher" }, { preset: "reviewer" }],
+          false,
+        ),
+      ).toBe(false);
+    });
+
+    it("returns false for chain of scouts and researchers (exploratory)", () => {
+      expect(
+        shouldRequireWorkflow(
+          "chain",
+          [{ preset: "scout" }, { preset: "researcher" }],
+          false,
+        ),
+      ).toBe(false);
+    });
+
+    it("returns true for chain with researcher + executor (implementation)", () => {
+      expect(
+        shouldRequireWorkflow(
+          "chain",
+          [{ preset: "researcher" }, { preset: "executor" }],
+          false,
+        ),
+      ).toBe(true);
     });
   });
 

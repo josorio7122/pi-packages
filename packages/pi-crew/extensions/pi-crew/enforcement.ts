@@ -2,8 +2,13 @@
 // Determines when dispatch_crew should require a .crew/state.md workflow
 // before proceeding. Prevents the LLM from skipping workflow management.
 
-/** Presets that only read — never modify code. */
-const READ_ONLY_PRESETS = new Set(["scout", "researcher", "reviewer"]);
+/**
+ * Presets that only read — never modify code.
+ * Note: researcher has bash access and may write to .crew/ for handoff,
+ * but is still considered exploratory for workflow gating purposes.
+ * Scout and reviewer have read-only tool sets (read,bash,grep,find,ls).
+ */
+const EXPLORATORY_PRESETS = new Set(["scout", "researcher", "reviewer"]);
 
 /** Presets that write code or make design decisions. */
 const WRITE_PRESETS = new Set(["executor", "architect"]);
@@ -16,8 +21,8 @@ const WRITE_PRESETS = new Set(["executor", "architect"]);
  *
  * Rules:
  * - Single agent dispatch: never requires workflow (simple tasks)
- * - Parallel with all read-only presets: no workflow (exploratory)
- * - Parallel with any write preset OR 3+ agents: requires workflow
+ * - Parallel with all exploratory presets (scout/researcher/reviewer): no workflow
+ * - Parallel with any write preset (executor/architect) OR 3+ agents: requires workflow
  * - Chain with any write preset: requires workflow (multi-step implementation)
  * - Already has active workflow: never blocks (state.md exists)
  *
@@ -38,7 +43,7 @@ export function shouldRequireWorkflow(
   if (mode === "single") return false;
 
   const hasWritePreset = agents.some((a) => WRITE_PRESETS.has(a.preset));
-  const allReadOnly = agents.every((a) => READ_ONLY_PRESETS.has(a.preset));
+  const allExploratory = agents.every((a) => EXPLORATORY_PRESETS.has(a.preset));
 
   if (mode === "chain") {
     // Chain with any write preset = multi-step implementation
@@ -46,8 +51,8 @@ export function shouldRequireWorkflow(
   }
 
   if (mode === "parallel") {
-    // All read-only presets = exploratory, allow
-    if (allReadOnly) return false;
+    // All exploratory presets = no implementation work, allow
+    if (allExploratory) return false;
     // Any write preset or 3+ agents = needs workflow
     return hasWritePreset || agents.length >= 3;
   }
