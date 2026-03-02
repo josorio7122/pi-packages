@@ -496,6 +496,28 @@ Document what was built:
 };
 
 /**
+ * Metadata about phase behavior and constraints.
+ */
+interface PhaseMeta {
+  /** Which presets can be dispatched during this phase */
+  allowedPresets: string[];
+  /** Whether to auto-advance after first successful dispatch. False = orchestrator must complete phase explicitly */
+  autoAdvance: boolean;
+}
+
+/**
+ * Phase metadata indexed by phase ID.
+ */
+const PHASE_META: Record<PhaseId, PhaseMeta> = {
+  explore: { allowedPresets: ["scout", "researcher"], autoAdvance: true },
+  design: { allowedPresets: ["architect", "researcher", "scout"], autoAdvance: true },
+  plan: { allowedPresets: ["scout", "researcher"], autoAdvance: true },
+  build: { allowedPresets: ["executor", "debugger", "scout"], autoAdvance: false },
+  review: { allowedPresets: ["reviewer", "scout"], autoAdvance: false },
+  ship: { allowedPresets: ["scout", "researcher"], autoAdvance: true },
+};
+
+/**
  * Get the content for a workflow phase.
  * @param phase - Phase identifier (explore, design, plan, build, review, ship)
  * @returns Phase content string, or null if phase is invalid
@@ -505,6 +527,30 @@ export function getPhaseContent(phase: string): string | null {
     return PHASE_CONTENT[phase as PhaseId];
   }
   return null;
+}
+
+/**
+ * Get the allowed agent presets for a workflow phase.
+ * @param phase - Phase identifier
+ * @returns Array of allowed preset names, or null if phase is invalid
+ */
+export function getPhaseAllowedPresets(phase: string): string[] | null {
+  if (phase in PHASE_META) {
+    return PHASE_META[phase as PhaseId].allowedPresets;
+  }
+  return null;
+}
+
+/**
+ * Check if a phase should auto-advance after first successful dispatch.
+ * @param phase - Phase identifier
+ * @returns true if phase auto-advances, false if orchestrator must complete explicitly. Returns true for unknown phases.
+ */
+export function isPhaseAutoAdvance(phase: string): boolean {
+  if (phase in PHASE_META) {
+    return PHASE_META[phase as PhaseId].autoAdvance;
+  }
+  return true; // default to auto-advance for unknown phases
 }
 
 /**

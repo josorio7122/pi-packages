@@ -12,6 +12,8 @@ import {
   writeTaskFile,
   getHandoffPath,
   getTaskFilePath,
+  writeDispatchLog,
+  listDispatchLogs,
 } from "../handoff.js";
 
 describe("handoff", () => {
@@ -112,6 +114,101 @@ describe("handoff", () => {
     it("returns correct path for task file", () => {
       const result = getTaskFilePath(tmpDir, "auth", "03");
       expect(result).toBe(path.join(tmpDir, ".crew", "phases", "auth", "build", "task-03.md"));
+    });
+  });
+
+  describe("dispatch log", () => {
+    describe("writeDispatchLog", () => {
+      it("writes to .crew/dispatches/ directory", () => {
+        writeDispatchLog(tmpDir, "executor", "Do the thing", "Task completed");
+        
+        const dispatchesDir = path.join(tmpDir, ".crew", "dispatches");
+        expect(fs.existsSync(dispatchesDir)).toBe(true);
+        
+        const files = fs.readdirSync(dispatchesDir);
+        expect(files.length).toBe(1);
+        expect(files[0]).toMatch(/\.md$/);
+      });
+
+      it("creates the dispatches directory if missing", () => {
+        const dispatchesDir = path.join(tmpDir, ".crew", "dispatches");
+        expect(fs.existsSync(dispatchesDir)).toBe(false);
+        
+        writeDispatchLog(tmpDir, "executor", "Task", "Output");
+        
+        expect(fs.existsSync(dispatchesDir)).toBe(true);
+      });
+
+      it("includes preset name in filename", () => {
+        writeDispatchLog(tmpDir, "executor", "Task", "Output");
+        
+        const files = fs.readdirSync(path.join(tmpDir, ".crew", "dispatches"));
+        expect(files[0]).toMatch(/-executor\.md$/);
+      });
+
+      it("includes task and output in content", () => {
+        writeDispatchLog(tmpDir, "executor", "My task description", "My output content");
+        
+        const files = fs.readdirSync(path.join(tmpDir, ".crew", "dispatches"));
+        const content = fs.readFileSync(
+          path.join(tmpDir, ".crew", "dispatches", files[0]),
+          "utf-8"
+        );
+        
+        expect(content).toContain("# executor dispatch");
+        expect(content).toContain("## Task");
+        expect(content).toContain("My task description");
+        expect(content).toContain("## Output");
+        expect(content).toContain("My output content");
+      });
+
+      it("truncates long task descriptions to 500 chars", () => {
+        const longTask = "a".repeat(1000);
+        writeDispatchLog(tmpDir, "executor", longTask, "Output");
+        
+        const files = fs.readdirSync(path.join(tmpDir, ".crew", "dispatches"));
+        const content = fs.readFileSync(
+          path.join(tmpDir, ".crew", "dispatches", files[0]),
+          "utf-8"
+        );
+        
+        const taskSection = content.split("## Task")[1].split("## Output")[0].trim();
+        expect(taskSection.length).toBe(500);
+      });
+    });
+
+    describe("listDispatchLogs", () => {
+      it("returns empty array when no dispatches dir", () => {
+        expect(listDispatchLogs(tmpDir)).toEqual([]);
+      });
+
+      it("returns sorted filenames", () => {
+        // Write multiple dispatches - use different preset names to ensure unique filenames
+        writeDispatchLog(tmpDir, "executor", "Task 1", "Output 1");
+        writeDispatchLog(tmpDir, "planner", "Task 2", "Output 2");
+        writeDispatchLog(tmpDir, "designer", "Task 3", "Output 3");
+        
+        const logs = listDispatchLogs(tmpDir);
+        expect(logs.length).toBe(3);
+        
+        // Verify sorted order (alphabetically, which matches timestamp order)
+        for (let i = 1; i < logs.length; i++) {
+          expect(logs[i] >= logs[i - 1]).toBe(true);
+        }
+      });
+
+      it("filters to only .md files", () => {
+        writeDispatchLog(tmpDir, "executor", "Task", "Output");
+        
+        // Add a non-.md file
+        const dispatchesDir = path.join(tmpDir, ".crew", "dispatches");
+        fs.writeFileSync(path.join(dispatchesDir, "README.txt"), "Not a log");
+        fs.writeFileSync(path.join(dispatchesDir, ".gitkeep"), "");
+        
+        const logs = listDispatchLogs(tmpDir);
+        expect(logs.length).toBe(1);
+        expect(logs[0]).toMatch(/\.md$/);
+      });
     });
   });
 });

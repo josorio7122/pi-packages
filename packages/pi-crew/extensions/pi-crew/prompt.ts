@@ -50,25 +50,9 @@ dispatch_crew({
 
 You can override a preset's model if needed: \`dispatch_crew({ preset: "executor", model: "claude-opus-4", task: "..." })\`
 
-### ⚠️ Mandatory Workflow Gate
+### Starting a Workflow
 
-**BEFORE writing any implementation code, you MUST check whether a workflow is needed.**
-
-A workflow is required when ANY of these are true:
-- **3+ files** to create or modify (including package manifests, configs, READMEs)
-- **New feature, new package, or new module** being added to the codebase
-- **Architectural changes** — new directories, new patterns, cross-cutting concerns
-- **The user explicitly asks** for a structured approach
-
-**Concrete examples that REQUIRE a workflow:**
-- Creating a new package or library (even a small one — it has package.json, source files, README)
-- Adding a new module, extension, or plugin to an existing project
-- Implementing a feature that touches multiple files across the codebase
-- Refactoring that affects 3+ files
-
-**Do NOT rationalize skipping the workflow.** If the task matches any criterion above, write \`.crew/state.md\` BEFORE writing any implementation file. Choose the appropriate workflow shortcut (Quick or Minimal for small tasks).
-
-To start a workflow, write \`.crew/state.md\`:
+For multi-file features or new modules, create \`.crew/state.md\` to activate workflow tracking:
 
 \`\`\`yaml
 ---
@@ -78,9 +62,7 @@ workflow: explore,design,plan,build,review,ship
 ---
 \`\`\`
 
-Once you write \`state.md\` with a \`workflow\` field, the system will inject the current phase's full instructions into your prompt automatically. You MUST then complete the workflow — follow the phase instructions and advance through each phase.
-
-For simpler tasks (bug fix, config change, documentation), dispatch agents directly without a workflow.
+All dispatch results are automatically logged to \`.crew/dispatches/\`. When a workflow is active, results are also captured to \`.crew/phases/<feature>/<phase>.md\` and the system enforces phase-appropriate agent presets.
 
 ### Workflow Shortcuts
 

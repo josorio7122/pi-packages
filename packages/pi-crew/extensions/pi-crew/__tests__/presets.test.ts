@@ -133,9 +133,9 @@ describe("presets", () => {
     it("resolves model based on profile and tier", () => {
       const root = setupFakePackageRoot();
       try {
-        // architect = quality tier, quality profile → claude-opus-4
+        // architect = quality tier, quality profile → claude-opus-4-6
         const result = resolvePreset("architect", "quality", {}, root);
-        expect(result!.model).toBe("claude-opus-4");
+        expect(result!.model).toBe("claude-opus-4-6");
       } finally {
         cleanup();
       }
@@ -144,8 +144,8 @@ describe("presets", () => {
     it("applies per-agent override", () => {
       const root = setupFakePackageRoot();
       try {
-        const result = resolvePreset("scout", "balanced", { scout: "claude-opus-4" }, root);
-        expect(result!.model).toBe("claude-opus-4");
+        const result = resolvePreset("scout", "balanced", { scout: "claude-opus-4-6" }, root);
+        expect(result!.model).toBe("claude-opus-4-6");
       } finally {
         cleanup();
       }
@@ -188,9 +188,9 @@ describe("presets", () => {
       const quality = formatPresetsForLLM("quality", {});
       const budget = formatPresetsForLLM("budget", {});
       // Quality profile should have opus for quality tier agents
-      expect(quality).toContain("claude-opus-4");
+      expect(quality).toContain("claude-opus-4-6");
       // Budget profile should not have opus
-      expect(budget).not.toContain("claude-opus-4");
+      expect(budget).not.toContain("claude-opus-4-6");
     });
 
     it("reflects overrides in model column", () => {

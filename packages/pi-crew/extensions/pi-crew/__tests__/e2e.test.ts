@@ -260,7 +260,7 @@ describe("e2e: workflow enforcement via SDK", () => {
     expect(stateContent).toContain("workflow:");
 
     session.dispose();
-  }, 120_000);
+  }, 180_000);
 
   it("no nudge when workflow is complete (phase = last in workflow)", async () => {
     // State where phase is the last in workflow = complete

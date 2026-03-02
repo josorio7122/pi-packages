@@ -71,7 +71,7 @@ describe("workflow lifecycle", () => {
 
       expect(prompt).toContain("Crew — Agentic Workflow Orchestration");
       expect(prompt).toContain("dispatch_crew");
-      expect(prompt).toContain("Mandatory Workflow Gate");
+      expect(prompt).toContain("Starting a Workflow");
     });
 
     it("idle prompt tells LLM to write .crew/state.md", () => {
@@ -236,7 +236,7 @@ describe("workflow lifecycle", () => {
       for (let turn = 0; turn < 5; turn++) {
         const prompt = simulateBeforeAgentStart(tmpDir);
         // Always gets idle prompt — no enforcement mechanism kicks in
-        expect(prompt).toContain("Mandatory Workflow Gate");
+        expect(prompt).toContain("Starting a Workflow");
         expect(prompt).not.toContain("ACTIVE WORKFLOW");
 
         const nudge = simulateAgentEnd(tmpDir);
@@ -258,23 +258,21 @@ describe("workflow lifecycle", () => {
       expect(state).toBeNull();
 
       const prompt = simulateBeforeAgentStart(tmpDir);
-      expect(prompt).toContain("Mandatory Workflow Gate"); // Still idle
+      expect(prompt).toContain("Starting a Workflow"); // Still idle
       expect(prompt).not.toContain("ACTIVE WORKFLOW");
     });
 
-    it("idle prompt contains .crew/state.md but NOT as a tool_use block — it's just text", () => {
+    it("idle prompt contains .crew/state.md guidance but NOT as a tool_use block — it's just text", () => {
       const prompt = simulateBeforeAgentStart(tmpDir);
 
-      // The instruction to write state.md is plain text in the prompt
-      // It's NOT a structured command or tool call — it's advisory
-      expect(prompt).toContain("write `.crew/state.md`");
+      // The instruction to create state.md is plain text in the prompt
+      // It's NOT a structured command or tool call — it's guidance
+      expect(prompt).toContain(".crew/state.md");
 
-      // There is no mechanism to BLOCK the LLM from proceeding without state.md
-      // The LLM can:
-      //   1. Write state.md ✓ (follows instruction)
-      //   2. Write PLAN.md instead ✗ (ignores instruction)
-      //   3. Start dispatching agents directly ✗ (skips workflow)
-      //   4. Write implementation code directly ✗ (skips everything)
+      // However, mechanical enforcement now exists:
+      //   - dispatch_crew results always log to .crew/dispatches/
+      //   - phase-preset validation blocks wrong presets for current phase
+      //   - workflow gate blocks multi-agent work without state.md
     });
   });
 });

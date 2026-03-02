@@ -64,3 +64,47 @@ export function writeTaskFile(cwd: string, feature: string, taskId: string, cont
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf-8");
 }
+
+/**
+ * Write a dispatch log entry.
+ * Always called after any dispatch_crew execution, regardless of workflow state.
+ * Logs to .crew/dispatches/<timestamp>-<preset>.md
+ *
+ * @param cwd - Working directory
+ * @param preset - Agent preset name
+ * @param task - Task description (first 200 chars)
+ * @param output - Agent output
+ */
+export function writeDispatchLog(
+  cwd: string,
+  preset: string,
+  task: string,
+  output: string,
+): void {
+  const dir = path.join(cwd, ".crew", "dispatches");
+  fs.mkdirSync(dir, { recursive: true });
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `${timestamp}-${preset}.md`;
+  const content = `# ${preset} dispatch
+
+## Task
+${task.slice(0, 500)}
+
+## Output
+${output}
+`;
+
+  fs.writeFileSync(path.join(dir, filename), content, "utf-8");
+}
+
+/**
+ * List all dispatch log entries.
+ * @param cwd - Working directory
+ * @returns Array of filenames sorted by timestamp
+ */
+export function listDispatchLogs(cwd: string): string[] {
+  const dir = path.join(cwd, ".crew", "dispatches");
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort();
+}

@@ -13,19 +13,19 @@ export type ProfileName = "quality" | "balanced" | "budget";
 
 const PROFILES: Record<ProfileName, ModelProfile> = {
   quality: {
-    budget: "claude-sonnet-4-5",
-    balanced: "claude-sonnet-4-5",
-    quality: "claude-opus-4",
+    budget: "claude-sonnet-4-6",
+    balanced: "claude-sonnet-4-6",
+    quality: "claude-opus-4-6",
   },
   balanced: {
     budget: "claude-haiku-4-5",
-    balanced: "claude-sonnet-4-5",
-    quality: "claude-sonnet-4-5",
+    balanced: "claude-sonnet-4-6",
+    quality: "claude-sonnet-4-6",
   },
   budget: {
     budget: "claude-haiku-4-5",
     balanced: "claude-haiku-4-5",
-    quality: "claude-sonnet-4-5",
+    quality: "claude-sonnet-4-6",
   },
 };
 

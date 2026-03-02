@@ -39,6 +39,17 @@ explore → design → plan → build → review → ship
 | **Review**  | Three-gate verification: spec compliance → code quality → security                   |
 | **Ship**    | Squash commits, push branch, open PR/MR with generated description                   |
 
+Each phase restricts which agent presets can be dispatched:
+
+| Phase       | Allowed Presets              | Auto-Advance |
+| ----------- | ---------------------------- | ------------ |
+| **Explore** | scout, researcher            | ✓            |
+| **Design**  | architect, researcher, scout | ✓            |
+| **Plan**    | scout, researcher            | ✓            |
+| **Build**   | executor, debugger, scout    | ✗            |
+| **Review**  | reviewer, scout              | ✗            |
+| **Ship**    | scout, researcher            | ✓            |
+
 **Not every task needs every phase.** Choose a workflow when starting:
 
 | Scope    | Workflow                              | When                                  |
@@ -54,11 +65,13 @@ For simple tasks, dispatch agents directly without a workflow.
 
 Pi-crew doesn't rely on the LLM following instructions. Enforcement is in extension code:
 
-1. **Auto-capture** — After `dispatch_crew` returns, the extension writes agent output to `.crew/phases/<feature>/<phase>.md`. Zero reliance on LLM writing handoff files.
-2. **Phase gate** — Before dispatching, the extension checks that the previous phase's handoff file exists. Missing handoffs block advancement with a descriptive error.
-3. **State auto-management** — The extension writes/updates `state.md` phase transitions. After handoff is captured, it auto-advances to the next phase.
-4. **Workflow gate** — Multi-agent implementation work (parallel with executors, chains with architects) requires `.crew/state.md` before dispatch is allowed.
-5. **Agent-end nudge** — After each LLM turn, if the workflow is incomplete, the extension sends a `triggerTurn` message forcing the LLM to continue.
+1. **Universal dispatch log** — Every `dispatch_crew` result is written to `.crew/dispatches/<timestamp>-<preset>.md`, regardless of workflow state. `.crew/` is the universal record of all agent work.
+2. **Auto-capture** — When a workflow is active, dispatch output is also written to `.crew/phases/<feature>/<phase>.md`.
+3. **Smart auto-advance** — Simple phases (explore, design, plan, ship) auto-advance after the first successful dispatch. Complex phases (build, review) write the handoff but do NOT auto-advance — the orchestrator completes them manually.
+4. **Phase-preset validation** — Each phase restricts which presets can be dispatched (e.g., only scout/researcher during explore, only executor/debugger/scout during build). Invalid presets are blocked with a descriptive error.
+5. **Phase gate** — Before dispatching, the extension checks that the previous phase's handoff file exists. Missing handoffs block advancement.
+6. **Workflow gate** — Multi-agent implementation work (parallel with executors, chains with architects) requires `.crew/state.md` before dispatch is allowed.
+7. **Agent-end nudge** — After each LLM turn, if the workflow is incomplete, the extension sends a `triggerTurn` message forcing the LLM to continue.
 
 ## Agent Presets
 
@@ -113,7 +126,7 @@ dispatch_crew({
 ```
 dispatch_crew({
   preset: "executor",
-  model: "claude-opus-4",
+  model: "claude-opus-4-6",
   thinking: "high",
   task: "Implement the complex migration logic"
 })
@@ -123,13 +136,13 @@ dispatch_crew({
 
 | Profile                | Budget Tier       | Balanced Tier     | Quality Tier      |
 | ---------------------- | ----------------- | ----------------- | ----------------- |
-| **quality**            | claude-sonnet-4-5 | claude-sonnet-4-5 | claude-opus-4     |
-| **balanced** (default) | claude-haiku-4-5  | claude-sonnet-4-5 | claude-sonnet-4-5 |
-| **budget**             | claude-haiku-4-5  | claude-haiku-4-5  | claude-sonnet-4-5 |
+| **quality**            | claude-sonnet-4-6 | claude-sonnet-4-6 | claude-opus-4-6   |
+| **balanced** (default) | claude-haiku-4-5  | claude-sonnet-4-6 | claude-sonnet-4-6 |
+| **budget**             | claude-haiku-4-5  | claude-haiku-4-5  | claude-sonnet-4-6 |
 
 ```
 /crew:profile quality
-/crew:override executor claude-opus-4
+/crew:override executor claude-opus-4-6
 /crew:reset
 ```
 
@@ -141,6 +154,9 @@ Pi-crew stores workflow state in `.crew/` at the project root. This directory is
 .crew/
 ├── config.json              # Profile, agent overrides
 ├── state.md                 # Current phase, feature, progress (auto-managed by extension)
+├── dispatches/              # Universal dispatch log (all agent results, auto-written)
+│   ├── 2026-03-01T...-scout.md
+│   └── 2026-03-01T...-executor.md
 └── phases/
     └── <feature>/
         ├── explore.md       # Auto-captured from scout dispatch

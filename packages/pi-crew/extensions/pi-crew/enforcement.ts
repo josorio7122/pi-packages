@@ -4,7 +4,7 @@
 
 import type { CrewState } from "./state.js";
 import { handoffExists } from "./handoff.js";
-import { getRequiredHandoffs, type PhaseId } from "./phases.js";
+import { getRequiredHandoffs, getPhaseAllowedPresets, type PhaseId } from "./phases.js";
 
 /**
  * Presets that only read — never modify code.
@@ -130,4 +130,46 @@ export function buildMissingHandoffMessage(state: CrewState, missing: string[]):
 ${paths}
 
 Complete the previous phase(s) first. Dispatch the appropriate agents and the handoff files will be auto-captured.`;
+}
+
+/**
+ * Check if a preset is allowed for the current workflow phase.
+ * Only enforced when a workflow is active with a valid phase.
+ * Returns null if no restriction applies (no workflow, no phase, unknown phase).
+ *
+ * @param phase - Current workflow phase (or null)
+ * @param presets - Array of preset names being dispatched
+ * @returns Object with blocked flag and list of invalid presets, or null if no restriction
+ */
+export function shouldBlockForInvalidPreset(
+  phase: string | null,
+  presets: string[],
+): { blocked: boolean; invalidPresets: Array<{ preset: string; phase: string }> } | null {
+  if (!phase) return null;
+
+  const allowed = getPhaseAllowedPresets(phase);
+  if (!allowed) return null; // unknown phase, no restriction
+
+  const invalid = presets
+    .filter((p) => !allowed.includes(p))
+    .map((p) => ({ preset: p, phase }));
+
+  if (invalid.length > 0) {
+    return { blocked: true, invalidPresets: invalid };
+  }
+
+  return { blocked: false, invalidPresets: [] };
+}
+
+/**
+ * Build error message for invalid preset dispatch during a phase.
+ */
+export function buildInvalidPresetMessage(
+  phase: string,
+  invalidPresets: Array<{ preset: string; phase: string }>,
+  allowedPresets: string[],
+): string {
+  const names = invalidPresets.map((p) => `"${p.preset}"`).join(", ");
+  const allowed = allowedPresets.map((p) => `"${p}"`).join(", ");
+  return `⚠️ **Phase restriction:** Cannot dispatch ${names} during "${phase}" phase.\n\nAllowed presets for this phase: ${allowed}\n\nEither advance to the appropriate phase or use a different preset.`;
 }

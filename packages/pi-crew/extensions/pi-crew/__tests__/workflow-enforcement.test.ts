@@ -5,7 +5,12 @@
  * multi-agent work without first writing .crew/state.md.
  */
 import { describe, it, expect } from "vitest";
-import { shouldRequireWorkflow, buildWorkflowGateMessage } from "../enforcement.js";
+import {
+  shouldRequireWorkflow,
+  buildWorkflowGateMessage,
+  shouldBlockForInvalidPreset,
+  buildInvalidPresetMessage,
+} from "../enforcement.js";
 
 describe("workflow enforcement", () => {
   describe("shouldRequireWorkflow", () => {
@@ -134,6 +139,114 @@ describe("workflow enforcement", () => {
       const msg = buildWorkflowGateMessage();
       expect(msg).toContain("feature:");
       expect(msg).toContain("phase:");
+    });
+  });
+
+  describe("shouldBlockForInvalidPreset", () => {
+    it("returns null when phase is null (no restriction)", () => {
+      expect(shouldBlockForInvalidPreset(null, ["executor"])).toBeNull();
+    });
+
+    it("returns null for unknown phase", () => {
+      expect(shouldBlockForInvalidPreset("unknown", ["executor"])).toBeNull();
+    });
+
+    it("allows scout during explore", () => {
+      const result = shouldBlockForInvalidPreset("explore", ["scout"]);
+      expect(result).toEqual({ blocked: false, invalidPresets: [] });
+    });
+
+    it("allows researcher during explore", () => {
+      const result = shouldBlockForInvalidPreset("explore", ["researcher"]);
+      expect(result).toEqual({ blocked: false, invalidPresets: [] });
+    });
+
+    it("blocks executor during explore (not in allowed list)", () => {
+      const result = shouldBlockForInvalidPreset("explore", ["executor"]);
+      expect(result).toEqual({
+        blocked: true,
+        invalidPresets: [{ preset: "executor", phase: "explore" }],
+      });
+    });
+
+    it("blocks architect during explore", () => {
+      const result = shouldBlockForInvalidPreset("explore", ["architect"]);
+      expect(result).toEqual({
+        blocked: true,
+        invalidPresets: [{ preset: "architect", phase: "explore" }],
+      });
+    });
+
+    it("allows executor during build", () => {
+      const result = shouldBlockForInvalidPreset("build", ["executor"]);
+      expect(result).toEqual({ blocked: false, invalidPresets: [] });
+    });
+
+    it("allows debugger during build", () => {
+      const result = shouldBlockForInvalidPreset("build", ["debugger"]);
+      expect(result).toEqual({ blocked: false, invalidPresets: [] });
+    });
+
+    it("blocks reviewer during build", () => {
+      const result = shouldBlockForInvalidPreset("build", ["reviewer"]);
+      expect(result).toEqual({
+        blocked: true,
+        invalidPresets: [{ preset: "reviewer", phase: "build" }],
+      });
+    });
+
+    it("allows reviewer during review", () => {
+      const result = shouldBlockForInvalidPreset("review", ["reviewer"]);
+      expect(result).toEqual({ blocked: false, invalidPresets: [] });
+    });
+
+    it("blocks executor during review", () => {
+      const result = shouldBlockForInvalidPreset("review", ["executor"]);
+      expect(result).toEqual({
+        blocked: true,
+        invalidPresets: [{ preset: "executor", phase: "review" }],
+      });
+    });
+
+    it("returns all invalid presets when multiple are invalid", () => {
+      const result = shouldBlockForInvalidPreset("explore", ["executor", "debugger", "scout"]);
+      expect(result).toEqual({
+        blocked: true,
+        invalidPresets: [
+          { preset: "executor", phase: "explore" },
+          { preset: "debugger", phase: "explore" },
+        ],
+      });
+    });
+  });
+
+  describe("buildInvalidPresetMessage", () => {
+    it("includes phase name", () => {
+      const msg = buildInvalidPresetMessage(
+        "explore",
+        [{ preset: "executor", phase: "explore" }],
+        ["scout", "researcher"],
+      );
+      expect(msg).toContain('"explore"');
+    });
+
+    it("includes invalid preset names", () => {
+      const msg = buildInvalidPresetMessage(
+        "explore",
+        [{ preset: "executor", phase: "explore" }],
+        ["scout", "researcher"],
+      );
+      expect(msg).toContain('"executor"');
+    });
+
+    it("includes allowed presets", () => {
+      const msg = buildInvalidPresetMessage(
+        "explore",
+        [{ preset: "executor", phase: "explore" }],
+        ["scout", "researcher"],
+      );
+      expect(msg).toContain('"scout"');
+      expect(msg).toContain('"researcher"');
     });
   });
 });

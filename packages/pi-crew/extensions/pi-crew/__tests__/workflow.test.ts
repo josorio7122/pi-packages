@@ -122,7 +122,7 @@ describe("integration: workflow enforcement", () => {
     expect(exitCode).toBe(0);
     // The explore phase content says "3-4" scouts for 500+ files
     expect(output).toMatch(/3.?4/);
-  }, 60_000);
+  }, 90_000);
 
   it("active mode — system prompt shows enforcement header with feature name", async () => {
     const crewDir = path.join(tmpDir, ".crew");

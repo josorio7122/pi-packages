@@ -23,12 +23,6 @@ describe("prompt", () => {
       expect(result).toContain("task");
     });
 
-    it("includes workflow start guidance", () => {
-      const result = buildIdlePrompt(mockPresetDocs);
-      expect(result).toContain("state.md");
-      expect(result).toContain("workflow:");
-    });
-
     it("includes workflow shortcut table", () => {
       const result = buildIdlePrompt(mockPresetDocs);
       expect(result).toContain("Full");
@@ -42,23 +36,17 @@ describe("prompt", () => {
       expect(result).not.toContain("⚠️ ACTIVE WORKFLOW");
     });
 
-    it("includes mandatory workflow gate — MUST evaluate before implementing", () => {
+    it("includes workflow start guidance", () => {
       const result = buildIdlePrompt(mockPresetDocs);
-      // The idle prompt must contain a mandatory pre-implementation check
-      // that forces the LLM to evaluate workflow criteria before writing any code.
-      // This prevents the LLM from skipping the workflow for tasks that clearly
-      // involve 3+ files, new features, or architectural changes.
-      expect(result).toContain("BEFORE writing any implementation code");
-      expect(result).toContain("MUST check");
+      expect(result).toContain("Starting a Workflow");
+      expect(result).toContain("state.md");
+      expect(result).toContain("workflow:");
     });
 
-    it("lists concrete examples of tasks that require a workflow", () => {
+    it("mentions dispatch logging", () => {
       const result = buildIdlePrompt(mockPresetDocs);
-      // The guidance must include concrete examples so the LLM doesn't
-      // rationalize skipping the workflow for "simple" multi-file tasks
-      // like creating new packages, adding new modules, etc.
-      expect(result).toContain("new package");
-      expect(result).toContain("new module");
+      expect(result).toContain(".crew/dispatches/");
+      expect(result).toContain("automatically logged");
     });
   });
 

@@ -9,15 +9,15 @@ describe("profiles", () => {
     });
 
     it("returns correct model for balanced profile + balanced tier", () => {
-      expect(resolveModel("balanced", "balanced", "executor", {})).toBe("claude-sonnet-4-5");
+      expect(resolveModel("balanced", "balanced", "executor", {})).toBe("claude-sonnet-4-6");
     });
 
     it("returns correct model for balanced profile + quality tier", () => {
-      expect(resolveModel("balanced", "quality", "architect", {})).toBe("claude-sonnet-4-5");
+      expect(resolveModel("balanced", "quality", "architect", {})).toBe("claude-sonnet-4-6");
     });
 
     it("returns correct model for quality profile + quality tier", () => {
-      expect(resolveModel("quality", "quality", "architect", {})).toBe("claude-opus-4");
+      expect(resolveModel("quality", "quality", "architect", {})).toBe("claude-opus-4-6");
     });
 
     it("returns correct model for budget profile + budget tier", () => {
@@ -29,41 +29,41 @@ describe("profiles", () => {
     });
 
     it("returns correct model for budget profile + quality tier", () => {
-      expect(resolveModel("budget", "quality", "debugger", {})).toBe("claude-sonnet-4-5");
+      expect(resolveModel("budget", "quality", "debugger", {})).toBe("claude-sonnet-4-6");
     });
 
     it("per-agent override takes precedence over profile", () => {
-      expect(resolveModel("budget", "budget", "scout", { scout: "claude-opus-4" })).toBe(
-        "claude-opus-4",
+      expect(resolveModel("budget", "budget", "scout", { scout: "claude-opus-4-6" })).toBe(
+        "claude-opus-4-6",
       );
     });
 
     it("override for different agent does not affect this agent", () => {
-      expect(resolveModel("balanced", "budget", "scout", { executor: "claude-opus-4" })).toBe(
+      expect(resolveModel("balanced", "budget", "scout", { executor: "claude-opus-4-6" })).toBe(
         "claude-haiku-4-5",
       );
     });
 
     it("falls back to balanced profile for unknown profile name", () => {
       expect(resolveModel("nonexistent", "budget", "scout", {})).toBe("claude-haiku-4-5");
-      expect(resolveModel("nonexistent", "quality", "architect", {})).toBe("claude-sonnet-4-5");
+      expect(resolveModel("nonexistent", "quality", "architect", {})).toBe("claude-sonnet-4-6");
     });
 
     it("falls back to balanced for empty string profile", () => {
-      expect(resolveModel("", "balanced", "executor", {})).toBe("claude-sonnet-4-5");
+      expect(resolveModel("", "balanced", "executor", {})).toBe("claude-sonnet-4-6");
     });
 
     // Exhaustive: all 9 profile × tier combinations
     const expectations: Array<[ProfileName, Tier, string]> = [
-      ["quality", "budget", "claude-sonnet-4-5"],
-      ["quality", "balanced", "claude-sonnet-4-5"],
-      ["quality", "quality", "claude-opus-4"],
+      ["quality", "budget", "claude-sonnet-4-6"],
+      ["quality", "balanced", "claude-sonnet-4-6"],
+      ["quality", "quality", "claude-opus-4-6"],
       ["balanced", "budget", "claude-haiku-4-5"],
-      ["balanced", "balanced", "claude-sonnet-4-5"],
-      ["balanced", "quality", "claude-sonnet-4-5"],
+      ["balanced", "balanced", "claude-sonnet-4-6"],
+      ["balanced", "quality", "claude-sonnet-4-6"],
       ["budget", "budget", "claude-haiku-4-5"],
       ["budget", "balanced", "claude-haiku-4-5"],
-      ["budget", "quality", "claude-sonnet-4-5"],
+      ["budget", "quality", "claude-sonnet-4-6"],
     ];
 
     for (const [profile, tier, expected] of expectations) {

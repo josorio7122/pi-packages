@@ -30,8 +30,11 @@ import {
   buildWorkflowGateMessage,
   shouldBlockForMissingHandoff,
   buildMissingHandoffMessage,
+  shouldBlockForInvalidPreset,
+  buildInvalidPresetMessage,
 } from "./enforcement.js";
-import { writeHandoff } from "./handoff.js";
+import { getPhaseAllowedPresets, isPhaseAutoAdvance } from "./phases.js";
+import { writeHandoff, writeDispatchLog } from "./handoff.js";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -675,6 +678,25 @@ export default function piCrew(pi: ExtensionAPI) {
         }
       }
 
+      // ── Phase-preset gate: check presets are valid for current phase ──
+      if (hasActiveWorkflow && state) {
+        const presetNames = hasSingle
+          ? [params.preset!]
+          : hasTasks
+            ? params.tasks!.map((t) => t.preset)
+            : params.chain!.map((c) => c.preset);
+
+        const presetCheck = shouldBlockForInvalidPreset(state.phase, presetNames);
+        if (presetCheck?.blocked) {
+          const allowed = getPhaseAllowedPresets(state.phase ?? "") ?? [];
+          return {
+            content: [{ type: "text", text: buildInvalidPresetMessage(state.phase!, presetCheck.invalidPresets, allowed) }],
+            details: undefined,
+            isError: true,
+          };
+        }
+      }
+
       // ── Dispatch to mode handler ────────────────────────────
       let result: {
         content: Array<{ type: "text"; text: string }>;
@@ -698,18 +720,37 @@ export default function piCrew(pi: ExtensionAPI) {
         };
       }
 
-      // ── Auto-capture handoff to .crew/ ──────────────────────
-      if (!result.isError && hasActiveWorkflow) {
-        const state = readState(ctx.cwd);
-        if (state?.feature && state.phase) {
-          const output = result.content
-            .filter((c): c is { type: "text"; text: string } => c.type === "text")
-            .map((c) => c.text)
-            .join("\n\n");
-          if (output.trim()) {
-            writeHandoff(ctx.cwd, state.feature, state.phase, output);
-            // Auto-advance to next phase now that handoff is written
-            advancePhase(ctx.cwd);
+      // ── Universal dispatch log — always write to .crew/ ────
+      if (!result.isError) {
+        const output = result.content
+          .filter((c): c is { type: "text"; text: string } => c.type === "text")
+          .map((c) => c.text)
+          .join("\n\n");
+
+        if (output.trim()) {
+          // Always log dispatch to .crew/dispatches/ regardless of workflow
+          const dispatchPreset = hasSingle
+            ? params.preset!
+            : hasTasks
+              ? params.tasks!.map((t) => t.preset).join("+")
+              : params.chain!.map((c) => c.preset).join("→");
+          const dispatchTask = hasSingle
+            ? params.task!
+            : hasTasks
+              ? params.tasks!.map((t) => `[${t.preset}] ${t.task}`).join("\n")
+              : params.chain!.map((c) => `[${c.preset}] ${c.task}`).join("\n");
+          writeDispatchLog(ctx.cwd, dispatchPreset, dispatchTask, output);
+
+          // When workflow is active, also write phase handoff
+          if (hasActiveWorkflow) {
+            const currentState = readState(ctx.cwd);
+            if (currentState?.feature && currentState.phase) {
+              writeHandoff(ctx.cwd, currentState.feature, currentState.phase, output);
+              // Only auto-advance for phases that support it (not build, not review)
+              if (isPhaseAutoAdvance(currentState.phase)) {
+                advancePhase(ctx.cwd);
+              }
+            }
           }
         }
       }
