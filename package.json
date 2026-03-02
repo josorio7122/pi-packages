@@ -30,7 +30,6 @@
   "type": "module",
   "pi": {
     "skills": [
-      "./packages/pi-crew/skills",
       "./packages/exa-search/skills",
       "./packages/gh/skills",
       "./packages/glab/skills",

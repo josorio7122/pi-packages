@@ -262,7 +262,8 @@ async function executeSingleMode(
 
 // ── Parallel Mode ───────────────────────────────────────────────────
 
-interface TaskInput {
+/** Shared shape for task/chain step input. */
+interface AgentInput {
   preset: string;
   task: string;
   cwd?: string;
@@ -272,7 +273,7 @@ interface TaskInput {
 }
 
 async function executeParallelMode(
-  tasks: TaskInput[],
+  tasks: AgentInput[],
   profile: string,
   overrides: Record<string, string>,
   defaultCwd: string,
@@ -368,17 +369,8 @@ function buildParallelResult(agents: AgentRenderState[]): ToolResult {
 
 // ── Chain Mode ──────────────────────────────────────────────────────
 
-interface ChainInput {
-  preset: string;
-  task: string;
-  cwd?: string;
-  model?: string;
-  tools?: string;
-  thinking?: string;
-}
-
 async function executeChainMode(
-  chain: ChainInput[],
+  chain: AgentInput[],
   profile: string,
   overrides: Record<string, string>,
   defaultCwd: string,
