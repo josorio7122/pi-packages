@@ -1,197 +1,226 @@
-# Pi-Packages Improvement Plan
+# Pi-Packages Improvement Plan (Round 2)
 
-> **Status: COMPLETE** — All 14 tasks across 4 waves implemented. See git log for commits.
-
-Comprehensive evaluation against Anthropic engineering standards, TypeScript best practices, and code quality benchmarks.
+> **Status: PENDING** — 18 tasks across 5 waves. Fresh evaluation post-Round 1.
 
 ## Evaluation Summary
 
 | Dimension | Grade | Key Findings |
 |-----------|-------|-------------|
-| Anthropic Agent Patterns | B+ | Tool descriptions need examples/clarity; chain error recovery loses context |
-| TypeScript Type Safety | B | Optional fields where discriminated unions needed; `Record<string, unknown>` |
-| DRY | C+ | 3x error extraction in pi-crew, 5x error handler in exa-search, options builder duplication |
-| Test Coverage | A | 188 tests, 10 suites; comprehensive coverage including negative paths, abort, concurrent failure |
-| Module Architecture | A | Clean separation, no circular deps, single responsibility |
-| Documentation | A- | Excellent README; some JSDoc gaps on public API |
+| Anthropic Patterns | **A-** | Good tool descriptions w/ examples, parallel dispatch, retry logic. Gaps: index.ts God Function (337 lines), no orchestrator planning visibility, no response format control |
+| TypeScript Safety | **B+** | Zero `any`, discriminated unions for DisplayItem. Gaps: 10 non-null assertions in index.ts, `as` casts in rendering, no Result type for error paths |
+| DRY | **B+** | common.ts extracted for exa-search. Gaps: timer pattern 3×, instance counter 3×, exa-search still has 5× identical try/catch/output blocks |
+| Dead Code | **A** | Only 2 unused exports (AgentPreset, ModelProfile interfaces) + 2 tested-but-uncalled functions (getPhaseDir, listFeatures) |
+| Test Coverage | **A** | 173 unit tests, error/stagger/lock retry coverage. Gaps: no exa-search tests, no type-level tests |
+| Module Design | **A-** | Type exports at bottom of index.ts. Gaps: `export *` would be cleaner via barrel, rendering.ts mixes types + UI + data extraction |
+| Performance | **A-** | Stagger + retry, concurrent limits. Gap: timer intervals allocate closures per-agent |
 
 ---
 
-## Phase 1 — Foundation (DRY + Tool Design)
+## Anthropic Patterns Evaluation (48-point checklist)
 
-### Task 1.1: Extract error message helper
-- **Priority:** High | **Effort:** S | **Category:** DRY
-- **Package:** pi-crew
-- **File:** `extensions/pi-crew/index.ts` (lines 317, 434, 525)
-- **What:** Extract `e instanceof Error ? e.message : String(e)` to `extractErrorMessage(e: unknown): string`
-- **Why:** Identical pattern repeated 3× in single/parallel/chain error handlers
+### ✅ Passing (32/48)
 
-### Task 1.2: exa-search common.ts expansion
-- **Priority:** High | **Effort:** S | **Category:** DRY
-- **Package:** exa-search
-- **Files:** `scripts/lib/common.ts`, all 5 script files
-- **What:** Add 3 exports:
-  - `handleError(err: unknown): never` — replaces 5× identical try/catch
-  - `filterOptions(opts, keys)` — replaces 4× options filtering loop
-  - `buildContentsOptions(opts)` — replaces 2× contents builder in search/find-similar
-- **Why:** 5 scripts share identical error handling; 4 share options loop; 2 share 9-line block
+- **COMPOSABILITY**: Clean pattern — prompt chaining, orchestrator-workers, parallelization all visible
+- **MULTI_AGENT_FOR_PARALLELIZATION**: Parallel mode spawns concurrent agents with stagger
+- **ORCHESTRATOR_WORKER_PATTERN**: Clear delegation — preset defines role, task defines scope
+- **TOOL_PARALLELIZATION**: mapWithConcurrencyLimit enables concurrent tool execution
+- **SEPARATION_OF_CONCERNS**: Each preset has distinct tools (scout: read-only, executor: read+write+bash)
+- **RETRY_LOGIC_WITH_BACKOFF**: Lock file retry with exponential backoff (500ms → 1s → 2s)
+- **TOOL_DESCRIPTIONS_EXPLICIT**: Comprehensive descriptions with examples for single/parallel/chain
+- **PARAMETER_CLARITY**: Parameters well-named (preset, task, cwd, model, thinking)
+- **HELPFUL_ERROR_MESSAGES**: extractErrorMessage + error details in chain output
+- **TOKEN_EFFICIENT_DEFAULTS**: MAX_CONCURRENT=4, truncated previews, concise rendering
 
-### Task 1.3: Improve dispatch_crew tool description
-- **Priority:** Critical | **Effort:** S | **Category:** tool-design
-- **Package:** pi-crew
-- **File:** `extensions/pi-crew/index.ts` (line 164)
-- **What:** Expand description with:
-  - Isolation model explanation (agents can't see conversation)
-  - Mode descriptions with concurrency limit (8)
-  - `{previous}` mechanism for chains
-  - **Examples** for each mode (single, parallel, chain)
-  - Full-context requirement emphasis
-- **Why:** Anthropic: "Tool descriptions are crucial — agents read them like API docs" and "Include examples in tool descriptions"
+### ⚠️ Partial (10/48)
 
----
+| Pattern | Issue | Fix |
+|---------|-------|-----|
+| **CONTEXT_WINDOW_DISTRIBUTION** | Chain mode passes full output as `{previous}` — no summarization for long outputs | Truncate/summarize `{previous}` if over token threshold |
+| **STATEFUL_RESUMPTION** | `.crew/state.md` exists but no checkpoint within a dispatch | Add per-step state for chain mode |
+| **OBSERVABILITY_FOR_DEBUGGING** | stderr captured but no structured logging of agent decisions | Add debug mode with structured trace output |
+| **TASK_DESCRIPTION_SPECIFICITY** | Depends entirely on LLM writing good task descriptions | Add task template validation / minimum length check |
+| **RESPONSE_FORMAT_ENUM** | No concise vs detailed response control | Add `response_format` parameter |
+| **LEAD_AGENT_PLANNING** | No visible planning step before dispatch | N/A — orchestrator is the host LLM |
+| **AGENT_PROMPT_ENGINEERING_ITERATION** | No automated prompt optimization | Out of scope for now |
+| **STOP_CONDITION_EXPLICIT** | No max iteration/token budget per agent | Add `maxTurns` parameter |
+| **TOOL_ERGONOMICS_MATCH_AGENT_COGNITION** | Good but could expose `response_format` | See above |
+| **POKA_YOKE_TOOL_DESIGN** | `cwd` accepts relative paths (error-prone) | Resolve to absolute in tool handler |
 
-## Phase 2 — Type Safety
+### ❌ Missing (6/48)
 
-### Task 2.1: DisplayItem discriminated union
-- **Priority:** Critical | **Effort:** S | **Category:** type-safety
-- **Package:** pi-crew
-- **File:** `extensions/pi-crew/rendering.ts` (line 44)
-- **Current:**
-  ```typescript
-  interface DisplayItem {
-    type: "text" | "toolCall";
-    text?: string;
-    name?: string;
-    arguments?: Record<string, unknown>;
-  }
-  ```
-- **Change to:**
-  ```typescript
-  type DisplayItem =
-    | { type: "text"; text: string }
-    | { type: "toolCall"; name: string; arguments: Record<string, unknown> };
-  ```
-- **Why:** Optional fields allow illegal states (text DisplayItem with no `text` field)
-
-### Task 2.2: SpawnResult discriminated union
-- **Priority:** Critical | **Effort:** M | **Category:** type-safety
-- **Package:** pi-crew
-- **File:** `extensions/pi-crew/spawn.ts` (line 32)
-- **What:** Discriminate success vs error states:
-  ```typescript
-  export type SpawnResult = SpawnResultBase & (
-    | { exitCode: 0; stopReason?: "stop" | "maxTurns" }
-    | { exitCode: number; stopReason: "error" | "aborted"; errorMessage: string }
-  );
-  ```
-- **Why:** `errorMessage` and `stopReason` are always set on error but typed as optional
-- **Dependencies:** Update consumers in index.ts (3 mode handlers)
+| Pattern | Impact | Effort |
+|---------|--------|--------|
+| **RESPONSE_FORMAT_ADAPTATION** | Medium — all output is raw text | Low |
+| **MULTI_AGENT_EMERGENT_BEHAVIORS** | Low — no eval for redundancy between agents | High |
+| **HELD_OUT_TEST_SET** | Low — no eval framework yet | High |
+| **LLM_JUDGE_RUBRIC** | Low — no automated quality scoring | High |
+| **RAINBOW_DEPLOYMENT** | N/A — local tool, not a service | N/A |
+| **TOOL_TESTING_AGENT** | Low — manual testing only | Medium |
 
 ---
 
-## Phase 3 — Robustness
+## TypeScript Best Practices Evaluation
 
-### Task 3.1: Chain mode preserve prior step results on error
-- **Priority:** High | **Effort:** M | **Category:** architecture
-- **Package:** pi-crew
-- **File:** `extensions/pi-crew/index.ts` (line 515)
-- **What:** When chain step fails, include summary of completed steps in error output
-- **Why:** Anthropic: "Error handling should preserve context for recovery"
-
-### Task 3.2: Negative tool call tests
-- **Priority:** High | **Effort:** M | **Category:** testing
-- **Package:** pi-crew
-- **Files:** New tests in `__tests__/`
-- **What:** Test invalid preset names, mode conflicts, missing params, empty arrays
-- **Why:** Verify error messages guide recovery (Anthropic pattern)
-
-### Task 3.3: Abort/timeout tests
-- **Priority:** High | **Effort:** M | **Category:** testing
-- **Package:** pi-crew
-- **File:** `__tests__/spawn.test.ts`
-- **What:** Test AbortSignal cancellation of running agents
-- **Why:** Abort logic exists but never tested
-
-### Task 3.4: Concurrent failure tests
-- **Priority:** High | **Effort:** M | **Category:** testing
-- **Package:** pi-crew
-- **File:** `__tests__/integration.test.ts`
-- **What:** Test parallel mode when some agents fail (partial failure handling)
-- **Why:** `allFailed` logic in index.ts untested
+| Category | Score | Details |
+|----------|-------|---------|
+| **Type Safety** | 7/10 | Discriminated unions for DisplayItem ✅, branded types not needed, `satisfies` not used but acceptable. 10 non-null assertions in index.ts (post-validation but fragile). No `any`. |
+| **Error Handling** | 5/10 | No Result type — functions return `null` or throw. catch blocks use `unknown` properly. Silent parse failures in NDJSON/JSON. extractErrorMessage is good but ad-hoc. |
+| **Module Design** | 7/10 | Type exports at bottom of index.ts. No barrel file. rendering.ts is 360 lines mixing types, data extraction, and UI rendering — should split. |
+| **API Design** | 8/10 | Options object pattern (DispatchCrewParams). Good discriminated mode detection. Builder pattern not needed here. |
+| **Testing** | 7/10 | 173 unit tests, good coverage. No type-level tests. No exa-search script tests. |
+| **Performance** | 8/10 | Lazy temp file creation, stagger, retry. Timer closures per-agent are fine. No WeakRef needed. |
+| **Anti-Patterns** | 8/10 | Zero `any`, zero enums, minimal casts. 10 `!` assertions and some `as` casts remain. |
 
 ---
 
-## Phase 4 — Polish
+## Dead Code Inventory
 
-### Task 4.1: JSDoc for public API functions
-- **Priority:** Medium | **Effort:** M | **Category:** docs
-- **Package:** pi-crew
-- **Files:** presets.ts, profiles.ts, spawn.ts, state.ts
-- **What:** Add JSDoc to all exported functions. Key targets:
-  - `mapWithConcurrencyLimit` — explain order preservation, clamping, rejection
-  - `resolvePreset` — explain why it reads prompts from disk
-  - `getPreset`, `resolveModel`, `isValidProfile`
-
-### Task 4.2: Document MAX_CONCURRENT
-- **Priority:** Medium | **Effort:** S | **Category:** docs
-- **Package:** pi-crew
-- **File:** `extensions/pi-crew/index.ts` (line 36)
-- **What:** JSDoc explaining why 8 is the ceiling (empirical testing on M-series Macs)
-
-### Task 4.3: Callback naming consistency
-- **Priority:** Medium | **Effort:** S | **Category:** architecture
-- **Package:** pi-crew
-- **Files:** spawn.ts, index.ts
-- **What:** Standardize on `OnAgentUpdate` / `onUpdate` pattern
-
-### Task 4.4: Type exports for extension consumers
-- **Priority:** Medium | **Effort:** S | **Category:** architecture
-- **Package:** pi-crew
-- **File:** `extensions/pi-crew/index.ts`
-- **What:** Export types from spawn, presets, state, rendering for downstream use
+| Item | File:Line | Status | Action |
+|------|-----------|--------|--------|
+| `AgentPreset` interface | presets.ts:10 | Exported, never imported | Remove `export` or use in type exports |
+| `ModelProfile` interface | profiles.ts:5 | Exported, never imported | Remove `export` or use in type exports |
+| `getPhaseDir()` | state.ts:58 | Exported, tested, never called | Keep for SDK — document as public API |
+| `listFeatures()` | state.ts:66 | Exported, tested, never called | Keep for SDK — document as public API |
 
 ---
 
-## What's Already Excellent (No Action Needed)
+## DRY Violations
 
-- ✅ Module architecture — clean separation, no circular deps
-- ✅ Error handling — consistent, defensive, proper cleanup
-- ✅ Workflow enforcement — state-driven injection is innovative
-- ✅ Preset system — clear role separation, appropriate model tiers
-- ✅ Rendering system — DynamicBorder, progressive disclosure
-- ✅ Zero dead code
-- ✅ README documentation — comprehensive and well-structured
-- ✅ Test foundation — 188 tests across 10 suites
+### High Priority
 
----
+| Pattern | Locations | Fix |
+|---------|-----------|-----|
+| Timer interval setup/cleanup | index.ts:302, 419, 565 (3×) | Extract `createAgentTimer()` helper |
+| Instance counter (preset numbering) | index.ts:273, rendering.ts:324 (2×) | Already in `buildAgentStates` — remove duplicate in rendering |
+| exa-search try/catch/output | All 5 scripts (5×) | Extract `executeAndPrint()` wrapper in common.ts |
+| exa-search `new Exa()` | All 5 scripts (5×) | Extract `createClient()` in common.ts |
 
-## Implementation Waves
+### Medium Priority
 
-| Wave | Tasks | Effort | Focus |
-|------|-------|--------|-------|
-| 1 | 1.1, 1.2, 1.3 | 3×S | DRY cleanup + tool descriptions |
-| 2 | 2.1, 2.2 | S+M | Type safety |
-| 3 | 3.1, 3.2, 3.3, 3.4 | 4×M | Robustness + test gaps |
-| 4 | 4.1, 4.2, 4.3, 4.4 | M+3×S | Documentation + polish |
+| Pattern | Locations | Fix |
+|---------|-----------|-----|
+| exa-search option parsing `JSON.parse(args[N])` | All 5 scripts | Already in `parseArgs()` — verify all use it |
+| TaskItem/ChainItem schema duplication | index.ts:66-88 | Both are identical — extract `AgentTaskSchema` |
 
 ---
 
-## Key Anthropic Pattern Gaps
+## Plan: 18 Tasks, 5 Waves
 
-| Principle | Current State | Gap | Fix |
-|-----------|--------------|-----|-----|
-| Tool descriptions are API docs | Brief, no examples | Missing examples, isolation model, concurrency limit | Task 1.3 |
-| Error messages guide recovery | Good but chain loses context | Prior step results lost on chain failure | Task 3.1 |
-| Include examples in descriptions | None | LLMs learn from examples faster than prose | Task 1.3 |
-| Let agents self-correct | Already good | Tool errors returned to LLM, not swallowed | ✅ |
-| Scale effort to complexity | Workflow shortcuts exist | Good coverage | ✅ |
-| Transparent abstractions | Prompts visible in skills | No hidden magic | ✅ |
+### Wave 1 — God Function Decomposition (index.ts) [HIGH IMPACT]
 
-## Key TS Pattern Gaps
+The 337-line `execute` function is the #1 code quality issue. It handles single/parallel/chain modes inline with timer logic, state mutation, and error formatting interleaved.
 
-| Pattern | Current State | Gap | Fix |
-|---------|--------------|-----|-----|
-| Discriminated unions | Optional fields | DisplayItem, SpawnResult | Tasks 2.1, 2.2 |
-| JSDoc on exports | Partial | Key functions undocumented | Task 4.1 |
-| Type exports | None | Downstream can't use types | Task 4.4 |
-| Error extraction | Inline | Repeated 3× | Task 1.1 |
+**Task 1.1: Extract single mode handler**
+- File: `index.ts`
+- Extract lines ~243-326 into `executeSingleMode(params, resolveOne, buildAgentStates, emitUpdate, config, signal, ctx)`
+- Return `ToolResult`
+- Effort: Medium
+
+**Task 1.2: Extract parallel mode handler**
+- File: `index.ts`
+- Extract lines ~329-364 into `executeParallelMode(params, resolveOne, buildAgentStates, emitUpdate, config, signal, ctx)`
+- Return `ToolResult`
+- Effort: Medium
+
+**Task 1.3: Extract chain mode handler**
+- File: `index.ts`
+- Extract lines ~367-488 into `executeChainMode(params, resolveOne, buildAgentStates, emitUpdate, config, signal, ctx)`
+- Return `ToolResult`
+- Effort: Medium
+
+**Task 1.4: Extract timer helper**
+- File: `index.ts` or new `helpers.ts`
+- Extract the `setInterval(() => { agents[i].elapsedMs = ...; emitUpdate(...) }, 1000)` pattern into `startAgentTimer(agent, emitUpdate, mode)` returning cleanup function
+- Used in: single (1×), parallel (1×), chain (1×)
+- Effort: Small
+
+### Wave 2 — Type Safety Improvements [MEDIUM IMPACT]
+
+**Task 2.1: Eliminate non-null assertions in index.ts**
+- Replace all 10 `params.preset!`, `params.tasks!`, `params.chain!` with proper narrowing
+- Pattern: destructure after mode check — `const { preset, task } = params as Required<Pick<..., 'preset' | 'task'>>`
+- Or better: pass narrowed params to mode handlers from Task 1.1-1.3
+- Effort: Small
+
+**Task 2.2: Schema deduplication — TaskItem and ChainItem**
+- `TaskItem` and `ChainItem` are identical schemas (preset, task, cwd, model, tools, thinking)
+- Extract `AgentTaskSchema` and reuse for both
+- Effort: Small
+
+**Task 2.3: Extract rendering types to separate file**
+- `rendering.ts` (360 lines) mixes: type definitions (lines 28-39), data extraction (lines 112-156), UI rendering (lines 176-316), render call builder (318-350)
+- Split into: `types.ts` (types only), keep `rendering.ts` for UI
+- Effort: Small
+
+### Wave 3 — exa-search DRY Cleanup [MEDIUM IMPACT]
+
+**Task 3.1: Add `createClient()` to common.ts**
+- Extract `new Exa()` instantiation used identically in all 5 scripts
+- Effort: Small
+
+**Task 3.2: Add `executeAndPrint()` to common.ts**
+- Extract the pattern: `try { const result = await apiCall(); console.log(JSON.stringify(result, null, 2)); } catch (err) { handleError(err); }`
+- Used in: search.ts, find-similar.ts, contents.ts, answer.ts (non-streaming)
+- Effort: Small
+
+**Task 3.3: Add `requireArg()` to common.ts**
+- Extract: `if (!value) { console.error("Error: <name> required"); process.exit(1); } return value`
+- Used 5× in research.ts
+- Effort: Small
+
+### Wave 4 — Dead Code & Robustness [LOW IMPACT]
+
+**Task 4.1: Remove unused `export` from internal-only types**
+- `AgentPreset` (presets.ts:10) — remove `export` keyword, keep interface
+- `ModelProfile` (profiles.ts:5) — remove `export` keyword, keep interface
+- Effort: Tiny
+
+**Task 4.2: Document SDK-intended functions**
+- `getPhaseDir()` and `listFeatures()` — add JSDoc `@public` tag and note in README as SDK utilities
+- Effort: Tiny
+
+**Task 4.3: Resolve `cwd` to absolute path in tool handler**
+- In `execute()`, resolve relative `cwd` to absolute before passing to `runSingleAgent`
+- Prevents "file not found" errors when agent runs in wrong directory
+- Effort: Small
+
+**Task 4.4: Add `maxTurns` parameter to dispatch_crew**
+- New optional parameter: `maxTurns?: number` — passed to pi subprocess as `--max-turns N`
+- Prevents runaway agents from burning tokens indefinitely
+- Verify pi CLI supports `--max-turns` flag first
+- Effort: Small
+
+### Wave 5 — Testing Gaps [MEDIUM IMPACT]
+
+**Task 5.1: Extract magic numbers to named constants in rendering.ts**
+- Replace: `50` → `TASK_PREVIEW_LENGTH`, `60` → `TOOL_DETAIL_LENGTH`, `47` → `PATH_TRUNCATE_LENGTH`, etc.
+- Effort: Small
+
+**Task 5.2: Add exa-search script tests**
+- Test `common.ts` functions: `filterOptions`, `buildContentsOptions`, `handleError`, `parseArgs`
+- Mock `process.exit` and `console.error` for `handleError`/`showHelp`
+- Effort: Medium
+
+---
+
+## Execution Order & Dependencies
+
+```
+Wave 1 (God Function) ─→ Wave 2 (Type Safety) ─→ Wave 5 (Testing)
+                                                     ↑
+Wave 3 (exa-search DRY) ─────────────────────────────┘
+Wave 4 (Dead Code) ── independent, can run anytime
+```
+
+Wave 1 must come first because Wave 2 (non-null assertion removal) depends on the mode handlers being extracted.
+
+## Estimated Effort
+
+| Wave | Tasks | Effort | Lines Changed |
+|------|-------|--------|---------------|
+| 1 — God Function | 4 | 2-3 hours | ~200 lines refactored |
+| 2 — Type Safety | 3 | 1 hour | ~50 lines |
+| 3 — exa-search | 3 | 1 hour | ~40 lines |
+| 4 — Dead Code | 4 | 30 min | ~20 lines |
+| 5 — Testing | 2 | 1-2 hours | ~100 lines new tests |
+| **Total** | **18** | **~6-7 hours** | **~410 lines** |
