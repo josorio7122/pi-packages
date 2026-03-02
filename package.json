@@ -29,7 +29,13 @@
   },
   "type": "module",
   "pi": {
-    "skills": "[\"./packages/exa-search/skills\",\"./packages/gh/skills\",\"./packages/glab/skills\",\"./packages/create-skill/skills\",\"./packages/interface-design/skills\"]",
+    "skills": [
+      "./packages/exa-search/skills",
+      "./packages/gh/skills",
+      "./packages/glab/skills",
+      "./packages/create-skill/skills",
+      "./packages/interface-design/skills"
+    ],
     "extensions": [
       "./packages/pi-crew/extensions",
       "./packages/exit/extensions",
