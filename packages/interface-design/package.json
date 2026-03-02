@@ -1,0 +1,22 @@
+{
+  "name": "@josorio/interface-design",
+  "version": "1.0.0",
+  "description": "Design engineering skill for pi. Build interfaces with craft, memory, and consistency.",
+  "scripts": {},
+  "keywords": [
+    "pi-package",
+    "pi-skill",
+    "design",
+    "interface-design",
+    "ui"
+  ],
+  "author": "",
+  "license": "MIT",
+  "private": "true",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "type": "module"
+}
