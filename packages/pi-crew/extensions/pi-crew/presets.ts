@@ -7,7 +7,7 @@ import * as path from "node:path";
 import type { Tier } from "./profiles.js";
 import { resolveModel } from "./profiles.js";
 
-export interface AgentPreset {
+interface AgentPreset {
   name: string;
   description: string;
   promptFile: string; // Relative to package root: "references/prompts/scout.md"

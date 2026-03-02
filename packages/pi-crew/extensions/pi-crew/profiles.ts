@@ -2,7 +2,7 @@
 // Maps agent tiers (budget/balanced/quality) to concrete model strings
 // based on the active profile.
 
-export interface ModelProfile {
+interface ModelProfile {
   budget: string;
   balanced: string;
   quality: string;

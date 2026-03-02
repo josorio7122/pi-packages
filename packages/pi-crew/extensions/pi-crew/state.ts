@@ -47,6 +47,7 @@ export function ensureCrewDir(cwd: string): void {
 
 /**
  * Get the phase directory for a feature.
+ * @public
  * @param cwd - Working directory
  * @param feature - Feature name
  * @returns Path to .crew/phases/{feature}
@@ -57,6 +58,7 @@ export function getPhaseDir(cwd: string, feature: string): string {
 
 /**
  * List all feature directories.
+ * @public
  * @param cwd - Working directory
  * @returns Array of feature names
  */
