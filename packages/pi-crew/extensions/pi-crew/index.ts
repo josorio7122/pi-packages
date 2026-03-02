@@ -50,6 +50,11 @@ const MAX_CONCURRENT = Math.min(
 );
 const MAX_PARALLEL_TASKS = 8;
 
+/** Extract a human-readable message from an unknown error value. */
+function extractErrorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 // ── Tool Schema ─────────────────────────────────────────────────────
 
 const TaskItem = Type.Object({
@@ -345,7 +350,7 @@ export default function piCrew(pi: ExtensionAPI) {
           agents[0].status = "error";
           agents[0].exitCode = 1;
           agents[0].elapsedMs = Date.now() - startTime;
-          const errorMessage = e instanceof Error ? e.message : String(e);
+          const errorMessage = extractErrorMessage(e);
           agents[0].errorMessage = errorMessage;
           return {
             content: [{ type: "text", text: `Agent aborted: ${errorMessage}` }],
@@ -462,7 +467,7 @@ export default function piCrew(pi: ExtensionAPI) {
           };
         } catch (e: unknown) {
           clearInterval(timer);
-          const errorMessage = e instanceof Error ? e.message : String(e);
+          const errorMessage = extractErrorMessage(e);
           return {
             content: [{ type: "text", text: `Parallel dispatch error: ${errorMessage}` }],
             details: { mode: "parallel", agents } as CrewDispatchDetails,
@@ -553,7 +558,7 @@ export default function piCrew(pi: ExtensionAPI) {
             agents[i].status = "error";
             agents[i].exitCode = 1;
             agents[i].elapsedMs = Date.now() - startTime;
-            const errorMessage = e instanceof Error ? e.message : String(e);
+            const errorMessage = extractErrorMessage(e);
             agents[i].errorMessage = errorMessage;
             return {
               content: [{ type: "text", text: `Chain aborted at step ${i + 1}: ${errorMessage}` }],
