@@ -13,6 +13,16 @@ import { Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
 import type { Message } from "@mariozechner/pi-ai";
 import type { UsageStats } from "./spawn.js";
 
+// ── Display Constants ────────────────────────────────────────────────
+const TOKENS_MILLION = 1_000_000;
+const TOKENS_THOUSAND = 1_000;
+const TASK_PREVIEW_CHARS = 50;
+const TOOL_DETAIL_CHARS = 60;
+const PATH_TRUNCATE_CHARS = 57;
+const OUTPUT_PREVIEW_LINES = 2;
+const COLLAPSED_TOOL_COUNT = 5;
+const CHAIN_PREVIEW_STEPS = 3;
+
 // ── Types ───────────────────────────────────────────────────────────
 
 interface DispatchCrewArgs {
@@ -51,8 +61,8 @@ type DisplayItem =
  * Format a token count for display: 1200 → "1.2k", 45 → "45"
  */
 export function formatTokens(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
+  if (count >= TOKENS_MILLION) return `${(count / TOKENS_MILLION).toFixed(1)}M`;
+  if (count >= TOKENS_THOUSAND) return `${(count / TOKENS_THOUSAND).toFixed(1)}k`;
   return String(count);
 }
 
@@ -88,7 +98,7 @@ export function formatToolCall(
     detail = shortenPath(String(args.path));
   } else if (toolName === "bash" && args.command) {
     const cmd = String(args.command);
-    detail = cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd;
+    detail = cmd.length > TOOL_DETAIL_CHARS ? cmd.slice(0, PATH_TRUNCATE_CHARS) + "..." : cmd;
   } else if (toolName === "write" && args.path) {
     detail = shortenPath(String(args.path));
   } else if (toolName === "edit" && args.path) {
@@ -106,7 +116,7 @@ export function formatToolCall(
     const firstArg = Object.values(args).find((v) => typeof v === "string");
     if (firstArg) {
       const s = String(firstArg);
-      detail = s.length > 50 ? s.slice(0, 47) + "..." : s;
+      detail = s.length > TASK_PREVIEW_CHARS ? s.slice(0, TASK_PREVIEW_CHARS - 3) + "..." : s;
     }
   }
 
@@ -225,7 +235,7 @@ function buildAgentCard(
   const elapsed = `${Math.round(agent.elapsedMs / 1000)}s`;
 
   // Header: icon + name + task preview + time
-  const taskPreview = agent.task.length > 50 ? agent.task.slice(0, 47) + "..." : agent.task;
+  const taskPreview = agent.task.length > TASK_PREVIEW_CHARS ? agent.task.slice(0, TASK_PREVIEW_CHARS - 3) + "..." : agent.task;
   const header =
     `${icon} ${theme.fg("accent", theme.bold(name))}` +
     theme.fg("dim", `  ${taskPreview}`) +
@@ -286,7 +296,7 @@ function buildAgentCard(
     if (usageStr) card.addChild(new Text(theme.fg("dim", usageStr), 0, 0));
   } else {
     // Collapsed: last ~5 tool calls + truncated output
-    const toolCalls = displayItems.filter((i) => i.type === "toolCall").slice(-5);
+    const toolCalls = displayItems.filter((i) => i.type === "toolCall").slice(-COLLAPSED_TOOL_COUNT);
     for (const item of toolCalls) {
       card.addChild(
         new Text(
@@ -298,7 +308,7 @@ function buildAgentCard(
       );
     }
     if (finalOutput) {
-      const preview = finalOutput.split("\n").slice(0, 2).join("\n");
+      const preview = finalOutput.split("\n").slice(0, OUTPUT_PREVIEW_LINES).join("\n");
       card.addChild(new Text(theme.fg("dim", `  ${preview}`), 0, 0));
     }
   }
@@ -383,7 +393,7 @@ export function buildRenderResult(
 export function buildRenderCall(args: DispatchCrewArgs, theme: Theme): Text {
   if (args.preset && args.task) {
     // Single mode
-    const preview = args.task.length > 60 ? args.task.slice(0, 57) + "..." : args.task;
+    const preview = args.task.length > TOOL_DETAIL_CHARS ? args.task.slice(0, PATH_TRUNCATE_CHARS) + "..." : args.task;
     return new Text(
       theme.fg("toolTitle", theme.bold("dispatch_crew ")) +
         theme.fg("accent", args.preset) +
@@ -399,12 +409,12 @@ export function buildRenderCall(args: DispatchCrewArgs, theme: Theme): Text {
     let text =
       theme.fg("toolTitle", theme.bold("dispatch_crew ")) +
       theme.fg("accent", `parallel (${args.tasks.length} tasks)`);
-    for (const t of args.tasks.slice(0, 3)) {
+    for (const t of args.tasks.slice(0, CHAIN_PREVIEW_STEPS)) {
       const preview = t.task.length > 40 ? t.task.slice(0, 37) + "..." : t.task;
       text += `\n  ${theme.fg("accent", t.preset)} ${theme.fg("dim", preview)}`;
     }
-    if (args.tasks.length > 3) {
-      text += `\n  ${theme.fg("muted", `... +${args.tasks.length - 3} more`)}`;
+    if (args.tasks.length > CHAIN_PREVIEW_STEPS) {
+      text += `\n  ${theme.fg("muted", `... +${args.tasks.length - CHAIN_PREVIEW_STEPS} more`)}`;
     }
     return new Text(text, 0, 0);
   }
@@ -414,7 +424,7 @@ export function buildRenderCall(args: DispatchCrewArgs, theme: Theme): Text {
     let text =
       theme.fg("toolTitle", theme.bold("dispatch_crew ")) +
       theme.fg("accent", `chain (${args.chain.length} steps)`);
-    for (let i = 0; i < Math.min(args.chain.length, 3); i++) {
+    for (let i = 0; i < Math.min(args.chain.length, CHAIN_PREVIEW_STEPS); i++) {
       const step = args.chain[i];
       const cleanTask = step.task.replace(/\{previous\}/g, "").trim();
       const preview = cleanTask.length > 40 ? cleanTask.slice(0, 37) + "..." : cleanTask;
