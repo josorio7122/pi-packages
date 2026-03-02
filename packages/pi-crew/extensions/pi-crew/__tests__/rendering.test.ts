@@ -186,7 +186,9 @@ describe("rendering", () => {
       const items = getDisplayItems(messages);
       expect(items).toHaveLength(1);
       expect(items[0].type).toBe("text");
-      expect(items[0].text).toBe("Here is my analysis");
+      if (items[0].type === "text") {
+        expect(items[0].text).toBe("Here is my analysis");
+      }
     });
 
     it("extracts tool call blocks", () => {
@@ -202,7 +204,9 @@ describe("rendering", () => {
       const items = getDisplayItems(messages);
       expect(items).toHaveLength(1);
       expect(items[0].type).toBe("toolCall");
-      expect(items[0].name).toBe("read");
+      if (items[0].type === "toolCall") {
+        expect(items[0].name).toBe("read");
+      }
     });
 
     it("handles mixed content", () => {
@@ -243,8 +247,12 @@ describe("rendering", () => {
       ] as Message[];
       const items = getDisplayItems(messages);
       expect(items).toHaveLength(2);
-      expect(items[0].text).toBe("first");
-      expect(items[1].text).toBe("second");
+      if (items[0].type === "text") {
+        expect(items[0].text).toBe("first");
+      }
+      if (items[1].type === "text") {
+        expect(items[1].text).toBe("second");
+      }
     });
   });
 

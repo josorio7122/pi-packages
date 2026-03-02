@@ -41,12 +41,9 @@ export interface CrewDispatchDetails {
   agents: AgentRenderState[];
 }
 
-interface DisplayItem {
-  type: "text" | "toolCall";
-  text?: string;
-  name?: string;
-  arguments?: Record<string, unknown>;
-}
+type DisplayItem =
+  | { type: "text"; text: string }
+  | { type: "toolCall"; name: string; arguments: Record<string, unknown> };
 
 // ── Formatting Helpers ──────────────────────────────────────────────
 
@@ -134,7 +131,7 @@ export function getDisplayItems(messages: Message[]): DisplayItem[] {
         items.push({
           type: "toolCall",
           name: block.name,
-          arguments: (block as { arguments?: Record<string, unknown> }).arguments,
+          arguments: (block as { arguments?: Record<string, unknown> }).arguments ?? {},
         });
       }
     }
@@ -249,11 +246,11 @@ function buildAgentCard(
   if (isRunning) {
     // Show only last tool call while running
     const lastTool = displayItems.filter((i) => i.type === "toolCall").pop();
-    if (lastTool && lastTool.name) {
+    if (lastTool) {
       card.addChild(
         new Text(
           theme.fg("muted", "  → ") +
-            formatToolCall(lastTool.name, lastTool.arguments || {}, theme.fg.bind(theme)),
+            formatToolCall(lastTool.name, lastTool.arguments, theme.fg.bind(theme)),
           0,
           0,
         ),
@@ -264,11 +261,11 @@ function buildAgentCard(
   } else if (expanded) {
     // Show all tool calls + full output
     for (const item of displayItems) {
-      if (item.type === "toolCall" && item.name) {
+      if (item.type === "toolCall") {
         card.addChild(
           new Text(
             theme.fg("muted", "  → ") +
-              formatToolCall(item.name, item.arguments || {}, theme.fg.bind(theme)),
+              formatToolCall(item.name, item.arguments, theme.fg.bind(theme)),
             0,
             0,
           ),
@@ -286,16 +283,14 @@ function buildAgentCard(
     // Collapsed: last ~5 tool calls + truncated output
     const toolCalls = displayItems.filter((i) => i.type === "toolCall").slice(-5);
     for (const item of toolCalls) {
-      if (item.name) {
-        card.addChild(
-          new Text(
-            theme.fg("muted", "  → ") +
-              formatToolCall(item.name, item.arguments || {}, theme.fg.bind(theme)),
-            0,
-            0,
-          ),
-        );
-      }
+      card.addChild(
+        new Text(
+          theme.fg("muted", "  → ") +
+            formatToolCall(item.name, item.arguments, theme.fg.bind(theme)),
+          0,
+          0,
+        ),
+      );
     }
     if (finalOutput) {
       const preview = finalOutput.split("\n").slice(0, 2).join("\n");
