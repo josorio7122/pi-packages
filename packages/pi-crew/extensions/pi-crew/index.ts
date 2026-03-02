@@ -12,6 +12,7 @@ import {
   readState,
   readStateRaw,
   isWorkflowComplete,
+  advancePhase,
 } from "./state.js";
 import { runSingleAgent, mapWithConcurrencyLimit, emptyUsage } from "./spawn.js";
 import type { SpawnParams } from "./spawn.js";
@@ -715,6 +716,8 @@ export default function piCrew(pi: ExtensionAPI) {
             .join("\n\n");
           if (output.trim()) {
             writeHandoff(ctx.cwd, state.feature, state.phase, output);
+            // Auto-advance to next phase now that handoff is written
+            advancePhase(ctx.cwd);
           }
         }
       }

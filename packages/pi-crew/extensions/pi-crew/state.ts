@@ -3,6 +3,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { handoffExists } from "./handoff.js";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -214,4 +215,60 @@ export function getWorkflowProgress(state: CrewState): string {
       return phase;
     })
     .join(" → ");
+}
+
+/**
+ * Write state.md with YAML frontmatter.
+ * Creates .crew/ directory if needed.
+ * @param cwd - Project working directory
+ * @param state - CrewState to write
+ */
+export function writeState(cwd: string, state: CrewState): void {
+  const crewDir = path.join(cwd, CREW_DIR);
+  fs.mkdirSync(crewDir, { recursive: true });
+
+  let yaml = `---\nfeature: ${state.feature}\nphase: ${state.phase}\n`;
+  if (state.progress) {
+    yaml += `progress: ${state.progress}\n`;
+  }
+  if (state.workflow) {
+    yaml += `workflow: ${state.workflow.join(",")}\n`;
+  }
+  yaml += `---\n`;
+
+  fs.writeFileSync(path.join(crewDir, "state.md"), yaml, "utf-8");
+}
+
+/**
+ * Advance the workflow to the next phase if the current phase's handoff exists.
+ * Updates state.md with the new phase and clears progress.
+ *
+ * @param cwd - Project working directory
+ * @returns True if phase was advanced, false otherwise
+ */
+export function advancePhase(cwd: string): boolean {
+  const state = readState(cwd);
+  if (!state || !state.workflow || state.workflow.length === 0 || !state.phase || !state.feature) {
+    return false;
+  }
+
+  const currentIdx = state.workflow.indexOf(state.phase);
+  // Already at last phase or phase not in workflow
+  if (currentIdx < 0 || currentIdx >= state.workflow.length - 1) {
+    return false;
+  }
+
+  // Check handoff exists for current phase
+  if (!handoffExists(cwd, state.feature, state.phase)) {
+    return false;
+  }
+
+  // Advance to next phase
+  const nextPhase = state.workflow[currentIdx + 1];
+  writeState(cwd, {
+    ...state,
+    phase: nextPhase,
+    progress: null, // Clear progress on phase change
+  });
+  return true;
 }
