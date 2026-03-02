@@ -24,7 +24,12 @@ import {
   type CrewDispatchDetails,
 } from "./rendering.js";
 import { buildCrewPrompt, buildNudgeMessage } from "./prompt.js";
-import { shouldRequireWorkflow, buildWorkflowGateMessage } from "./enforcement.js";
+import {
+  shouldRequireWorkflow,
+  buildWorkflowGateMessage,
+  shouldBlockForMissingHandoff,
+  buildMissingHandoffMessage,
+} from "./enforcement.js";
 import { writeHandoff } from "./handoff.js";
 import type {
   ExtensionAPI,
@@ -659,6 +664,21 @@ export default function piCrew(pi: ExtensionAPI) {
             details: undefined,
             isError: true,
           };
+        }
+      }
+
+      // ── Phase gate: check handoff files exist ───────────────
+      if (hasActiveWorkflow) {
+        const state = readState(ctx.cwd);
+        if (state) {
+          const handoffCheck = shouldBlockForMissingHandoff(ctx.cwd, state);
+          if (handoffCheck.blocked) {
+            return {
+              content: [{ type: "text", text: buildMissingHandoffMessage(state, handoffCheck.missing) }],
+              details: undefined,
+              isError: true,
+            };
+          }
         }
       }
 

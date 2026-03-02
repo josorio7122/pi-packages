@@ -2,6 +2,10 @@
 // Determines when dispatch_crew should require a .crew/state.md workflow
 // before proceeding. Prevents the LLM from skipping workflow management.
 
+import type { CrewState } from "./state.js";
+import { handoffExists } from "./handoff.js";
+import { getRequiredHandoffs, type PhaseId } from "./phases.js";
+
 /**
  * Presets that only read — never modify code.
  * Note: researcher has bash access and may write to .crew/ for handoff,
@@ -84,4 +88,45 @@ Choose the right workflow scope:
 - **Minimal**: build,ship
 
 Once you write state.md, this dispatch will be allowed.`;
+}
+
+/**
+ * Check if the current phase should be blocked due to missing handoff files.
+ *
+ * Each phase requires its predecessor's handoff file to exist in `.crew/phases/<feature>/`.
+ * In workflow shortcuts, only the phases actually in the workflow are checked.
+ *
+ * @param cwd - Project working directory
+ * @param state - Current workflow state
+ * @returns `{ blocked: false }` or `{ blocked: true, missing: PhaseId[] }`
+ */
+export function shouldBlockForMissingHandoff(
+  cwd: string,
+  state: CrewState,
+): { blocked: boolean; missing: string[] } {
+  // No workflow or no feature — no gating
+  if (!state.workflow || state.workflow.length === 0 || !state.feature) {
+    return { blocked: false, missing: [] };
+  }
+
+  const required = getRequiredHandoffs(state.phase as PhaseId, state.workflow);
+  const missing = required.filter((phase) => !handoffExists(cwd, state.feature, phase));
+
+  if (missing.length > 0) {
+    return { blocked: true, missing };
+  }
+
+  return { blocked: false, missing: [] };
+}
+
+/**
+ * Build error message for missing handoff files.
+ */
+export function buildMissingHandoffMessage(state: CrewState, missing: string[]): string {
+  const paths = missing.map((p) => `  - \`.crew/phases/${state.feature}/${p}.md\``).join("\n");
+  return `⚠️ **Phase gate:** Cannot proceed to "${state.phase}" — missing handoff files:
+
+${paths}
+
+Complete the previous phase(s) first. Dispatch the appropriate agents and the handoff files will be auto-captured.`;
 }

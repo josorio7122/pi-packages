@@ -496,6 +496,20 @@ Document what was built:
 };
 
 /**
+ * Phase dependency map — each phase depends on the phase immediately before it
+ * in the canonical order. When a workflow skips phases, only the phases
+ * actually in the workflow are considered.
+ */
+const PHASE_DEPENDENCIES: Record<PhaseId, PhaseId | null> = {
+  explore: null,      // First phase — no deps
+  design: "explore",
+  plan: "design",
+  build: "plan",
+  review: "build",
+  ship: "review",
+};
+
+/**
  * Get the content for a workflow phase.
  * @param phase - Phase identifier (explore, design, plan, build, review, ship)
  * @returns Phase content string, or null if phase is invalid
@@ -505,4 +519,27 @@ export function getPhaseContent(phase: string): string | null {
     return PHASE_CONTENT[phase as PhaseId];
   }
   return null;
+}
+
+/**
+ * Get the required handoff phases for a given phase in a specific workflow.
+ * Only returns dependencies that are actually in the workflow (handles shortcuts).
+ *
+ * For example, in a "quick" workflow [explore, build, ship]:
+ * - build's canonical dep is "plan", but plan isn't in the workflow
+ * - Walk back through canonical deps until we find one in the workflow: "explore"
+ * - So build requires ["explore"]
+ *
+ * @param phase - Current phase
+ * @param workflow - Active workflow phases
+ * @returns Array of phase IDs that must have handoff files before this phase can proceed
+ */
+export function getRequiredHandoffs(phase: PhaseId, workflow: string[]): PhaseId[] {
+  const phaseIndex = workflow.indexOf(phase);
+  // First phase in workflow has no deps
+  if (phaseIndex <= 0) return [];
+
+  // The required handoff is the phase immediately before in the workflow
+  const prevPhase = workflow[phaseIndex - 1] as PhaseId;
+  return [prevPhase];
 }
