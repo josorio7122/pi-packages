@@ -75,6 +75,16 @@ export function cleanupTempFile(dir: string | null, filePath: string | null) {
 
 // ── Concurrency Limiter ─────────────────────────────────────────────
 
+/**
+ * Run async work items with a concurrency limit.
+ * - Preserves input order in the result array
+ * - Clamps concurrency to [1, items.length]
+ * - Staggers initial launches by STAGGER_MS to avoid lock file contention
+ *   when multiple pi subprocesses race for ~/.pi/agent/settings.json
+ * - Rejects on first error (remaining in-flight items continue but results are discarded)
+ */
+const STAGGER_MS = 150;
+
 export async function mapWithConcurrencyLimit<T, R>(
   items: T[],
   concurrency: number,
@@ -86,7 +96,13 @@ export async function mapWithConcurrencyLimit<T, R>(
   let nextIndex = 0;
   const workers = Array(limit)
     .fill(null)
-    .map(async () => {
+    .map(async (_, workerIndex) => {
+      // Stagger worker starts to avoid global lock file contention.
+      // Pi uses proper-lockfile on ~/.pi/agent/{settings,auth}.json during startup;
+      // simultaneous spawns cause "Lock file is already being held" crashes.
+      if (workerIndex > 0) {
+        await new Promise((resolve) => setTimeout(resolve, workerIndex * STAGGER_MS));
+      }
       while (true) {
         const current = nextIndex++;
         if (current >= items.length) return;
