@@ -31,12 +31,6 @@ You now have the `dispatch_crew` tool and all 10 skills available in every pi se
 
 | Skill          | Package                                  | Description                                                                    |
 | -------------- | ---------------------------------------- | ------------------------------------------------------------------------------ |
-| `crew-explore` | [pi-crew](./packages/pi-crew/)           | Dispatch scouts to map codebase structure, patterns, and conventions           |
-| `crew-design`  | [pi-crew](./packages/pi-crew/)           | Discuss design approaches, dispatch architects, lock decisions                 |
-| `crew-plan`    | [pi-crew](./packages/pi-crew/)           | Break designs into executable task waves with dependencies                     |
-| `crew-build`   | [pi-crew](./packages/pi-crew/)           | Execute plans wave-by-wave with executor agents; retry failures with debuggers |
-| `crew-review`  | [pi-crew](./packages/pi-crew/)           | Three-gate review: spec compliance → code quality → security                   |
-| `crew-ship`    | [pi-crew](./packages/pi-crew/)           | Squash commits, push branch, open PR/MR                                        |
 | `exa-search`   | [exa-search](./packages/exa-search/)     | Semantic web search, content extraction, and AI answers via Exa API            |
 | `gh`           | [gh](./packages/gh/)                     | GitHub CLI — pull requests, issues, releases, Actions, API                     |
 | `glab`         | [glab](./packages/glab/)                 | GitLab CLI — merge requests, issues, CI/CD, stacked diffs, API                 |
@@ -46,7 +40,7 @@ You now have the `dispatch_crew` tool and all 10 skills available in every pi se
 
 ### [pi-crew](./packages/pi-crew/)
 
-The centerpiece. Registers a `dispatch_crew` tool that spawns isolated pi agents with preset configurations — scout, researcher, architect, executor, reviewer, debugger — each with tuned system prompts, tool access, and model selection. Six phase skills guide the workflow from exploration through shipping. See the [pi-crew README](./packages/pi-crew/README.md) for full documentation.
+The centerpiece. Registers a `dispatch_crew` tool that spawns isolated pi agents with preset configurations — scout, researcher, architect, executor, reviewer, debugger — each with tuned system prompts, tool access, and model selection. Six workflow phases (explore → design → plan → build → review → ship) are enforced mechanically by the extension with auto-capture, phase gates, and state management. See the [pi-crew README](./packages/pi-crew/README.md) for full documentation.
 
 ### [exa-search](./packages/exa-search/)
 
