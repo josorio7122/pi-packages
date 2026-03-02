@@ -33,9 +33,9 @@ export interface SpawnResult {
   exitCode: number;
   messages: Message[];
   usage: UsageStats;
-  model?: string;
-  stopReason?: string;
-  errorMessage?: string;
+  model: string | undefined;
+  stopReason: string | undefined;
+  errorMessage: string | undefined;
   stderr: string;
 }
 
@@ -131,6 +131,8 @@ export async function runSingleAgent(
     messages: [],
     usage: emptyUsage(),
     model: params.model,
+    stopReason: undefined,
+    errorMessage: undefined,
     stderr: "",
   };
 
