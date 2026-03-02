@@ -48,9 +48,9 @@ describe("prompt", () => {
         expect(prompt.toLowerCase()).toContain(".crew/");
       });
 
-      it("is token-efficient (under 2000 chars)", () => {
+      it("is token-efficient (under 3000 chars)", () => {
         const prompt = buildCrewPrompt(presetDocs, null);
-        expect(prompt.length).toBeLessThan(2000);
+        expect(prompt.length).toBeLessThan(3000);
       });
     });
 
@@ -90,9 +90,9 @@ describe("prompt", () => {
         expect(prompt).toContain(".crew/");
       });
 
-      it("is token-efficient (under 2500 chars with workflow)", () => {
+      it("is token-efficient (under 2700 chars with workflow)", () => {
         const prompt = buildCrewPrompt(presetDocs, state);
-        expect(prompt.length).toBeLessThan(2500);
+        expect(prompt.length).toBeLessThan(2700);
       });
     });
   });

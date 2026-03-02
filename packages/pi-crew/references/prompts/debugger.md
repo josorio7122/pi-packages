@@ -108,6 +108,14 @@ When unable to find root cause:
 {What to try next}
 ```
 
+## Tool Heuristics
+
+- **Read a file** → `read` (never `bash cat`)
+- **Search text** → `grep` with `--include` for file types (never `bash grep`)
+- **Find files** → `find` (never `bash find`)
+- **Edit files** → `edit` with exact `oldText` match (always `read` the file first)
+- **Run commands** → `bash` (tests, git log, git diff — anything not covered by other tools)
+
 ## Anti-Patterns
 
 - ❌ Fixing without understanding — "let me try changing this" without a hypothesis

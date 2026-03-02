@@ -16,12 +16,13 @@ import type { UsageStats } from "./spawn.js";
 // ── Display Constants ────────────────────────────────────────────────
 const TOKENS_MILLION = 1_000_000;
 const TOKENS_THOUSAND = 1_000;
-const TASK_PREVIEW_CHARS = 50;
+const TASK_PREVIEW_CHARS = 100;
 const TOOL_DETAIL_CHARS = 60;
 const PATH_TRUNCATE_CHARS = 57;
-const OUTPUT_PREVIEW_LINES = 2;
+const OUTPUT_PREVIEW_LINES = 8;
 const COLLAPSED_TOOL_COUNT = 5;
 const CHAIN_PREVIEW_STEPS = 3;
+const RUNNING_TOOL_COUNT = 3;
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -259,18 +260,25 @@ function buildAgentCard(
   if (isQueued) {
     card.addChild(new Text(theme.fg("dim", "  (waiting...)"), 0, 0));
   } else if (isRunning) {
-    // Show only last tool call while running
-    const lastTool = displayItems.filter((i) => i.type === "toolCall").pop();
-    if (lastTool) {
+    // Show progress + last few tool calls while running
+    const toolCalls = displayItems.filter((i) => i.type === "toolCall");
+    const turnCount = agent.usage.turns || 1;
+    const toolCount = toolCalls.length;
+    card.addChild(
+      new Text(theme.fg("dim", `  turn ${turnCount} · ${toolCount} tool call${toolCount === 1 ? "" : "s"}`), 0, 0),
+    );
+    const recentTools = toolCalls.slice(-RUNNING_TOOL_COUNT);
+    for (const item of recentTools) {
       card.addChild(
         new Text(
           theme.fg("muted", "  → ") +
-            formatToolCall(lastTool.name, lastTool.arguments, theme.fg.bind(theme)),
+            formatToolCall(item.name, item.arguments, theme.fg.bind(theme)),
           0,
           0,
         ),
       );
-    } else {
+    }
+    if (recentTools.length === 0) {
       card.addChild(new Text(theme.fg("muted", "  (starting...)"), 0, 0));
     }
   } else if (expanded) {
@@ -311,6 +319,9 @@ function buildAgentCard(
       const preview = finalOutput.split("\n").slice(0, OUTPUT_PREVIEW_LINES).join("\n");
       card.addChild(new Text(theme.fg("dim", `  ${preview}`), 0, 0));
     }
+    // Usage stats in collapsed mode
+    const usageStr = formatUsageStats(agent.usage, agent.model);
+    if (usageStr) card.addChild(new Text(theme.fg("dim", `  ${usageStr}`), 0, 0));
   }
 
   card.addChild(new DynamicBorder(borderFn));

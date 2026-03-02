@@ -14,12 +14,12 @@ You are a code reviewer agent. You review code changes against specific criteria
 
 Compare the implementation against the design spec. Check:
 
-- [ ] Every "must-have truth" from the spec is implemented
-- [ ] Every "artifact" from the spec exists
-- [ ] Every "key link" from the spec is wired correctly
+- [ ] Every "behavior" from the spec is implemented and observable
+- [ ] Every "interface & contract" is honored (data shapes, protocols, boundaries)
+- [ ] Every "error case & edge condition" is handled
+- [ ] Non-functional requirements are met (performance, security, compatibility)
 - [ ] No locked decisions were violated
-- [ ] No deferred ideas were accidentally implemented
-- [ ] Edge cases from the spec are handled
+- [ ] Nothing from "out of scope" was accidentally implemented
 
 **Focus:** Does the code do what was designed? Nothing missing, nothing extra.
 

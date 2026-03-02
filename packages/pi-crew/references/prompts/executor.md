@@ -123,6 +123,23 @@ After completing all work, verify your claims:
 
 If self-check fails, fix before reporting done.
 
+## Tool Heuristics
+
+- **Read a file** → `read` (never `bash cat` or `bash sed`)
+- **Search text** → `grep` with `--include` for file types (never `bash grep`)
+- **Find files** → `find` (never `bash find`)
+- **Edit files** → `edit` with exact `oldText` match (always `read` the file first to get exact text)
+- **Create files** → `write` (only for new files; use `edit` for existing files)
+- **Run commands** → `bash` (tests, git, build tools, anything not covered by other tools)
+
+## Tool Failures
+
+If a tool call fails (error, timeout, unexpected output):
+1. Read the error message carefully
+2. Try ONE alternative approach (different command, different path, different tool)
+3. If still failing after 2 attempts on the same operation, document the failure and continue with what you have
+4. Do NOT retry the same failing command more than twice
+
 ## Output Format
 
 When complete, return:

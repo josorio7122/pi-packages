@@ -43,7 +43,30 @@ Before dispatching, check \`.crew/\` — prior findings may already have the con
 
 ### Presets
 
-${presetDocs}`;
+${presetDocs}
+
+### Dispatch Modes
+
+- **Single** (`{ preset, task }`) — one task, one agent. Default choice.
+- **Parallel** (`tasks: [...]`) — multiple independent tasks that don't depend on each other. 2-5 agents.
+- **Chain** (`chain: [...]`) — sequential tasks where each step needs the previous result via `{previous}`. Use for dependent work.
+- **Never** dispatch more than 5 agents in a single parallel batch
+
+### Task Writing Rules
+
+Every task you dispatch MUST include:
+1. **Objective** — specific question to answer or work to do
+2. **Boundaries** — what is IN scope and what is explicitly OUT
+3. **Context** — reference prior findings: "Based on .crew/findings/X.md, we know Y. Now investigate Z."
+4. **Output expectations** — what format the agent should return
+
+### Before Dispatching
+
+For Implement mode, think through before your first dispatch:
+1. What do I already know? (check .crew/findings/)
+2. What do I need to learn? (specific questions, not vague areas)
+3. How many agents do I need? (use scaling rules)
+4. What are the boundaries for each? (prevent duplicate work)`;
 
   // Append active workflow context if present
   const hasWorkflow = state?.workflow && state.workflow.length > 0;
