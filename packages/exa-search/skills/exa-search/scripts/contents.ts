@@ -29,7 +29,7 @@
  */
 
 import { Exa } from "exa-js";
-import { showHelp, requireApiKey } from "./lib/common.js";
+import { showHelp, requireApiKey, handleError, filterOptions } from "./lib/common.js";
 
 const args = process.argv.slice(2);
 
@@ -52,8 +52,7 @@ requireApiKey();
 
 const exa = new Exa();
 
-const contentsOpts: Record<string, unknown> = {};
-for (const key of [
+const contentsOpts = filterOptions(opts, [
   "text",
   "highlights",
   "summary",
@@ -61,14 +60,11 @@ for (const key of [
   "filterEmptyResults",
   "subpages",
   "subpageTarget",
-] as const) {
-  if (opts[key] !== undefined) contentsOpts[key] = opts[key];
-}
+]);
 
 try {
   const result = await exa.getContents(urls, contentsOpts);
   console.log(JSON.stringify(result, null, 2));
 } catch (err) {
-  console.error(`Error: ${(err as Error).message}`);
-  process.exit(1);
+  handleError(err);
 }

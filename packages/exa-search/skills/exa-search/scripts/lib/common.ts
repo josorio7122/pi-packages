@@ -45,3 +45,41 @@ export function parseArgs(scriptUrl: string): { query: string; opts: Record<stri
 
   return { query, opts };
 }
+
+/**
+ * Standardized error handler for all exa scripts.
+ */
+export function handleError(err: unknown): never {
+  console.error(`Error: ${(err as Error).message}`);
+  process.exit(1);
+}
+
+/**
+ * Pick allowed keys from an options object, skipping undefined values.
+ */
+export function filterOptions(
+  opts: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (opts[key] !== undefined) filtered[key] = opts[key];
+  }
+  return filtered;
+}
+
+/**
+ * Build contents options from text/highlights/summary fields.
+ */
+export function buildContentsOptions(opts: Record<string, unknown>): Record<string, unknown> {
+  let contentsOpts: Record<string, unknown> = {};
+  if (opts.text === true) contentsOpts.text = true;
+  else if (typeof opts.text === "object") contentsOpts.text = opts.text;
+  if (opts.highlights === true) contentsOpts.highlights = true;
+  else if (typeof opts.highlights === "object") contentsOpts.highlights = opts.highlights;
+  if (opts.summary === true) contentsOpts.summary = true;
+  else if (typeof opts.summary === "object") contentsOpts.summary = opts.summary;
+  if (typeof opts.contents === "object")
+    contentsOpts = { ...contentsOpts, ...(opts.contents as Record<string, unknown>) };
+  return contentsOpts;
+}

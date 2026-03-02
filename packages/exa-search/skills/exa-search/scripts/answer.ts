@@ -27,17 +27,20 @@
  */
 
 import { Exa } from "exa-js";
-import { parseArgs, requireApiKey } from "./lib/common.js";
+import { parseArgs, requireApiKey, handleError, filterOptions } from "./lib/common.js";
 
 const { query, opts } = parseArgs(import.meta.url);
 requireApiKey();
 
 const exa = new Exa();
 
-const answerOpts: Record<string, unknown> = {};
-for (const key of ["text", "model", "systemPrompt", "outputSchema", "userLocation"] as const) {
-  if (opts[key] !== undefined) answerOpts[key] = opts[key];
-}
+const answerOpts = filterOptions(opts, [
+  "text",
+  "model",
+  "systemPrompt",
+  "outputSchema",
+  "userLocation",
+]);
 
 try {
   if (opts.stream) {
@@ -56,6 +59,5 @@ try {
     console.log(JSON.stringify(result, null, 2));
   }
 } catch (err) {
-  console.error(`Error: ${(err as Error).message}`);
-  process.exit(1);
+  handleError(err);
 }

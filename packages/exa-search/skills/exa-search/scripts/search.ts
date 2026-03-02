@@ -43,7 +43,13 @@
  */
 
 import { Exa } from "exa-js";
-import { parseArgs, requireApiKey } from "./lib/common.js";
+import {
+  parseArgs,
+  requireApiKey,
+  handleError,
+  filterOptions,
+  buildContentsOptions,
+} from "./lib/common.js";
 
 const { query, opts } = parseArgs(import.meta.url);
 requireApiKey();
@@ -54,18 +60,9 @@ const exa = new Exa();
 const wantContents = opts.contents || opts.text || opts.highlights || opts.summary;
 
 // Build contents options
-let contentsOpts: Record<string, unknown> = {};
-if (opts.text === true) contentsOpts.text = true;
-else if (typeof opts.text === "object") contentsOpts.text = opts.text;
-if (opts.highlights === true) contentsOpts.highlights = true;
-else if (typeof opts.highlights === "object") contentsOpts.highlights = opts.highlights;
-if (opts.summary === true) contentsOpts.summary = true;
-else if (typeof opts.summary === "object") contentsOpts.summary = opts.summary;
-if (typeof opts.contents === "object")
-  contentsOpts = { ...contentsOpts, ...(opts.contents as Record<string, unknown>) };
+const contentsOpts = buildContentsOptions(opts);
 
 // Build search options
-const searchOpts: Record<string, unknown> = {};
 const searchKeys = [
   "numResults",
   "type",
@@ -89,9 +86,7 @@ const searchKeys = [
   "filterEmptyResults",
 ] as const;
 
-for (const key of searchKeys) {
-  if (opts[key] !== undefined) searchOpts[key] = opts[key];
-}
+const searchOpts = filterOptions(opts, searchKeys);
 
 try {
   let result;
@@ -102,6 +97,5 @@ try {
   }
   console.log(JSON.stringify(result, null, 2));
 } catch (err) {
-  console.error(`Error: ${(err as Error).message}`);
-  process.exit(1);
+  handleError(err);
 }

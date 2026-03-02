@@ -53,7 +53,7 @@
  */
 
 import { Exa } from "exa-js";
-import { showHelp, requireApiKey } from "./lib/common.js";
+import { showHelp, requireApiKey, handleError } from "./lib/common.js";
 
 const args = process.argv.slice(2);
 
@@ -161,6 +161,5 @@ try {
       process.exit(1);
   }
 } catch (err) {
-  console.error(`Error: ${(err as Error).message}`);
-  process.exit(1);
+  handleError(err);
 }
