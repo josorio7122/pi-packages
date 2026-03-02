@@ -545,8 +545,18 @@ export default function piCrew(pi: ExtensionAPI) {
             if (isError) {
               // Chain stops on first error
               const output = getFinalOutput(result.messages) || "(error — no output)";
+              let errorContent = `Chain stopped at step ${i + 1}/${params.chain!.length}: ${output}`;
+              if (i > 0) {
+                errorContent += "\n\nCompleted steps:";
+                for (let j = 0; j < i; j++) {
+                  const stepOutput = getFinalOutput(agents[j].messages);
+                  const preview = stepOutput.split('\n').slice(0, 3).join('\n');
+                  errorContent += `\n\n## Step ${j + 1} (${agents[j].preset}):\n${preview}`;
+                  if (stepOutput.split('\n').length > 3) errorContent += '\n...';
+                }
+              }
               return {
-                content: [{ type: "text", text: `Chain stopped at step ${i + 1}: ${output}` }],
+                content: [{ type: "text", text: errorContent }],
                 details: { mode: "chain", agents } as CrewDispatchDetails,
                 isError: true,
               };
@@ -560,8 +570,18 @@ export default function piCrew(pi: ExtensionAPI) {
             agents[i].elapsedMs = Date.now() - startTime;
             const errorMessage = extractErrorMessage(e);
             agents[i].errorMessage = errorMessage;
+            let errorContent = `Chain aborted at step ${i + 1}/${params.chain!.length}: ${errorMessage}`;
+            if (i > 0) {
+              errorContent += "\n\nCompleted steps:";
+              for (let j = 0; j < i; j++) {
+                const stepOutput = getFinalOutput(agents[j].messages);
+                const preview = stepOutput.split('\n').slice(0, 3).join('\n');
+                errorContent += `\n\n## Step ${j + 1} (${agents[j].preset}):\n${preview}`;
+                if (stepOutput.split('\n').length > 3) errorContent += '\n...';
+              }
+            }
             return {
-              content: [{ type: "text", text: `Chain aborted at step ${i + 1}: ${errorMessage}` }],
+              content: [{ type: "text", text: errorContent }],
               details: { mode: "chain", agents } as CrewDispatchDetails,
               isError: true,
             };
