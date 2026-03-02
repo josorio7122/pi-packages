@@ -45,7 +45,23 @@ export type OnAgentUpdate = (update: {
   exitCode: number;
 }) => void;
 
+// ── Constants ───────────────────────────────────────────────────────
+
+/** Max retries when pi subprocess crashes due to lock file contention. */
+const LOCK_RETRY_MAX = 3;
+/** Base delay between lock retries (ms). Doubles on each retry. */
+const LOCK_RETRY_BASE_MS = 500;
+
 // ── Helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Detect if stderr indicates a lock file contention crash.
+ * Pi uses proper-lockfile on ~/.pi/agent/{settings,auth}.json during startup.
+ * Simultaneous subprocess spawns cause "Lock file is already being held".
+ */
+export function isLockFileError(stderr: string): boolean {
+  return stderr.includes("Lock file is already being held");
+}
 
 /**
  * Create a zeroed UsageStats object.
@@ -139,6 +155,10 @@ export async function mapWithConcurrencyLimit<T, R>(
  * Spawn a single pi subprocess with resolved preset params.
  * Reports progress via onAgentUpdate callback on each NDJSON event.
  * Returns final SpawnResult after process exits.
+ *
+ * Automatically retries up to LOCK_RETRY_MAX times if the subprocess crashes
+ * due to lock file contention (pi's proper-lockfile on global settings/auth).
+ *
  * @param params - Resolved spawn parameters (task, systemPrompt, tools, model, cwd, thinking)
  * @param defaultCwd - Default working directory if params.cwd is not set
  * @param signal - AbortSignal for cancellation support
@@ -146,6 +166,30 @@ export async function mapWithConcurrencyLimit<T, R>(
  * @returns Promise resolving to SpawnResult with exitCode, messages, usage, model, stopReason, errorMessage, stderr
  */
 export async function runSingleAgent(
+  params: SpawnParams,
+  defaultCwd: string,
+  signal: AbortSignal | undefined,
+  onAgentUpdate?: OnAgentUpdate,
+): Promise<SpawnResult> {
+  for (let attempt = 0; attempt <= LOCK_RETRY_MAX; attempt++) {
+    const result = await spawnPiSubprocess(params, defaultCwd, signal, onAgentUpdate);
+
+    // Retry on lock file contention (non-zero exit + lock error in stderr)
+    if (result.exitCode !== 0 && isLockFileError(result.stderr) && attempt < LOCK_RETRY_MAX) {
+      const delay = LOCK_RETRY_BASE_MS * Math.pow(2, attempt); // 500, 1000, 2000
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      continue;
+    }
+
+    return result;
+  }
+
+  // Unreachable, but TypeScript needs it
+  throw new Error("Lock retry exhausted");
+}
+
+/** Inner subprocess spawn — no retry logic, just the raw spawn. */
+async function spawnPiSubprocess(
   params: SpawnParams,
   defaultCwd: string,
   signal: AbortSignal | undefined,
