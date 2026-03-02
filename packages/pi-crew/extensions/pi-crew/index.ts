@@ -25,6 +25,7 @@ import {
   type CrewDispatchDetails,
 } from "./rendering.js";
 import { buildCrewPrompt, buildNudgeMessage } from "./prompt.js";
+import { shouldRequireWorkflow, buildWorkflowGateMessage } from "./enforcement.js";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -639,6 +640,27 @@ export default function piCrew(pi: ExtensionAPI) {
           details: undefined,
           isError: true,
         };
+      }
+
+      // ── Workflow gate: require state.md for multi-agent work ──
+      const state = readState(ctx.cwd);
+      const hasActiveWorkflow = Boolean(state?.workflow && state.workflow.length > 0);
+
+      if (hasSingle || hasTasks || hasChain) {
+        const mode = hasSingle ? "single" : hasTasks ? "parallel" : "chain";
+        const agentList = hasSingle
+          ? [{ preset: params.preset! }]
+          : hasTasks
+            ? params.tasks!.map((t) => ({ preset: t.preset }))
+            : params.chain!.map((c) => ({ preset: c.preset }));
+
+        if (shouldRequireWorkflow(mode, agentList, hasActiveWorkflow)) {
+          return {
+            content: [{ type: "text", text: buildWorkflowGateMessage() }],
+            details: undefined,
+            isError: true,
+          };
+        }
       }
 
       // ── Dispatch to mode handler ────────────────────────────
