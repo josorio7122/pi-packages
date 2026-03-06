@@ -1,0 +1,17 @@
+{
+  "name": "@josorio/delete-session",
+  "version": "1.0.0",
+  "description": "Pi extension that adds /delete to delete the current session",
+  "scripts": {},
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  }
+}

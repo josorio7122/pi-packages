@@ -40,7 +40,8 @@
     "extensions": [
       "./packages/pi-crew/extensions",
       "./packages/exit/extensions",
-      "./packages/summarize/extensions"
+      "./packages/summarize/extensions",
+      "./packages/delete-session/extensions"
     ]
   }
 }

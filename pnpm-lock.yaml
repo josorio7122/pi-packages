@@ -38,6 +38,8 @@ importers:
 
   packages/create-skill: {}
 
+  packages/delete-session: {}
+
   packages/exa-search:
     dependencies:
       exa-js:
@@ -93,6 +95,8 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.3.3)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/pi-docs: {}
 
   packages/summarize: {}
 
