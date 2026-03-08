@@ -1,11 +1,11 @@
 ---
-name: spec-driven-dev
+name: write-spec
 description: >
-  Guides agents through Spec-Driven Development (SDD) — a methodology where a written
-  specification is the source of truth before any implementation begins. Use when the user
-  wants to build a feature, system, or product using a specification-first workflow:
-  Specify → Plan → Tasks → Implement & Verify. Prevents premature coding, reduces rewrites,
-  and produces auditable decision trails.
+  Writes a specification before any code is written. Use when the user wants to build a
+  feature, system, or product and needs a written spec as the source of truth first.
+  Guides the agent through four gated phases — Specify → Plan → Tasks → Implement & Verify
+  — so implementation only begins once behaviors, contracts, and a sequenced task list are
+  approved. Prevents premature coding, scope creep, and rewrites.
 metadata:
   author: josorio7122
   version: "1.0"
