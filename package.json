@@ -35,7 +35,8 @@
       "./packages/glab/skills",
       "./packages/create-skill/skills",
       "./packages/interface-design/skills",
-      "./packages/frontend-design/skills"
+      "./packages/frontend-design/skills",
+      "./packages/spec-driven-dev/skills"
     ],
     "extensions": [
       "./packages/pi-crew/extensions",
