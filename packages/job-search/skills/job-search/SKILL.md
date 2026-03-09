@@ -29,78 +29,73 @@ Find job postings across ATS platforms using site: operators, Boolean search, an
 
 ## Search Strategy
 
-Use a 3-step approach: Research → Discover → Refine
+Use a 3-step approach: ATS Direct Search → Career Pages → Startup Discovery
 
-### Step 1: Exa Research (Broad Discovery)
+**Important:** Search ATS platforms and company career pages directly — NOT job board aggregators (remoteok, remotive, weworkremotely, dynamitejobs). Aggregators have stale data. ATS platforms (Greenhouse, Lever, Ashby) serve live listings.
 
-Use exa-search to identify companies and trends. Resolve the exa-search skill path first,
-then run its scripts:
+### Step 1: ATS Direct Search (Primary)
+
+Search directly on ATS platforms where companies post live listings. These are always current.
+
+**Note:** For Exa searches, use `includeDomains` to scope to ATS platforms — NOT `site:` operators.
 
 ```bash
-# Find companies hiring for the role (live-crawl for freshest results)
-tsx /path/to/exa-search/scripts/search.ts "[role] [skill] remote worldwide" '{"numResults": 20, "type": "auto", "livecrawl": "preferred", "maxAgeHours": 720, "includeText": ["remote"], "excludeText": ["US only", "United States only"]}'
+# Search Greenhouse, Lever, Ashby simultaneously
+tsx /path/to/exa-search/scripts/search.ts "[role] [skill] remote" '{"numResults": 25, "type": "auto", "livecrawl": "preferred", "maxAgeHours": 720, "includeDomains": ["boards.greenhouse.io", "jobs.lever.co", "jobs.ashby.com"], "includeText": ["remote"], "excludeText": ["US only", "United States only"]}'
 
-# Get AI-powered answer about market
-tsx /path/to/exa-search/scripts/answer.ts "What companies are actively hiring [role] with [skills] remotely worldwide or in LATAM in 2026?"
-
-# Deep research on job market
-tsx /path/to/exa-search/scripts/research.ts run "Top remote [role] opportunities for [skills] professionals, global remote or LATAM 2026"
+# Add enterprise ATS for broader coverage
+tsx /path/to/exa-search/scripts/search.ts "[role] [skill] remote" '{"numResults": 15, "type": "auto", "livecrawl": "preferred", "maxAgeHours": 720, "includeDomains": ["myworkdayjobs.com", "icims.com", "careers.smartrecruiters.com"], "includeText": ["remote"]}'
 ```
 
-### Step 2: ATS Site: Search (Precision Discovery)
+| ATS | Domain | Market |
+|-----|--------|--------|
+| Greenhouse | `boards.greenhouse.io` | ~35% of VC-backed startups |
+| Lever | `jobs.lever.co` | ~25% of growth-stage startups |
+| Ashby | `jobs.ashby.com` | Fast-growing, popular with AI companies |
+| Workday | `*.myworkdayjobs.com` | Enterprise / Fortune 500 |
+| iCIMS | `*.icims.com` | Enterprise, healthcare, finance |
+| SmartRecruiters | `careers.smartrecruiters.com` | Mid-market |
 
-Search directly across ATS platforms. See [ATS URL patterns](references/ats-url-patterns.md) for full domain reference.
+### Step 2: Company Career Pages (Targeted)
 
-| ATS | Domain | Site: Query |
-|-----|--------|-------------|
-| Greenhouse | `boards.greenhouse.io` | `site:boards.greenhouse.io "[role]" [skill] remote` |
-| Lever | `jobs.lever.co` | `site:jobs.lever.co "[role]" [skill] remote` |
-| Ashby | `jobs.ashby.com` | `site:jobs.ashby.com "[role]" [skill]` |
-| Workday | `*.myworkdayjobs.com` | `site:myworkdayjobs.com "[role]" [skill]` |
+When you know specific companies, extract their career pages directly:
 
-**Combined multi-ATS search:**
-```
-(site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashby.com) "[role]" [skill] (remote OR "latin america" OR LATAM)
-```
-
-**Note:** For Exa searches, use `includeDomains` option instead of `site:` operators.
-
-Execute these via Exa:
 ```bash
-# Search startup ATS platforms (with live-crawl for fresh listings)
-tsx /path/to/exa-search/scripts/search.ts "senior engineer python remote worldwide" '{"numResults": 20, "livecrawl": "preferred", "maxAgeHours": 720, "includeDomains": ["boards.greenhouse.io", "jobs.lever.co", "jobs.ashby.com"], "includeText": ["remote"], "excludeText": ["US only"]}'
+# Extract a specific company's careers page (live-crawl for current listings)
+tsx /path/to/exa-search/scripts/contents.ts "https://company.com/careers" '{"text": true, "livecrawl": "always"}'
+
+# Search for career pages of known companies
+tsx /path/to/exa-search/scripts/search.ts "[company name] careers jobs engineering" '{"numResults": 5, "livecrawl": "always", "subpages": 3, "subpageTarget": "careers"}'
+
+# Find career pages for companies in a specific space
+tsx /path/to/exa-search/scripts/search.ts "[industry] startup careers hiring remote engineers 2026" '{"numResults": 15, "type": "deep", "livecrawl": "preferred", "maxAgeHours": 720, "includeText": ["careers", "hiring"]}'
 ```
 
-Or extract a specific job page:
+**Google fallback** (for manual search if Exa results are insufficient):
+```
+site:boards.greenhouse.io "[role]" [skill] (remote OR worldwide OR LATAM)
+site:jobs.lever.co "[role]" [skill] (remote OR worldwide OR LATAM)
+site:jobs.ashby.com "[role]" [skill] remote
+```
+
+### Step 3: Startup Discovery (Recently Funded)
+
+Find recently funded startups and check their career pages:
+
 ```bash
-tsx /path/to/exa-search/scripts/contents.ts "https://boards.greenhouse.io/company/jobs/12345"
+# Find startups that recently raised funding
+tsx /path/to/exa-search/scripts/search.ts "startup raised seed series A B funding 2026 hiring engineers" '{"numResults": 20, "type": "deep", "livecrawl": "preferred", "maxAgeHours": 720, "category": "news", "includeText": ["remote"]}'
+
+# Research specific companies for open roles
+tsx /path/to/exa-search/scripts/answer.ts "What startups raised funding in 2026 and are hiring senior engineers remotely?"
+
+# Extract career page from a discovered company
+tsx /path/to/exa-search/scripts/contents.ts "https://company.com/careers" '{"text": true, "livecrawl": "always"}'
 ```
 
-### Step 3: LATAM & Remote Job Boards
-
-Search these specialized boards:
-
-| Board | Domain | Focus |
-|-------|--------|-------|
-| GetOnBoard | `getonbrd.com` | LATAM tech (1.4M+ professionals) |
-| LATAM Jobs | `latam.jobs` | Remote LATAM-only |
-| LatHire | `lathire.com` | LATAM ↔ US bridge |
-| Torre | `torre.co` | Global remote + LATAM |
-| WeWorkRemotely | `weworkremotely.com` | Global remote |
-| RemoteOK | `remoteok.com` | Global remote (100K+ jobs) |
-| Remotive | `remotive.com` | Global remote with LATAM section |
-
-**Exa search for these boards (preferred):**
+For LATAM-specific startup discovery:
 ```bash
-# Search LATAM job boards
-tsx /path/to/exa-search/scripts/search.ts "[role] [skill] remote" '{"numResults": 15, "includeDomains": ["getonbrd.com", "torre.co", "latam.jobs", "remoteok.com", "weworkremotely.com", "remotive.com"]}'
-```
-
-**Google fallback (site: queries):**
-```
-site:getonbrd.com "[role]" remote
-site:weworkremotely.com "[role]" [skill]
-site:remoteok.com "[role]"
+tsx /path/to/exa-search/scripts/search.ts "startup hiring engineers remote LATAM latin america" '{"numResults": 15, "type": "deep", "livecrawl": "preferred", "maxAgeHours": 720, "includeDomains": ["getonbrd.com", "boards.greenhouse.io", "jobs.lever.co", "jobs.ashby.com"]}'
 ```
 
 ## Boolean Search Operators
@@ -184,6 +179,8 @@ By default, scope all searches to **global remote** or **LATAM** positions. Excl
 ### Default Search Behavior
 
 - ALWAYS use `"livecrawl": "preferred"` and `"maxAgeHours": 720` to get fresh, current job listings
+- ALWAYS search ATS platforms directly (Greenhouse, Lever, Ashby) as primary source — job board aggregators have stale data
+- For startup discovery, search for recently funded companies and extract their career pages
 - ALWAYS include location terms in every query: `(remote OR "worldwide" OR "anywhere" OR LATAM OR "latin america")`
 - ALWAYS use `includeText` in Exa options to require location signals:
   ```json
@@ -215,6 +212,14 @@ After receiving results, **discard** any listing that:
 3. **cold-email** → Craft outreach to hiring manager/CEO
 4. **pdf-tools** → Generate optimized resume PDF
 
+## Parallel Search by Role
+
+When searching for multiple roles (e.g., "senior full-stack, founding engineer, senior backend"), dispatch **one sub-agent per role** in parallel. Each agent runs the full 3-step strategy independently for its role.
+
+Example: if user asks for 3 roles, dispatch 3 parallel scouts — one for "senior full-stack engineer", one for "founding engineer", one for "senior backend engineer". Merge and deduplicate results before presenting.
+
+Never search for all roles in a single query — it dilutes results.
+
 ## Rules
 
 - ALWAYS ask user for role, skills, and location preference before searching
@@ -222,6 +227,9 @@ After receiving results, **discard** any listing that:
 - ALWAYS include LATAM-specific boards when user indicates LATAM interest
 - ALWAYS present results in the structured output format above
 - ALWAYS scope searches to global remote or LATAM by default — never return US-only or EU-only roles unless user explicitly requests them
+- ALWAYS search ATS platforms directly (Greenhouse, Lever, Ashby) — never rely on job board aggregators (remoteok, remotive, weworkremotely, dynamitejobs) as primary sources
+- ALWAYS dispatch one sub-agent per role when searching for multiple roles — never combine roles in a single search query
+- ALWAYS use livecrawl: preferred and maxAgeHours: 720 for fresh results
 - ALWAYS use Exa includeDomains option instead of site: operators when searching via Exa scripts
 - ALWAYS post-filter results to discard location-restricted roles (US only, UK only, EU only) before presenting to user
 - ALWAYS use includeText/excludeText in Exa options to filter by location signals
