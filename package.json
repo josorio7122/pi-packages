@@ -36,7 +36,8 @@
       "./packages/create-skill/skills",
       "./packages/interface-design/skills",
       "./packages/frontend-design/skills",
-      "./packages/write-spec/skills"
+      "./packages/write-spec/skills",
+      "./packages/render-deploy/skills"
     ],
     "extensions": [
       "./packages/pi-crew/extensions",

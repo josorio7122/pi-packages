@@ -1,0 +1,21 @@
+{
+  "name": "@josorio/render-deploy",
+  "version": "1.0.0",
+  "description": "Pi skill for deploying services to Render via the REST API. Supports creating databases, web services, setting env vars, triggering deploys, and monitoring status.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}
