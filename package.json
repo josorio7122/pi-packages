@@ -37,7 +37,11 @@
       "./packages/interface-design/skills",
       "./packages/frontend-design/skills",
       "./packages/write-spec/skills",
-      "./packages/render-deploy/skills"
+      "./packages/render-deploy/skills",
+      "./packages/pdf-tools/skills",
+      "./packages/cold-email/skills",
+      "./packages/resume-ats/skills",
+      "./packages/job-search/skills"
     ],
     "extensions": [
       "./packages/pi-crew/extensions",
