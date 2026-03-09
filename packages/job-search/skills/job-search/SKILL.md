@@ -184,7 +184,7 @@ By default, scope all searches to **global remote** or **LATAM** positions. Excl
 - ALWAYS include location terms in every query: `(remote OR "worldwide" OR "anywhere" OR LATAM OR "latin america")`
 - ALWAYS use `includeText` in Exa options to require location signals:
   ```json
-  {"includeText": ["remote"], "excludeText": ["US only", "United States only", "must be located in the US", "UK only"]}
+  {"includeText": ["remote"], "excludeText": ["US only", "United States only", "must be located in the US", "must be authorized to work in the United States", "UK only", "EU only"]}
   ```
 - For LATAM-specific searches, use:
   ```json
@@ -194,10 +194,13 @@ By default, scope all searches to **global remote** or **LATAM** positions. Excl
 ### Post-Search Filtering
 
 After receiving results, **discard** any listing that:
-- Says "US only", "United States only", "must be authorized to work in the US"
-- Says "UK only", "EU only" (unless user is in EU)
-- Requires specific country citizenship or work authorization (unless it matches user's location)
+- Says "US only", "United States only", "must be authorized to work in the US/United States"
+- Says "Remote - US", "Remote - United States", "Remote (US)", "US citizens or permanent residents only"
+- Says "UK only", "EU only", "Remote - EU", "Remote (EU)" (unless user is in EU)
+- Says "must be authorized to work in the United States", "US work authorization required"
+- Requires specific country citizenship, visa, or work authorization (unless it matches user's location)
 - Has no remote/location info AND is clearly tied to one office
+- **IMPORTANT: Never assume a role is location-restricted without verifying.** If the listing doesn't explicitly state a restriction, include it. When in doubt, use `contents.ts` with `livecrawl: always` to extract the full job page and check.
 
 **Keep** listings that say:
 - "Remote", "Worldwide", "Anywhere", "Global"
@@ -231,7 +234,8 @@ Never search for all roles in a single query — it dilutes results.
 - ALWAYS dispatch one sub-agent per role when searching for multiple roles — never combine roles in a single search query
 - ALWAYS use livecrawl: preferred and maxAgeHours: 720 for fresh results
 - ALWAYS use Exa includeDomains option instead of site: operators when searching via Exa scripts
-- ALWAYS post-filter results to discard location-restricted roles (US only, UK only, EU only) before presenting to user
+- ALWAYS post-filter results to discard location-restricted roles (US only, US remote, EU only, EU remote, UK only) before presenting to user
+- NEVER assume a role is location-restricted without checking the actual listing — use contents.ts with livecrawl to verify when unsure
 - ALWAYS use includeText/excludeText in Exa options to filter by location signals
 - NEVER fabricate job listings — only report what search actually returns
 - When using Exa, resolve the exa-search skill path and use its scripts
