@@ -1,0 +1,20 @@
+{
+  "name": "@josorio/resume-ats",
+  "version": "1.0.0",
+  "description": "Pi skill for evaluating and optimizing resumes for ATS compliance",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}
