@@ -30,6 +30,8 @@
  *     "outputSchema": {},              // deep search structured output
  *     "subpages": 0,
  *     "subpageTarget": "pricing",
+ *     "livecrawl": "auto",              // "never"|"fallback"|"always"|"auto"|"preferred" - live-crawl pages for fresh data
+ *     "livecrawlTimeout": 10000,         // timeout in ms for live crawl
  *     "maxAgeHours": 168
  *   }
  *
@@ -82,6 +84,8 @@ const searchKeys = [
   "outputSchema",
   "subpages",
   "subpageTarget",
+  "livecrawl",
+  "livecrawlTimeout",
   "maxAgeHours",
   "filterEmptyResults",
 ] as const;

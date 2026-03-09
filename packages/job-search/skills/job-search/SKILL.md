@@ -37,8 +37,8 @@ Use exa-search to identify companies and trends. Resolve the exa-search skill pa
 then run its scripts:
 
 ```bash
-# Find companies hiring for the role
-tsx /path/to/exa-search/scripts/search.ts "[role] [skill] remote worldwide" '{"numResults": 20, "type": "auto", "includeText": ["remote"], "excludeText": ["US only", "United States only"]}'
+# Find companies hiring for the role (live-crawl for freshest results)
+tsx /path/to/exa-search/scripts/search.ts "[role] [skill] remote worldwide" '{"numResults": 20, "type": "auto", "livecrawl": "preferred", "maxAgeHours": 720, "includeText": ["remote"], "excludeText": ["US only", "United States only"]}'
 
 # Get AI-powered answer about market
 tsx /path/to/exa-search/scripts/answer.ts "What companies are actively hiring [role] with [skills] remotely worldwide or in LATAM in 2026?"
@@ -67,8 +67,8 @@ Search directly across ATS platforms. See [ATS URL patterns](references/ats-url-
 
 Execute these via Exa:
 ```bash
-# Search startup ATS platforms
-tsx /path/to/exa-search/scripts/search.ts "senior engineer python remote worldwide" '{"numResults": 20, "includeDomains": ["boards.greenhouse.io", "jobs.lever.co", "jobs.ashby.com"], "includeText": ["remote"], "excludeText": ["US only"]}'
+# Search startup ATS platforms (with live-crawl for fresh listings)
+tsx /path/to/exa-search/scripts/search.ts "senior engineer python remote worldwide" '{"numResults": 20, "livecrawl": "preferred", "maxAgeHours": 720, "includeDomains": ["boards.greenhouse.io", "jobs.lever.co", "jobs.ashby.com"], "includeText": ["remote"], "excludeText": ["US only"]}'
 ```
 
 Or extract a specific job page:
@@ -183,6 +183,7 @@ By default, scope all searches to **global remote** or **LATAM** positions. Excl
 
 ### Default Search Behavior
 
+- ALWAYS use `"livecrawl": "preferred"` and `"maxAgeHours": 720` to get fresh, current job listings
 - ALWAYS include location terms in every query: `(remote OR "worldwide" OR "anywhere" OR LATAM OR "latin america")`
 - ALWAYS use `includeText` in Exa options to require location signals:
   ```json

@@ -13,6 +13,8 @@
  *     "text": true,                         // or { "maxCharacters": 5000, "includeHtmlTags": false }
  *     "highlights": true,                   // or { "query": "AI", "numSentences": 3 }
  *     "summary": true,                      // or { "query": "summarize pricing" }
+ *     "livecrawl": "auto",                  // "never"|"fallback"|"always"|"auto"|"preferred"
+ *     "livecrawlTimeout": 10000,             // timeout in ms for live crawl
  *     "maxAgeHours": 168,                   // 0 = always fresh, -1 = cache only
  *     "filterEmptyResults": true,
  *     "subpages": 3,
@@ -61,6 +63,8 @@ const contentsOpts = filterOptions(opts, [
   "text",
   "highlights",
   "summary",
+  "livecrawl",
+  "livecrawlTimeout",
   "maxAgeHours",
   "filterEmptyResults",
   "subpages",

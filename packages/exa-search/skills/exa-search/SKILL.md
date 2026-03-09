@@ -87,6 +87,8 @@ tsx scripts/search.ts "quantum computing breakthroughs" '{"type":"deep","additio
 | `useAutoprompt`      | bool        | Enhance query automatically                                                 |
 | `subpages`           | number      | Number of subpages per result                                               |
 | `subpageTarget`      | string      | Text to match subpages against                                              |
+| `livecrawl`          | string      | `"never"`, `"fallback"`, `"auto"`, `"preferred"`, `"always"` — live-crawl for fresh data |
+| `livecrawlTimeout`   | number      | Timeout in ms for live crawl (default: 10000)                               |
 | `additionalQueries`  | string[]    | Alt queries for deep search (max 5)                                         |
 | `outputSchema`       | object      | JSON Schema for deep search structured output                               |
 
@@ -124,6 +126,9 @@ tsx scripts/contents.ts "https://docs.example.com" '{"text":true,"subpages":3,"s
 
 # Force fresh content (ignore cache)
 tsx scripts/contents.ts "https://example.com" '{"text":true,"maxAgeHours":0}'
+
+# Live-crawl for real-time data (always fetches fresh)
+tsx scripts/contents.ts "https://example.com" '{"text":true,"livecrawl":"always"}'
 ```
 
 ## Answer
