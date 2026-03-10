@@ -75,6 +75,21 @@ export function parseArgs(argv: string[]): SearchConfig {
   return { roles, stack, location, newOnly, limit };
 }
 
+async function checkCredits(): Promise<{ remaining: number; total: number } | null> {
+  try {
+    const firecrawl = new (await import('@mendable/firecrawl-js')).default({
+      apiKey: process.env.FIRECRAWL_API_KEY!,
+    });
+    const usage = await firecrawl.getCreditUsage();
+    return {
+      remaining: (usage as any).remainingCredits ?? (usage as any).remaining_credits ?? 0,
+      total: (usage as any).planCredits ?? (usage as any).plan_credits ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function preFilterDiscoveries(discoveries: RawDiscovery[], store: Store): RawDiscovery[] {
   const existingUrls = new Set(Object.keys(store.jobs));
 
@@ -147,6 +162,14 @@ async function main(): Promise<void> {
 
   const config = parseArgs(process.argv.slice(2));
 
+  const creditsBefore = await checkCredits();
+  if (creditsBefore) {
+    process.stderr.write(`💳 Firecrawl credits: ${creditsBefore.remaining} / ${creditsBefore.total}\n`);
+    if (creditsBefore.remaining < 50) {
+      process.stderr.write(`⚠️  Low credits! Consider upgrading at https://firecrawl.dev/pricing\n`);
+    }
+  }
+
   process.stderr.write(
     `🔍 Searching for ${config.roles.length} role(s): ${config.roles.join(', ')}\n`,
   );
@@ -206,8 +229,14 @@ async function main(): Promise<void> {
   // Output results to stdout
   console.log(JSON.stringify(output, null, 2));
 
-  const estimatedCredits = filtered.length * 5 + config.roles.length * 4; // 5 per scrape + ~4 per search/map
-  process.stderr.write(`📊 ${output.length} results output (${newCount} new) | ~${estimatedCredits} Firecrawl credits used\n`);
+  const creditsAfter = await checkCredits();
+  const actualCreditsUsed = creditsBefore && creditsAfter
+    ? creditsBefore.remaining - creditsAfter.remaining
+    : null;
+  const creditStr = actualCreditsUsed !== null
+    ? `${actualCreditsUsed} credits used (${creditsAfter!.remaining} remaining)`
+    : `~${filtered.length * 5 + config.roles.length * 4} estimated credits`;
+  process.stderr.write(`📊 ${output.length} results output (${newCount} new) | ${creditStr}\n`);
 }
 
 main().catch((err) => {
