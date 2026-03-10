@@ -1,0 +1,20 @@
+{
+  "name": "@josorio/humanizer",
+  "version": "1.0.0",
+  "description": "Pi skill for detecting and removing AI writing patterns. Identifies 24 distinct LLM output patterns and rewrites with natural human voice.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}

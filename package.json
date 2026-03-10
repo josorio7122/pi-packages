@@ -41,7 +41,8 @@
       "./packages/pdf-tools/skills",
       "./packages/cold-email/skills",
       "./packages/resume-ats/skills",
-      "./packages/job-search/skills"
+      "./packages/job-search/skills",
+      "./packages/humanizer/skills"
     ],
     "extensions": [
       "./packages/pi-crew/extensions",
