@@ -144,7 +144,8 @@ async function main(): Promise<void> {
   // Output results to stdout
   console.log(JSON.stringify(output, null, 2));
 
-  process.stderr.write(`📊 ${output.length} results output (${newCount} new)\n`);
+  const estimatedCredits = filtered.length * 5 + config.roles.length * 4; // 5 per scrape + ~4 per search/map
+  process.stderr.write(`📊 ${output.length} results output (${newCount} new) | ~${estimatedCredits} Firecrawl credits used\n`);
 }
 
 main().catch((err) => {

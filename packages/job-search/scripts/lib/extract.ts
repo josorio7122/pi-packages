@@ -59,9 +59,73 @@ export async function extractJobs(discoveries: RawDiscovery[]): Promise<Job[]> {
     }
   }
 
-  process.stderr.write(`📄 Extracting ${deduped.length} URLs (concurrency 5)...\n`);
+  // Pre-filter: skip URLs that are clearly not individual job listings
+  // This saves ~5 Firecrawl credits per skipped URL (1 scrape + 4 JSON extraction)
+  const JUNK_DOMAINS = new Set([
+    'indeed.com', 'glassdoor.com', 'jooble.org', 'linkedin.com',
+    'dailyremote.com', 'remoterocketship.com', 'remotefront.com',
+    'careervault.io', 'tallo.com', 'jaabz.com', 'dynamitejobs.com',
+    'lensa.com', 'talent.com', 'ziprecruiter.com', 'whoishiring.jobs',
+    'hnhiring.com', 'workingnomads.com', 'nchelluri.github.io',
+    'remoteok.com', 'weworkremotely.com', 'flexjobs.com',
+    'freelancer.com', 'upwork.com', 'fiverr.com',
+    'stackoverflow.com', 'wellfound.com', 'angel.co',
+    'simplyhired.com', 'monster.com', 'careerbuilder.com',
+    'dice.com', 'hired.com', 'triplebyte.com',
+    'toptal.com', 'andela.com', 'bairesdev.com', 'turing.com',
+    'crossover.com', 'arc.dev', 'workana.com', 'gun.io',
+    'jobgether.com', 'truelogic.io', 'globant.com',
+  ]);
 
-  const tasks = deduped.map((discovery) => async (): Promise<Job> => {
+  const JUNK_PATH_PATTERNS = [
+    '/jobs?', '/search?', '/q-', '/tag/', '/technologies/',
+    '/country/', '/location/', '/category/',
+  ];
+
+  const filtered: RawDiscovery[] = [];
+  let skippedCount = 0;
+  for (const d of deduped) {
+    try {
+      const parsed = new URL(d.url);
+      const hostname = parsed.hostname.replace(/^www\./, '');
+      // Skip junk aggregator domains
+      if (JUNK_DOMAINS.has(hostname)) { skippedCount++; continue; }
+      // Skip if any parent domain matches (e.g., co.jooble.org)
+      const parts = hostname.split('.');
+      for (let i = 1; i < parts.length; i++) {
+        const parent = parts.slice(i).join('.');
+        if (JUNK_DOMAINS.has(parent)) { skippedCount++; continue; }
+      }
+      // Skip directory/search pages (not individual job listings)
+      const path = parsed.pathname + parsed.search;
+      if (JUNK_PATH_PATTERNS.some((p) => path.includes(p))) { skippedCount++; continue; }
+      // Skip YC directory pages (not individual company job pages)
+      if (hostname === 'ycombinator.com' || hostname === 'www.ycombinator.com') {
+        if (!parsed.pathname.includes('/companies/') || !parsed.pathname.includes('/jobs')) {
+          skippedCount++;
+          continue;
+        }
+      }
+      filtered.push(d);
+    } catch {
+      filtered.push(d); // keep if URL can't be parsed
+    }
+  }
+
+  // Cap total extractions to save credits (5 credits per URL)
+  const MAX_EXTRACTIONS = 40;
+  const toExtract = filtered.slice(0, MAX_EXTRACTIONS);
+  const cappedCount = filtered.length - toExtract.length;
+
+  if (skippedCount > 0) {
+    process.stderr.write(`⏭️  Skipped ${skippedCount} junk/aggregator URLs (saved ~${skippedCount * 5} credits)\n`);
+  }
+  if (cappedCount > 0) {
+    process.stderr.write(`⚠️  Capped at ${MAX_EXTRACTIONS} extractions (${cappedCount} deferred)\n`);
+  }
+  process.stderr.write(`📄 Extracting ${toExtract.length} URLs (concurrency 5)...\n`);
+
+  const tasks = toExtract.map((discovery) => async (): Promise<Job> => {
     const { url, strategy, role } = discovery;
 
     const result = await firecrawl.scrape(url, {

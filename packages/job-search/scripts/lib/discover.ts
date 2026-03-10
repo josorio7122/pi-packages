@@ -115,7 +115,7 @@ export async function discoverFunded(
 
     const newsResult = await firecrawl.search(
       `startup raised seed series A funding 2026 hiring ${role} remote`,
-      { limit: 10, tbs: 'qdr:m' },
+      { limit: 5, tbs: 'qdr:m' },
     );
 
     // SearchData = { web?: [...], news?: [...] }
@@ -133,7 +133,7 @@ export async function discoverFunded(
       if (seenDomains.has(hostname)) continue;
       seenDomains.add(hostname);
       companyDomains.push(hostname);
-      if (companyDomains.length >= 3) break;
+      if (companyDomains.length >= 2) break;
     }
 
     const discoveries: RawDiscovery[] = [];
@@ -142,7 +142,7 @@ export async function discoverFunded(
       try {
         const mapResult = await firecrawl.map(`https://${domain}`, {
           search: 'careers jobs hiring',
-          limit: 30,
+          limit: 15,
         });
 
         // MapData = { links: SearchResultWeb[] }, SearchResultWeb.url is string
@@ -177,7 +177,7 @@ export async function discoverGeneral(
     const query = `${role} ${config.stack.join(' ')} ${locationTerms} hiring`;
 
     const result = await firecrawl.search(query, {
-      limit: 25,
+      limit: 10,
       tbs: 'qdr:m',
     });
 
