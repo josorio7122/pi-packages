@@ -51,12 +51,34 @@ function isGeoAllowed(job: Job, config: SearchConfig): boolean {
   return true;
 }
 
+const CONSULTANCY_DESCRIPTION_PATTERNS: string[] = [
+  'staff augmentation',
+  'nearshore',
+  'outsourcing partner',
+  'we place engineers',
+  'our clients',
+  'client projects',
+  'assigned to client',
+  'work with our clients',
+  'talent marketplace',
+  'freelance marketplace',
+  'contract staffing',
+];
+
+function isNotConsultancyByDescription(job: Job): boolean {
+  const desc = job.description.toLowerCase();
+  return !CONSULTANCY_DESCRIPTION_PATTERNS.some((p) => desc.includes(p));
+}
+
 export function filterJobs(jobs: Job[], config: SearchConfig): Job[] {
-  // Step 1: Blacklist — remove consultancies
+  // Step 1: Blacklist — remove consultancies by name/domain
   const afterBlacklist = jobs.filter(isNotConsultancy);
 
+  // Step 1b: Remove consultancies detected by description
+  const afterDescCheck = afterBlacklist.filter(isNotConsultancyByDescription);
+
   // Step 2: Location — remove geo-restricted roles
-  const afterLocation = afterBlacklist.filter((job) => isGeoAllowed(job, config));
+  const afterLocation = afterDescCheck.filter((job) => isGeoAllowed(job, config));
 
   // Step 3: Dedup — remove duplicate URLs, keep first occurrence (ats > funded > general)
   const seen = new Set<string>();

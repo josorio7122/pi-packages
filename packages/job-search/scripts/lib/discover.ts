@@ -83,9 +83,9 @@ export async function discoverAts(
     const query = `${role} ${config.stack.join(' ')} remote`;
 
     const result = await exa.search(query, {
-      numResults: 25,
+      numResults: 40,
       type: 'auto',
-      includeDomains: ['boards.greenhouse.io', 'jobs.lever.co', 'jobs.ashby.com'],
+      includeDomains: ['boards.greenhouse.io', 'jobs.lever.co', 'jobs.ashby.com', 'jobs.ashbyhq.com'],
       includeText: ['remote'],
       excludeText: ['US residents only'],
       contents: {
@@ -177,7 +177,7 @@ export async function discoverGeneral(
     const query = `${role} ${config.stack.join(' ')} ${locationTerms} hiring`;
 
     const result = await firecrawl.search(query, {
-      limit: 15,
+      limit: 25,
       tbs: 'qdr:m',
     });
 

@@ -116,6 +116,16 @@ export async function extractJobs(discoveries: RawDiscovery[]): Promise<Job[]> {
     const job = result.value;
     // Discard results where both title and company are falsy
     if (!job.title && !job.company) continue;
+    // Discard junk: "Not Found" pages, directory/index pages, non-job pages
+    const titleLower = job.title.toLowerCase();
+    if (titleLower.includes('not found') || titleLower.includes('page not found')) continue;
+    if (titleLower.includes('not applicable')) continue;
+    if (titleLower.startsWith('jobs at ') && !titleLower.includes('engineer')) continue;
+    if (titleLower.startsWith('find the best') || titleLower.startsWith('remote jobs in')) continue;
+    if (titleLower.startsWith('remote entry-level')) continue;
+    // Discard YC directory pages
+    if (job.url.includes('ycombinator.com/jobs') && !job.url.includes('/companies/')) continue;
+    if (job.url.includes('ycombinator.com/careers')) continue;
     jobs.push(job);
   }
 
