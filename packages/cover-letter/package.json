@@ -1,0 +1,20 @@
+{
+  "name": "@josorio/cover-letter",
+  "version": "1.0.0",
+  "description": "Pi skill for writing high-converting cover letters using frameworks from YC, DHH, Forbes, and a16z",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "author": "josorio7122",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  }
+}

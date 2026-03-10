@@ -42,7 +42,8 @@
       "./packages/cold-email/skills",
       "./packages/resume-ats/skills",
       "./packages/job-search/skills",
-      "./packages/humanizer/skills"
+      "./packages/humanizer/skills",
+      "./packages/cover-letter/skills"
     ],
     "extensions": [
       "./packages/pi-crew/extensions",
