@@ -48,16 +48,8 @@ async function runWithConcurrency<T>(
 export async function extractJobs(discoveries: RawDiscovery[]): Promise<Job[]> {
   const firecrawl = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! });
 
-  // Deduplicate by normalized URL — keep first occurrence
-  const seen = new Set<string>();
-  const deduped: RawDiscovery[] = [];
-  for (const d of discoveries) {
-    const key = normalizeUrl(d.url);
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduped.push(d);
-    }
-  }
+  // Discoveries are already deduped and pre-filtered by search.ts
+  const deduped = discoveries;
 
   // Pre-filter: skip URLs that are clearly not individual job listings
   // This saves ~5 Firecrawl credits per skipped URL (1 scrape + 4 JSON extraction)

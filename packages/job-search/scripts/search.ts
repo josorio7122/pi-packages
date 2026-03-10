@@ -9,11 +9,11 @@
  * Requires: EXA_API_KEY, FIRECRAWL_API_KEY
  */
 
-import type { SearchConfig, RawDiscovery } from './lib/types.js';
+import type { SearchConfig, RawDiscovery, Store } from './lib/types.js';
 import { discoverAts, discoverFunded, discoverGeneral } from './lib/discover.js';
 import { extractJobs } from './lib/extract.js';
 import { filterJobs } from './lib/filters.js';
-import { loadStore, saveStore, upsertJobs } from './lib/store.js';
+import { loadStore, saveStore, upsertJobs, normalizeUrl } from './lib/store.js';
 
 function printUsage(): void {
   process.stderr.write(
@@ -75,6 +75,65 @@ export function parseArgs(argv: string[]): SearchConfig {
   return { roles, stack, location, newOnly, limit };
 }
 
+function preFilterDiscoveries(discoveries: RawDiscovery[], store: Store): RawDiscovery[] {
+  const existingUrls = new Set(Object.keys(store.jobs));
+
+  // Location patterns to reject based on snippet text
+  const REJECT_PATTERNS = [
+    'us only', 'united states only', 'usa only', 'u.s. only',
+    'us residents only', 'us citizens only',
+    'must be authorized to work in the united states',
+    'must be authorized to work in the us',
+    'us work authorization required',
+  ];
+
+  // Consultancy patterns in snippets
+  const CONSULTANCY_PATTERNS = [
+    'staff augmentation', 'nearshore', 'outsourcing partner',
+    'our clients', 'client projects', 'talent marketplace',
+  ];
+
+  const seen = new Set<string>();
+  const filtered: RawDiscovery[] = [];
+  let skippedStore = 0;
+  let skippedLocation = 0;
+  let skippedConsultancy = 0;
+  let skippedDupe = 0;
+
+  for (const d of discoveries) {
+    const normalized = normalizeUrl(d.url);
+
+    // Skip duplicates within this batch
+    if (seen.has(normalized)) { skippedDupe++; continue; }
+    seen.add(normalized);
+
+    // Skip URLs already in the store
+    if (existingUrls.has(normalized)) { skippedStore++; continue; }
+
+    // Check snippet for location restrictions
+    const snippet = (d.snippet || '').toLowerCase();
+    if (snippet && REJECT_PATTERNS.some((p) => snippet.includes(p))) {
+      skippedLocation++;
+      continue;
+    }
+
+    // Check snippet for consultancy signals
+    if (snippet && CONSULTANCY_PATTERNS.some((p) => snippet.includes(p))) {
+      skippedConsultancy++;
+      continue;
+    }
+
+    filtered.push(d);
+  }
+
+  if (skippedStore > 0) process.stderr.write(`   ↳ ${skippedStore} already tracked\n`);
+  if (skippedDupe > 0) process.stderr.write(`   ↳ ${skippedDupe} duplicates\n`);
+  if (skippedLocation > 0) process.stderr.write(`   ↳ ${skippedLocation} US-only (from snippet)\n`);
+  if (skippedConsultancy > 0) process.stderr.write(`   ↳ ${skippedConsultancy} consultancy (from snippet)\n`);
+
+  return filtered;
+}
+
 async function main(): Promise<void> {
   if (!process.env.EXA_API_KEY) {
     process.stderr.write('❌ EXA_API_KEY environment variable is not set\n');
@@ -115,8 +174,11 @@ async function main(): Promise<void> {
 
   process.stderr.write(`📡 Discovered ${allDiscoveries.length} candidate URLs\n`);
 
-  // Extract structured job data
-  const jobs = await extractJobs(allDiscoveries);
+  // Pre-filter: remove already-tracked URLs and obvious mismatches BEFORE extraction
+  const preFiltered = preFilterDiscoveries(allDiscoveries, store);
+  process.stderr.write(`🧹 ${allDiscoveries.length} → ${preFiltered.length} after pre-filtering (${allDiscoveries.length - preFiltered.length} skipped)\n`);
+
+  const jobs = await extractJobs(preFiltered);
   process.stderr.write(`🔍 Extracted ${jobs.length} jobs\n`);
 
   // Filter
