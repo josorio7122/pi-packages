@@ -43,7 +43,8 @@
       "./packages/resume-ats/skills",
       "./packages/job-search/skills",
       "./packages/humanizer/skills",
-      "./packages/cover-letter/skills"
+      "./packages/cover-letter/skills",
+      "./packages/playwright/skills"
     ],
     "extensions": [
       "./packages/pi-crew/extensions",
